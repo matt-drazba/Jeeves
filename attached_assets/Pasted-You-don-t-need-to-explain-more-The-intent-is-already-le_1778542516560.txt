@@ -1,0 +1,207 @@
+You don’t need to explain more. The intent is already legible from the code.
+
+What you built is *very* good for its goal. The feedback here is not “fix this,” it’s “here’s how this evolves from excellent hobby/one-off to bulletproof appliance software you could ship to 10,000 walls.”
+
+---
+
+## 1) Biggest structural gap: no error / stale-data state
+
+Right now, if the API fails, hangs, or returns junk, the UI happily keeps showing the last good render forever with a green refresh dot.
+
+For an always-on ops panel, that’s dangerous.
+
+Add three states:
+
+* **loading**
+* **stale**
+* **error**
+
+Pattern:
+
+* Track `lastSuccessfulRefresh`
+* If `refresh()` throws → show error banner, turn refresh dot red
+* If now − lastSuccessfulRefresh > 2× refresh interval → show “STALE DATA” state in alert strip
+
+This is the single most important reliability upgrade.
+
+---
+
+## 2) You should not fully re-render the status panel every minute
+
+You did this intentionally for drift correction (good instinct), but rebuilding the entire tile grid causes:
+
+* CSS animations to restart
+* Potential subtle flicker on lower-power hardware
+* Loss of future ability to animate value changes
+
+Better pattern:
+
+* Keep tiles persistent
+* Diff and update only values/alert class
+* Still allow a full rebuild every ~30 minutes as a safety reset
+
+You keep reliability **and** get smoother UX.
+
+---
+
+## 3) The alert ticker has a quiet bug
+
+If alerts change between refreshes (e.g., 3 alerts → 1 alert), `_alertIndex` can point past the new array and briefly show `undefined`.
+
+Reset `_alertIndex = 0` inside `renderAlerts()` when alerts array changes.
+
+---
+
+## 4) You’re missing “last updated” human visibility
+
+The refresh dot is clever, but only *you* know what it means.
+
+Add tiny text in the alert strip:
+
+> Updated 12:41:08
+
+When debugging a stuck integration, this becomes gold.
+
+---
+
+## 5) Weather + status + alerts are tightly coupled to one endpoint
+
+Right now the whole screen depends on one API response.
+
+If weather fails, you lose door status.
+
+Split the mental model:
+
+* `/api/weather` (5 min refresh)
+* `/api/status` (30–60s)
+* `/api/alerts` (30s)
+
+And render independently. This prevents cascading failure.
+
+---
+
+## 6) Hard-coded emojis will bite you as you add devices
+
+Today: cute.
+In 1 year: inconsistent.
+
+Create a tile type map:
+
+```js
+const TILE_TYPES = {
+  laundry: "🫧",
+  door: "🔒",
+  garage: "🏠",
+  temp: "🌡️",
+}
+```
+
+So icons are semantic, not data-provided.
+
+---
+
+## 7) Add a “degraded mode” visual language
+
+Right now tiles are either normal or alert.
+
+You’ll want a third state:
+
+* device offline
+* sensor unreachable
+* integration down
+
+That should be **yellow**, not red.
+
+You don’t have a visual vocabulary for that yet.
+
+---
+
+## 8) The clock updates every second for no reason
+
+You render minutes only.
+
+Update every 15 seconds. Saves pointless reflows forever.
+
+---
+
+## 9) Your layout is locked to 6 tiles forever
+
+You will want 7. Then 9. Then 12.
+
+Switch status panel to:
+
+```css
+grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+```
+
+Now the layout scales without redesign.
+
+---
+
+## 10) This should be installable as a PWA
+
+Right now if the device reboots and Safari/Chromium loses state, you rely on kiosk setup.
+
+Add:
+
+* manifest
+* service worker that caches this file
+
+Now this is a *real appliance app*.
+
+---
+
+## 11) Missing “quiet hours / night dimming”
+
+This will be on a wall at night.
+
+You’ll eventually want:
+
+* brightness dim after 10pm
+* maybe hide forecast and tiles, keep clock only
+
+Very easy to add via a CSS class toggled by time.
+
+---
+
+## 12) Security footgun (important)
+
+Because this is designed to call `/api/status`, someone will eventually host this on the public web.
+
+You want this to *only* work on LAN.
+
+At minimum, recommend:
+
+* Token header
+* Or IP-restricted endpoint
+
+Otherwise this becomes a live home telemetry page.
+
+---
+
+## The meta feedback
+
+You wrote this like someone who understands:
+
+> “software that runs in the real world for months, not software people click.”
+
+The only thing it lacks is the **operational paranoia** layer that production dashboards acquire after their first failure at 2am.
+
+That’s what all the suggestions above are.
+
+---
+
+## If you wanted to take this from “very good” to “this could be a product”
+
+Add:
+
+* error/stale states
+* partial updates instead of full redraw
+* degraded/offline state
+* PWA installability
+* dimming mode
+* split APIs
+
+That’s it.
+
+Everything else is already extremely mature.
