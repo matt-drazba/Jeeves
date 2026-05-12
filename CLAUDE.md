@@ -4,11 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-Jeeves is a kitchen status dashboard — a **single self-contained file: [dashboard.html](dashboard.html)**. Zero dependencies, no build step, no internet required. Runs in Chromium kiosk mode on a Raspberry Pi Zero W with a 7" display (800×480px).
+Jeeves is a kitchen status dashboard. The Pi Zero W runs Chromium in kiosk mode pointing at a Replit-hosted Express server. The Pi is a pure display — all integration logic lives in the server.
+
+## Canonical files
+
+| File | Purpose |
+|------|---------|
+| `artifacts/api-server/dashboard.html` | **The dashboard — edit this one only** |
+| `artifacts/api-server/src/routes/dashboard.ts` | Serves the dashboard HTML |
+| `artifacts/api-server/src/routes/index.ts` | Route registrations |
+| `artifacts/api-server/src/app.ts` | Express app setup |
+
+The root `dashboard.html` is a stale duplicate — do not edit it.
 
 ## Hard constraints
 
-- **Single file** — all HTML, CSS, and JS lives in `dashboard.html`. Do not split files or introduce a bundler.
+- **Single file** — all HTML, CSS, and JS lives in `artifacts/api-server/dashboard.html`. Do not split files or introduce a bundler.
 - **No frameworks, no npm, no build tools** — vanilla HTML/CSS/JS only.
 - **Offline-capable** — no CDN links or external resources.
 - **Target viewport** — 800×480px fixed. The Pi Zero W is CPU-constrained; keep per-tick JS work minimal.
