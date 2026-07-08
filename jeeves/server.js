@@ -32,6 +32,10 @@ let cachedStatus = {
 
 app.use(express.static(join(__dirname, 'public')));
 
+app.get('/', (req, res) => {
+  res.sendFile(join(__dirname, 'public', 'dashboard.html'));
+});
+
 app.get('/api/status', (req, res) => {
   res.json(cachedStatus);
 });
