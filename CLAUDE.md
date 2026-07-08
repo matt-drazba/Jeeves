@@ -1,52 +1,32 @@
-# CLAUDE.md
+# CLAUDE.md — Jeeves Homelab
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project overview
+## What this is
+Home automation monorepo: a custom kitchen dashboard ("Jeeves"), Home Assistant in Docker, laundry/chore/NFC automations, and pool monitoring. One Raspberry Pi 5 does everything: server + kitchen display.
 
-Jeeves is a kitchen status dashboard running on a Raspberry Pi Zero W with a 7" display (800×480px). The Pi runs Chromium in kiosk mode pointed at a Replit-hosted Express/TypeScript server. **The Pi is a pure display — all integration logic lives on Replit.**
-
-## Two-agent setup
-
-This repo is worked on by two AI agents. Respect the boundary:
-
-| Agent | Environment | Owns |
-|-------|-------------|------|
-| Claude Code (this) | Local / VS Code | `CLAUDE.md`, local commits, pushing |
-| Replit Agent | Replit workspace | `replit.md`, Express server code, Replit config |
-
-**Do not touch:** `.replit`, `replit.nix`, `artifacts/mockup-sandbox/` — these are Replit platform files. Let the Replit agent handle them.
-
-`replit.md` and `CLAUDE.md` are separate files for separate tools — not duplicates. Keep both updated but don't merge them.
-
-## Canonical files
-
-| File | Purpose |
-|------|---------|
-| `artifacts/api-server/dashboard.html` | **The dashboard — edit this one only** |
-| `artifacts/api-server/src/routes/dashboard.ts` | Serves the dashboard HTML at `/api/dashboard` |
-| `artifacts/api-server/src/routes/index.ts` | Route registrations |
-| `artifacts/api-server/src/app.ts` | Express app setup (CORS, logging, JSON) |
-
-## Hard constraints
-
-- **Single file** — all HTML, CSS, JS lives in `artifacts/api-server/dashboard.html`. No bundler, no splits.
-- **Vanilla only** — no frameworks, no CDN links, no external resources in the dashboard.
-- **800×480px fixed** — all layout decisions validated at this size.
-- **Pi Zero W is CPU-constrained** — keep per-tick JS work minimal; timer intervals are intentionally coarse.
+## Hardware
+- **Primary:** Raspberry Pi 5, 4GB (CanaKit — official 27W PSU, case, active cooling, SD card). Lives in the kitchen, drives the HDMI panel directly, runs the Chromium kiosk locally → `http://localhost:3000`.
+- **Dev machine:** Mac mini (primary development environment).
+- **Remote display testing:** Old MacBook — simulates a thin-client kiosk or tablet install pointed at `http://<pi5-ip>:3000`. Tests the same path the Zero W would use.
+- **Optional experiment (not on critical path):** Pi Zero W Rev 1.1 as a thin-client kiosk — Chromium on 32-bit Raspberry Pi OS pointed at `http://<pi5-ip>:3000`. Hardware dead end for anything beyond kiosk display — never run Node/servers on the Zero W.
 
 ## Architecture
+- Pi 5 OS: Raspberry Pi OS 64-bit desktop (kiosk runs locally)
+- Docker Compose runs all services on the Pi 5; Home Assistant is a Container install (no add-on store — use HACS for custom integrations).
+- NAS is a WD MyCloud EX2 Ultra (Marvell Armada 385, ARMv7 32-bit). Has Portainer/Docker running but cannot host current HA — HA dropped 32-bit ARM support in 2023. Not a viable HA host.
+- Jeeves = lightweight Express server + static HTML/CSS dashboard; binds `0.0.0.0` (keeps thin-client option free), LAN-only, Tailscale for remote access — no port forwarding
+- Dashboard page must stay light — heavy page permanently kills the Zero W kiosk option
+- ESPHome devices (future) connect via HA's native API — no MQTT broker unless a specific device requires it
 
 ### Data flow
-
 ```
-Pi (Chromium kiosk) → Replit Express server → /api/status → dashboard renders
+Chromium kiosk (localhost:3000) → Express /api/status → dashboard renders
 ```
 
-`fetchData()` in the dashboard is the only integration point. It currently returns hardcoded `TEST_DATA`. To go live, replace its body with `fetch('/api/status')`. The `/api/status` route lives in `artifacts/api-server/src/routes/`.
+`fetchData()` in the dashboard is the only integration point. It currently returns hardcoded `TEST_DATA`. To go live, replace its body with `fetch('/api/status')`.
 
 ### Expected `/api/status` shape
-
 ```json
 {
   "weather": {
@@ -62,11 +42,9 @@ Pi (Chromium kiosk) → Replit Express server → /api/status → dashboard rend
 ```
 
 ### Tile rendering — diff, not replace
-
 `renderStatus()` builds tile DOM once, then on subsequent calls only patches `.tile-value` text and class names. **Never reset `innerHTML` on `#status-panel` during updates** — it restarts CSS pulse animations. A full rebuild is forced every `FULL_REBUILD_EVERY = 30` poll cycles (~30 min).
 
 ### Tile states
-
 | State | Color | Trigger |
 |-------|-------|---------|
 | Normal | White | Default |
@@ -76,7 +54,6 @@ Pi (Chromium kiosk) → Replit Express server → /api/status → dashboard rend
 | Error | Red strip | `fetchData()` threw |
 
 ### Timers (coarse by design)
-
 | Timer | Interval |
 |-------|----------|
 | Clock + night-dim | 15s |
@@ -87,42 +64,76 @@ Pi (Chromium kiosk) → Replit Express server → /api/status → dashboard rend
 Night dimming (opacity 0.45) activates 10 PM–6 AM in JS, not via a server flag.
 
 ### Adding tiles
-
 Add a new key to the `status` object in the API response. The grid uses CSS `auto-fill minmax(140px, 1fr)` and reflows automatically — no CSS changes needed.
 
-## Roadmap
-
-### Phase 1 — Pi kiosk ✅ (in progress)
-Pi boots Chromium pointed at the Replit URL. No code changes needed.
-
-```bash
-chromium-browser --kiosk --noerrdialogs --disable-infobars \
-  --app=https://<replit-url>/api/dashboard
+## Repo layout
+```
+homelab/
+├── docker-compose.yml
+├── homeassistant/      # HA config; secrets.yaml + database gitignored
+├── jeeves/             # Express server + dashboard
+└── docs/               # planning .md files (including superseded drafts, kept for history)
 ```
 
-### Phase 2 — `/api/status` route (next)
-Add `GET /api/status` to `artifacts/api-server/src/routes/`. Start with hardcoded stubs matching `TEST_DATA`, then swap `fetchData()` in the dashboard to hit it.
+### Jeeves canonical files
+| File | Purpose |
+|------|---------|
+| `artifacts/api-server/dashboard.html` | **The dashboard — edit this one only** |
+| `artifacts/api-server/src/routes/dashboard.ts` | Serves dashboard HTML at `/api/dashboard` |
+| `artifacts/api-server/src/routes/index.ts` | Route registrations |
+| `artifacts/api-server/src/app.ts` | Express app setup (CORS, logging, JSON) |
 
-### Phase 3 — Weather
-Source: **Open-Meteo** (free, no API key). Fetch from the server (not the browser) and cache ~10 min. Hardcode lat/lon for the location.
+## Hard rules
+- Never commit secrets: API keys, HA long-lived tokens, secrets.yaml
+- **Single file** — all dashboard HTML, CSS, JS lives in `artifacts/api-server/dashboard.html`. No bundler, no splits.
+- **Vanilla only** — no frameworks, no CDN links, no external resources in the dashboard.
+- Keep the stack minimal — no Node-RED, InfluxDB, Grafana, or MQTT unless explicitly decided
+- Prefer known-working custom Jeeves code over adopting frameworks (MagicMirror was tried and dropped)
+- Alerts and notifications are plain and direct — no "Jeeves voice"/personality
 
-### Phase 4 — Home Assistant tiles (one at a time)
-Hub: likely Home Assistant. Use HA's REST API — `GET /api/states/<entity_id>` with a `Authorization: Bearer <token>` header. No HA Python client needed; Node `fetch` handles it.
+## Features — full scope
 
-Planned order:
-1. Thermostat (`climate.*`)
-2. Who's home (`person.*`)
-3. Front door / garage (`binary_sensor.*`)
-4. Pool (temperature sensor)
-5. Laundry (power-monitoring plug — alert when wattage drops)
+### Dashboard v1 (public APIs, no HA required)
+- Clock / date
+- Weather: current + forecast — Open-Meteo (free, no API key); fetch server-side, cache ~10 min
+- Air quality: PurpleAir API — `X-API-Key` header, `/v1/sensors/<sensor_index>`
+- Calendar agenda view — **source TBD**: iCloud via CalDAV (through HA) or a shared .ics URL fetched by Jeeves directly
 
-Config: HA entity IDs and token go in environment variables, not hardcoded.
+### Home Assistant phase
+- Washer + dryer: power-monitoring smart plugs → cycle-done detection, phone notifications, dashboard tiles
+- Additional entity tiles: thermostat, presence, door/garage
+- NFC tags via HA companion app: front door = "leaving" scene; bedside = "goodnight" scene; poolside = log manual water test / "swim time" scene
+- Chores leaderboard: household tasks logged via NFC taps or buttons → running scoreboard on the Jeeves dashboard
 
-### Phase 5 — Hardening
-- Per-tile try/catch → `degraded: true` on failure (rest of dashboard keeps working)
-- Systemd or Replit always-on to keep server running
+### Pool (see docs/Pool_automation_plan.md)
+- ha-poolchem via HACS for water balance + dosing recommendations
+- Probes supply pH/temp only; FC, TA, CH, CYA entered manually via input helpers
+- Alerts: chemical drift, pump failure, low water level, freeze warning
+
+## Deferred (committed, do later)
+- ESPHome pool sensor build (ESP32 + pH/ORP/temp probes)
+- Pump power monitoring + water level sensor hardware
+- NVMe SSD for the Pi 5 (SD card fine to start; trim HA recorder retention to a few days)
+- Freeze-warning automation (winter concern)
+- Home Assistant entity data on the Jeeves dashboard
+- Zero W thin-client kiosk experiment
+
+## Parked — device/Homebridge migration
+Homebridge running on NAS (WD MyCloud EX2 Ultra via Portainer). Plan is to shut it down and move everything to HA on Pi 5. Before doing that, audit what each device is and whether HA has a native integration:
+- Thermostat + lock: native HomeKit — pair directly to HA via HomeKit Controller integration
+- Smart plugs, lights, speakers: **brands TBD** — identify before migrating
+- HA's HomeKit Bridge integration exposes everything back to Apple Home so Siri/automations keep working
+- Shut down Homebridge container on NAS once migration is confirmed working
+
+## Parked — decide later (do NOT build unless explicitly asked)
+- Local voice control: HA Assist + Whisper (STT) + Piper (TTS), needs a USB mic. Plain responses only. Note: 4GB is tight with Chromium running locally — use a small Whisper model, or revisit if Zero W experiment frees the Pi 5.
+- Zigbee USB dongle + cheap motion/door/temp sensors
+- Energy monitoring via smart plugs (per-device power on the dashboard)
+- AQI-triggered automation: PurpleAir threshold → air purifier smart plug + notification
+- Weather automation: rain incoming + windows open → notification
+- Frigate local camera AI (person/package detection; wants a Coral USB accelerator)
+- Boss key: one keypress swaps kiosk to a fake spreadsheet
 
 ## Git
-
 Remote: `https://github.com/matt-drazba/Jeeves.git`
 Auth: HTTPS via osxkeychain — first push after a fresh session requires a manual `git push` in terminal (credentials cached after that).

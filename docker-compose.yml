@@ -1,0 +1,21 @@
+services:
+  homeassistant:
+    container_name: homeassistant
+    image: ghcr.io/home-assistant/home-assistant:stable
+    volumes:
+      - ./homeassistant:/config
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+
+  jeeves:
+    container_name: jeeves
+    build: ./jeeves
+    ports:
+      - "3000:3000"
+    environment:
+      - TZ=America/Los_Angeles
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
