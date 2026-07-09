@@ -140,6 +140,45 @@ async function fetchWasher() {
 fetchWasher().catch(err => console.error('Washer fetch failed:', err));
 setInterval(() => fetchWasher().catch(err => console.error('Washer fetch failed:', err)), 30 * 1000);
 
+async function fetchDryer() {
+  if (!HA_TOKEN) return;
+
+  const [statusRes, remainingRes] = await Promise.allSettled([
+    fetchHAState('sensor.dryer_current_status'),
+    fetchHAState('sensor.dryer_remaining_time'),
+  ]);
+
+  if (statusRes.status === 'rejected') throw statusRes.reason;
+  const state = statusRes.value.state;
+
+  let value, alert = false, degraded = false;
+  if (state === 'end') {
+    value = 'Done!';
+    alert = true;
+  } else if (state === 'running') {
+    let eta = '';
+    if (remainingRes.status === 'fulfilled') {
+      const minsLeft = Math.round((new Date(remainingRes.value.state) - Date.now()) / 60000);
+      if (minsLeft > 0) {
+        eta = new Date(remainingRes.value.state).toLocaleTimeString('en-US', {
+          hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Los_Angeles',
+        });
+      }
+    }
+    value = eta ? `Done by ${eta}` : 'Running';
+  } else if (state === 'pause') {
+    value = 'Paused';
+  } else {
+    value = 'Idle';
+  }
+
+  cachedStatus.status.dryer = { label: 'Dryer', icon: '🌀', value, alert, degraded };
+  console.log(`Dryer updated: ${value}`);
+}
+
+fetchDryer().catch(err => console.error('Dryer fetch failed:', err));
+setInterval(() => fetchDryer().catch(err => console.error('Dryer fetch failed:', err)), 30 * 1000);
+
 // Fetch weather on startup, then every 10 minutes
 fetchWeather().catch(err => console.error('Weather fetch failed:', err));
 setInterval(() => fetchWeather().catch(err => console.error('Weather fetch failed:', err)), 10 * 60 * 1000);
