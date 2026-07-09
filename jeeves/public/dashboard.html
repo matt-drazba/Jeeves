@@ -208,7 +208,7 @@
       50%       { box-shadow: 0 0 0 4px rgba(240,192,64,0.2); }
     }
 
-    .tile.done { background: #0a1a0a; border-color: var(--good); }
+    .tile.done { background: #0a1a0a; border-color: var(--good); cursor: pointer; }
     .tile.done .tile-value { color: var(--good); }
 
     /* ── Calendar view ───────────────────────────────────────────── */
@@ -619,6 +619,16 @@
 
     document.body.classList.toggle('night', now.getHours() >= 22 || now.getHours() < 6);
   }
+
+  /* ── Tap-to-dismiss done tiles ─────────────────────────────────── */
+  document.getElementById('status-panel').addEventListener('click', async (e) => {
+    const tile = e.target.closest('.tile.done');
+    if (!tile) return;
+    const key = tile.dataset.key;
+    tile.classList.remove('done');
+    tile.querySelector('.tile-value').textContent = 'Idle';
+    await fetch(`/api/dismiss/${key}`, { method: 'POST' });
+  });
 
   /* ── Boot ───────────────────────────────────────────────────────── */
   updateClock();

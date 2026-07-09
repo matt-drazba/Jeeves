@@ -95,9 +95,23 @@ homelab/
 - Dashboard cycles dashboard ↔ calendar every 15s
 - Repo cloned at `~/homelab` on Pi; `.env` at `~/homelab/.env` holds secrets (never committed)
 - **Washer tile live** — Samsung SmartThings via HA REST API, polls every 30s
-  - States: "Done by 10:44 PM" (running), "Paused", "Idle", "Done!" (alert, persists until next cycle)
+  - States: "Done by 10:44 PM" (running), "Paused", "Idle", "Done!" (green, persists until next cycle)
   - Entity: `sensor.laundry_room_washer_machine_state` + `sensor.laundry_room_washer_completion_time`
-- **Dryer tile stub** — shows "Idle", wired up once LG ThinQ (smartthinq_sensors HACS) is installed
+  - "Done!" uses `done: true` flag → `.tile.done` CSS class (solid green background/text); not `alert`
+  - Limitation: loses "Done!" state if Jeeves restarts mid-cycle (prev-state tracking is in-memory)
+- **Dryer tile live** — LG ThinQ via native HA LG integration, polls every 30s
+  - States: "Done by 12:26 AM" (running), "Paused", "Idle", "Done!" (green)
+  - Entity: `sensor.dryer_current_status` + `sensor.dryer_remaining_time`
+  - LG has a native `end` state — no prev-state tracking needed
+  - LG account auth: sign-in-with-Apple relay email + reset password to get email/password for HA
+
+### Tile states
+| State | CSS class | Trigger |
+|-------|-----------|---------|
+| Normal | (none) | Default |
+| Done | `.done` | `done: true` — solid green, used for appliance cycle complete |
+| Alert | `.alert` | `alert: true` — red pulse, reserved for urgent/error alerts |
+| Degraded | `.degraded` | `degraded: true` — yellow pulse |
 
 ### Secrets in `~/homelab/.env`
 ```
@@ -112,7 +126,6 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 ```
 
 ### Not yet wired up
-- Dryer tile: LG ThinQ via HACS `smartthinq_sensors` — LG credentials go in `.env` as `LG_USERNAME` / `LG_PASSWORD`
 - HA device pairing: thermostat + lock (native HomeKit → HA HomeKit Controller), smart plugs/lights/speakers (brands TBD)
 - AQI tile: PurpleAir — needs sensor index + API key in `.env`
 - Chromium kiosk autostart on Pi desktop boot (low priority — open browser manually for now)
@@ -162,6 +175,7 @@ Homebridge running on NAS (WD MyCloud EX2 Ultra via Portainer). Plan is to shut 
 
 ## Parked — decide later (do NOT build unless explicitly asked)
 - Local voice control: HA Assist + Whisper (STT) + Piper (TTS). Requires a USB microphone (Pi 5 has no built-in mic; ~$10 USB mic works). 4GB is tight with Chromium running locally — use a small Whisper model, or revisit if Zero W experiment frees the Pi 5.
+  - Voice dismiss for appliance tiles: "Jeeves, washer done" / "Jeeves, dryer done" → calls `POST /api/dismiss/washer` or `POST /api/dismiss/dryer`. Dashboard tap-to-dismiss is the current fallback.
 - Library holds tile: BiblioCommons (local library system). Fetch holds/ready items on a schedule — likely via RSS feed or authenticated scrape. Credentials go in env vars, never committed. Research the specific library's BiblioCommons URL first.
 - Zigbee USB dongle + cheap motion/door/temp sensors
 - Energy monitoring via smart plugs (per-device power on the dashboard)

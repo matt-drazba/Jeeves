@@ -92,6 +92,8 @@ async function fetchHAState(entityId) {
 
 let washerPrevState = 'stop';
 let washerDone = false;
+let dryerPrevState = 'power_off';
+let dryerDone = false;
 
 async function fetchWasher() {
   if (!HA_TOKEN) return;
@@ -151,8 +153,15 @@ async function fetchDryer() {
   if (statusRes.status === 'rejected') throw statusRes.reason;
   const state = statusRes.value.state;
 
+  if (state === 'running' || state === 'pause') {
+    dryerDone = false;
+  } else if (state === 'power_off' && (dryerPrevState === 'running' || dryerPrevState === 'pause')) {
+    dryerDone = true;
+  }
+  dryerPrevState = state;
+
   let value, alert = false, done = false, degraded = false;
-  if (state === 'end') {
+  if (dryerDone) {
     value = 'Done!';
     done = true;
   } else if (state === 'running') {
@@ -272,6 +281,21 @@ app.get('/', (req, res) => {
 
 app.get('/api/status', (req, res) => {
   res.json(cachedStatus);
+});
+
+app.post('/api/dismiss/:appliance', (req, res) => {
+  const { appliance } = req.params;
+  if (appliance === 'washer') {
+    washerDone = false;
+    cachedStatus.status.washer = { ...cachedStatus.status.washer, value: 'Idle', done: false };
+  } else if (appliance === 'dryer') {
+    dryerDone = false;
+    cachedStatus.status.dryer = { ...cachedStatus.status.dryer, value: 'Idle', done: false };
+  } else {
+    return res.status(400).json({ error: 'Unknown appliance' });
+  }
+  console.log(`${appliance} dismissed`);
+  res.json({ ok: true });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
