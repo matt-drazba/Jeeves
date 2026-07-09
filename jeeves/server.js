@@ -113,47 +113,40 @@ async function fetchCalendar() {
     };
   });
 
-  const addEvent = (startDate, summary, allDay, tz) => {
+  const addEvent = (startDate, summary, allDay) => {
     const d = new Date(startDate);
     const midnight = new Date(d);
     midnight.setHours(0, 0, 0, 0);
     const idx = Math.round((midnight - weekStart) / 86400000);
     if (idx < 0 || idx >= 7) return;
-
-    let timeStr = null;
-    let sortKey = -1;
-    if (!allDay) {
-      if (tz === 'America/Los_Angeles') {
-        // node-ical stores local Pacific time as-is in the Date object without converting to UTC.
-        // Read UTC accessors directly — they ARE the original local hours.
-        const h = d.getUTCHours();
-        const m = d.getUTCMinutes();
-        const ampm = h >= 12 ? 'PM' : 'AM';
-        const h12 = h % 12 || 12;
-        timeStr = `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
-        sortKey = h * 60 + m;
-      } else {
-        timeStr = d.toLocaleTimeString('en-US', {
-          hour: 'numeric', minute: '2-digit', hour12: true,
-          timeZone: 'America/Los_Angeles',
-        });
-        sortKey = d.getHours() * 60 + d.getMinutes();
-      }
-    }
-
-    days[idx].events.push({ title: summary || '(No title)', time: timeStr, allDay, sortKey });
+    const timeStr = allDay ? null : d.toLocaleTimeString('en-US', {
+      hour: 'numeric', minute: '2-digit', hour12: true,
+      timeZone: 'America/Los_Angeles',
+    });
+    days[idx].events.push({
+      title: summary || '(No title)',
+      time: timeStr,
+      allDay,
+      sortKey: allDay ? -1 : d.getHours() * 60 + d.getMinutes(),
+    });
   };
 
   for (const ev of Object.values(events)) {
     if (ev.type !== 'VEVENT') continue;
     const allDay = !!ev.start?.dateOnly;
-    const tz = ev.start?.tz;
+    if (ev.start && !allDay) {
+      // Debug: keep until timezone issues are fully resolved
+      const inWindow = ev.start >= weekStart && ev.start < weekEnd;
+      if (inWindow) {
+        console.log(`[CAL-DEBUG] "${ev.summary}" | start=${ev.start.toISOString()} | tz=${ev.start.tz || 'none'}`);
+      }
+    }
     if (ev.rrule) {
       for (const occ of ev.rrule.between(weekStart, weekEnd, true)) {
-        addEvent(occ, ev.summary, allDay, tz);
+        addEvent(occ, ev.summary, allDay);
       }
     } else if (ev.start) {
-      addEvent(ev.start, ev.summary, allDay, tz);
+      addEvent(ev.start, ev.summary, allDay);
     }
   }
 
