@@ -208,6 +208,9 @@
       50%       { box-shadow: 0 0 0 4px rgba(240,192,64,0.2); }
     }
 
+    .tile.done { background: #0a1a0a; border-color: var(--good); }
+    .tile.done .tile-value { color: var(--good); }
+
     /* ── Calendar view ───────────────────────────────────────────── */
     #calendar-grid {
       display: grid;
@@ -486,7 +489,7 @@
     for (const [key, tile] of entries) {
       const el = panel.querySelector(`[data-key="${key}"]`);
       if (!el) continue;
-      el.className = 'tile' + (tile.alert ? ' alert' : tile.degraded ? ' degraded' : '');
+      el.className = 'tile' + (tile.done ? ' done' : tile.alert ? ' alert' : tile.degraded ? ' degraded' : '');
       el.querySelector('.tile-value').textContent = tile.value;
     }
   }

@@ -111,10 +111,10 @@ async function fetchWasher() {
   }
   washerPrevState = state;
 
-  let value, alert = false, degraded = false;
+  let value, alert = false, done = false, degraded = false;
   if (washerDone) {
     value = 'Done!';
-    alert = true;
+    done = true;
   } else if (state === 'run') {
     let minsLeft = 0;
     if (completionRes.status === 'fulfilled') {
@@ -133,7 +133,7 @@ async function fetchWasher() {
     value = 'Idle';
   }
 
-  cachedStatus.status.washer = { label: 'Washer', icon: '🫧', value, alert, degraded };
+  cachedStatus.status.washer = { label: 'Washer', icon: '🫧', value, alert, done, degraded };
   console.log(`Washer updated: ${value}`);
 }
 
@@ -151,10 +151,10 @@ async function fetchDryer() {
   if (statusRes.status === 'rejected') throw statusRes.reason;
   const state = statusRes.value.state;
 
-  let value, alert = false, degraded = false;
+  let value, alert = false, done = false, degraded = false;
   if (state === 'end') {
     value = 'Done!';
-    alert = true;
+    done = true;
   } else if (state === 'running') {
     let eta = '';
     if (remainingRes.status === 'fulfilled') {
@@ -172,7 +172,7 @@ async function fetchDryer() {
     value = 'Idle';
   }
 
-  cachedStatus.status.dryer = { label: 'Dryer', icon: '🌀', value, alert, degraded };
+  cachedStatus.status.dryer = { label: 'Dryer', icon: '🌀', value, alert, done, degraded };
   console.log(`Dryer updated: ${value}`);
 }
 
