@@ -70,9 +70,10 @@ let cachedStatus = {
     ],
   },
   status: {
-    washer: { label: 'Washer', icon: '🫧', value: 'Idle', alert: false, degraded: false },
-    dryer:  { label: 'Dryer',  icon: '🌀', value: 'Idle', alert: false, degraded: false },
-    aqi:    { label: 'AQI',    icon: '💨', value: '—',    alert: false, degraded: false },
+    washer:   { label: 'Washer',   icon: '🫧', value: 'Idle', alert: false, degraded: false },
+    dryer:    { label: 'Dryer',    icon: '🌀', value: 'Idle', alert: false, degraded: false },
+    aqiIn:    { label: 'AQI In',   icon: '🏠', value: '—',    alert: false, degraded: false },
+    aqiOut:   { label: 'AQI Out',  icon: '🌿', value: '—',    alert: false, degraded: false },
   },
   alerts: [],
   calendar: { days: [] },
@@ -191,6 +192,7 @@ setInterval(() => fetchDryer().catch(err => console.error('Dryer fetch failed:',
 
 // ── AQI (PurpleAir) ──────────────────────────────────────────────
 const PURPLEAIR_KEY             = process.env.PURPLEAIR_API_KEY;
+const PURPLEAIR_INDOOR_SENSOR   = 126601;
 const PURPLEAIR_OUTDOOR_SENSORS = [113020, 81199, 284212];
 
 function pm25ToAqi(pm) {
@@ -208,38 +210,49 @@ function pm25ToAqi(pm) {
   return 500;
 }
 
-function aqiLabel(aqi) {
-  if (aqi <= 50)  return 'Good';
-  if (aqi <= 100) return 'Moderate';
-  if (aqi <= 150) return 'Sensitive';
-  if (aqi <= 200) return 'Unhealthy';
-  if (aqi <= 300) return 'Very Unhealthy';
-  return 'Hazardous';
+function aqiMeta(aqi) {
+  if (aqi <= 50)  return { label: 'Good',          color: '#68e143', bg: '#0a1a06' };
+  if (aqi <= 100) return { label: 'Moderate',       color: '#f7d300', bg: '#1a1800' };
+  if (aqi <= 150) return { label: 'Sensitive',      color: '#ff7e00', bg: '#1a0e00' };
+  if (aqi <= 200) return { label: 'Unhealthy',      color: '#ff0000', bg: '#1a0000' };
+  if (aqi <= 300) return { label: 'Very Unhealthy', color: '#8f3f97', bg: '#12001a' };
+  return                  { label: 'Hazardous',     color: '#7e0023', bg: '#1a0008' };
+}
+
+async function fetchPM25(sensorId) {
+  const r = await fetch(`https://api.purpleair.com/v1/sensors/${sensorId}?fields=pm2.5_10minute`,
+    { headers: { 'X-API-Key': PURPLEAIR_KEY } });
+  if (!r.ok) throw new Error(`PurpleAir ${r.status}`);
+  const d = await r.json();
+  return d.sensor.stats['pm2.5_10minute'];
+}
+
+function buildAqiTile(label, icon, aqi) {
+  const { label: aqiLabel, color, bg } = aqiMeta(aqi);
+  return { label, icon, value: `${aqi} ${aqiLabel}`, color, bg, alert: false, degraded: false, done: false };
 }
 
 async function fetchAQI() {
   if (!PURPLEAIR_KEY) return;
-  const results = await Promise.allSettled(
-    PURPLEAIR_OUTDOOR_SENSORS.map(id =>
-      fetch(`https://api.purpleair.com/v1/sensors/${id}?fields=pm2.5_10minute`,
-        { headers: { 'X-API-Key': PURPLEAIR_KEY } })
-        .then(r => r.ok ? r.json() : Promise.reject(new Error(`PurpleAir ${r.status}`)))
-        .then(d => d.sensor.stats['pm2.5_10minute'])
-    )
-  );
-  const readings = results.filter(r => r.status === 'fulfilled').map(r => r.value);
-  if (readings.length === 0) throw new Error('All PurpleAir sensors failed');
-  const pm = readings.reduce((a, b) => a + b, 0) / readings.length;
-  const aqi = pm25ToAqi(pm);
-  const label = aqiLabel(aqi);
-  cachedStatus.status.aqi = {
-    label: 'AQI', icon: '💨',
-    value: `${aqi} ${label}`,
-    alert:    aqi > 150,
-    degraded: aqi > 100 && aqi <= 150,
-    done: false,
-  };
-  console.log(`AQI updated: ${aqi} ${label}`);
+
+  const [indoorRes, ...outdoorResults] = await Promise.allSettled([
+    fetchPM25(PURPLEAIR_INDOOR_SENSOR),
+    ...PURPLEAIR_OUTDOOR_SENSORS.map(fetchPM25),
+  ]);
+
+  if (indoorRes.status === 'fulfilled') {
+    const aqi = pm25ToAqi(indoorRes.value);
+    cachedStatus.status.aqiIn = buildAqiTile('AQI In', '🏠', aqi);
+    console.log(`AQI In updated: ${aqi}`);
+  }
+
+  const outdoorReadings = outdoorResults.filter(r => r.status === 'fulfilled').map(r => r.value);
+  if (outdoorReadings.length > 0) {
+    const pm = outdoorReadings.reduce((a, b) => a + b, 0) / outdoorReadings.length;
+    const aqi = pm25ToAqi(pm);
+    cachedStatus.status.aqiOut = buildAqiTile('AQI Out', '🌿', aqi);
+    console.log(`AQI Out updated: ${aqi}`);
+  }
 }
 
 fetchAQI().catch(err => console.error('AQI fetch failed:', err));
