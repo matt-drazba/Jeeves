@@ -126,7 +126,8 @@ Homebridge running on NAS (WD MyCloud EX2 Ultra via Portainer). Plan is to shut 
 - Shut down Homebridge container on NAS once migration is confirmed working
 
 ## Parked — decide later (do NOT build unless explicitly asked)
-- Local voice control: HA Assist + Whisper (STT) + Piper (TTS), needs a USB mic. Plain responses only. Note: 4GB is tight with Chromium running locally — use a small Whisper model, or revisit if Zero W experiment frees the Pi 5.
+- Local voice control: HA Assist + Whisper (STT) + Piper (TTS). Requires a USB microphone (Pi 5 has no built-in mic; ~$10 USB mic works). 4GB is tight with Chromium running locally — use a small Whisper model, or revisit if Zero W experiment frees the Pi 5.
+- Library holds tile: BiblioCommons (local library system). Fetch holds/ready items on a schedule — likely via RSS feed or authenticated scrape. Credentials go in env vars, never committed. Research the specific library's BiblioCommons URL first.
 - Zigbee USB dongle + cheap motion/door/temp sensors
 - Energy monitoring via smart plugs (per-device power on the dashboard)
 - AQI-triggered automation: PurpleAir threshold → air purifier smart plug + notification

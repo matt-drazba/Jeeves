@@ -13,7 +13,7 @@
       --surface2:     #222222;
       --border:       #2e2e2e;
       --text:         #f0f0f0;
-      --muted:        #888888;
+      --muted:        #aaaaaa;
       --accent:       #4fc3f7;
       --alert-bg:     #1a0a00;
       --alert-col:    #ff6b35;
@@ -28,14 +28,8 @@
       --dim:          1;
     }
 
-    /* ── Night dimming ─────────────────────────────────────────── */
-    body.night {
-      --dim: 0.45;
-    }
-    #root {
-      opacity: var(--dim);
-      transition: opacity 2s ease;
-    }
+    body.night { --dim: 0.45; }
+    #root { opacity: var(--dim); transition: opacity 2s ease; }
 
     html, body {
       width: 800px;
@@ -48,13 +42,10 @@
       user-select: none;
     }
 
-    /* ── Layout ─────────────────────────────────────────────────── */
     #root {
       display: grid;
       grid-template-rows: 72px 1fr 38px;
-      grid-template-columns: 1fr;
       height: 480px;
-      gap: 0;
     }
 
     /* ── Top bar ─────────────────────────────────────────────────── */
@@ -76,9 +67,7 @@
       font-variant-numeric: tabular-nums;
     }
 
-    #topbar-right {
-      text-align: right;
-    }
+    #topbar-right { text-align: right; }
 
     #date-label {
       font-size: 15px;
@@ -92,11 +81,15 @@
       font-weight: 500;
     }
 
-    /* ── Main area ───────────────────────────────────────────────── */
+    /* ── Views ───────────────────────────────────────────────────── */
     #main {
+      overflow: hidden;
       display: grid;
       grid-template-columns: 272px 1fr;
-      gap: 0;
+    }
+
+    #view-calendar {
+      display: none;
       overflow: hidden;
     }
 
@@ -110,22 +103,9 @@
       gap: 10px;
     }
 
-    #weather-current {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-    }
-
-    #weather-icon {
-      font-size: 48px;
-      line-height: 1;
-      margin-top: 2px;
-    }
-
-    #weather-temps {
-      display: flex;
-      flex-direction: column;
-    }
+    #weather-current { display: flex; align-items: flex-start; gap: 10px; }
+    #weather-icon { font-size: 48px; line-height: 1; margin-top: 2px; }
+    #weather-temps { display: flex; flex-direction: column; }
 
     #weather-temp-big {
       font-size: 52px;
@@ -135,24 +115,10 @@
       color: var(--text);
     }
 
-    #weather-condition {
-      font-size: 14px;
-      color: var(--muted);
-      margin-top: 2px;
-    }
+    #weather-condition { font-size: 14px; color: var(--muted); margin-top: 2px; }
+    #weather-hl { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    #weather-hl span { color: var(--text); font-weight: 600; }
 
-    #weather-hl {
-      font-size: 13px;
-      color: var(--muted);
-      margin-top: 2px;
-    }
-
-    #weather-hl span {
-      color: var(--text);
-      font-weight: 600;
-    }
-
-    /* forecast strip */
     #forecast-strip {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -182,11 +148,10 @@
     }
 
     .forecast-day-icon { font-size: 22px; line-height: 1; }
-
     .forecast-day-hl { font-size: 11px; color: var(--muted); }
     .forecast-day-hl strong { color: var(--text); }
 
-    /* ── Status panel ────────────────────────────────────────────── */
+    /* ── Status tiles ────────────────────────────────────────────── */
     #status-panel {
       padding: 12px 14px;
       display: grid;
@@ -208,13 +173,8 @@
       overflow: hidden;
     }
 
-    .tile-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .tile-icon  { font-size: 22px; line-height: 1; }
+    .tile-header { display: flex; align-items: center; gap: 8px; }
+    .tile-icon { font-size: 22px; line-height: 1; }
 
     .tile-label {
       font-size: 11px;
@@ -232,30 +192,103 @@
       margin-top: 6px;
     }
 
-    /* Alert tile state — red */
-    .tile.alert {
-      background: var(--alert-bg);
-      border-color: var(--alert-bdr);
-      animation: pulse-border-red 1.8s ease-in-out infinite;
-    }
+    .tile.alert { background: var(--alert-bg); border-color: var(--alert-bdr); animation: pulse-red 1.8s ease-in-out infinite; }
     .tile.alert .tile-value { color: var(--alert-col); }
 
-    @keyframes pulse-border-red {
+    @keyframes pulse-red {
       0%, 100% { box-shadow: 0 0 0 0 rgba(255,107,53,0); }
       50%       { box-shadow: 0 0 0 4px rgba(255,107,53,0.25); }
     }
 
-    /* Degraded tile state — yellow */
-    .tile.degraded {
-      background: var(--warn-bg);
-      border-color: var(--warn-bdr);
-      animation: pulse-border-yellow 2.4s ease-in-out infinite;
-    }
+    .tile.degraded { background: var(--warn-bg); border-color: var(--warn-bdr); animation: pulse-yellow 2.4s ease-in-out infinite; }
     .tile.degraded .tile-value { color: var(--warn-col); }
 
-    @keyframes pulse-border-yellow {
+    @keyframes pulse-yellow {
       0%, 100% { box-shadow: 0 0 0 0 rgba(240,192,64,0); }
       50%       { box-shadow: 0 0 0 4px rgba(240,192,64,0.2); }
+    }
+
+    /* ── Calendar view ───────────────────────────────────────────── */
+    #calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .cal-col {
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .cal-col:last-child { border-right: none; }
+
+    .cal-header {
+      padding: 8px 6px;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+
+    .cal-col.today .cal-header {
+      background: #0d2a38;
+      border-bottom-color: var(--accent);
+    }
+
+    .cal-day-name {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+    }
+
+    .cal-col.today .cal-day-name { color: var(--accent); }
+
+    .cal-day-num {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.1;
+    }
+
+    .cal-col.today .cal-day-num { color: var(--accent); }
+
+    .cal-events {
+      flex: 1;
+      overflow: hidden;
+      padding: 4px 3px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .cal-event {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 3px 5px;
+      overflow: hidden;
+    }
+
+    .cal-event-time {
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .cal-event-title {
+      font-size: 10px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.3;
     }
 
     /* ── Alert strip ─────────────────────────────────────────────── */
@@ -269,20 +302,9 @@
       overflow: hidden;
     }
 
-    #alert-strip.has-alerts {
-      background: #1a0800;
-      border-top-color: var(--alert-bdr);
-    }
-
-    #alert-strip.error {
-      background: #1a0000;
-      border-top-color: var(--error-col);
-    }
-
-    #alert-strip.stale {
-      background: #1a1500;
-      border-top-color: var(--warn-bdr);
-    }
+    #alert-strip.has-alerts { background: #1a0800; border-top-color: var(--alert-bdr); }
+    #alert-strip.error { background: #1a0000; border-top-color: var(--error-col); }
+    #alert-strip.stale { background: #1a1500; border-top-color: var(--warn-bdr); }
 
     #alert-badge {
       font-size: 10px;
@@ -298,34 +320,18 @@
     }
 
     #alert-strip.has-alerts #alert-badge { display: block; }
-
-    #alert-strip.error #alert-badge {
-      display: block;
-      color: var(--error-col);
-      border-color: var(--error-col);
-    }
-
-    #alert-strip.stale #alert-badge {
-      display: block;
-      color: var(--warn-col);
-      border-color: var(--warn-col);
-    }
+    #alert-strip.error #alert-badge { display: block; color: var(--error-col); border-color: var(--error-col); }
+    #alert-strip.stale #alert-badge { display: block; color: var(--warn-col); border-color: var(--warn-col); }
 
     #alert-ticker-wrap {
       flex: 1;
       overflow: hidden;
-      position: relative;
       height: 100%;
       display: flex;
       align-items: center;
     }
 
-    #alert-ticker {
-      font-size: 13px;
-      color: var(--muted);
-      white-space: nowrap;
-    }
-
+    #alert-ticker { font-size: 13px; color: var(--muted); white-space: nowrap; }
     #alert-strip.has-alerts #alert-ticker { color: #ffb380; }
     #alert-strip.error      #alert-ticker { color: #ff8a80; }
     #alert-strip.stale      #alert-ticker { color: var(--warn-col); }
@@ -335,33 +341,24 @@
       to   { opacity: 1; transform: translateY(0); }
     }
 
-    /* ── Last-updated timestamp ──────────────────────────────────── */
-    #last-updated {
-      font-size: 10px;
-      color: var(--muted);
-      white-space: nowrap;
-      opacity: 0.7;
-    }
+    #last-updated { font-size: 11px; color: var(--muted); white-space: nowrap; }
 
-    /* ── Refresh dot ─────────────────────────────────────────────── */
     #refresh-dot {
-      width: 6px;
-      height: 6px;
+      width: 6px; height: 6px;
       border-radius: 50%;
       background: var(--good);
       flex-shrink: 0;
       opacity: 0.5;
       transition: background 0.4s, opacity 0.3s;
     }
-    #refresh-dot.flash   { opacity: 1; }
-    #refresh-dot.error   { background: var(--error-col); opacity: 1; }
-    #refresh-dot.stale   { background: var(--warn-col);  opacity: 1; }
+    #refresh-dot.flash { opacity: 1; }
+    #refresh-dot.error { background: var(--error-col); opacity: 1; }
+    #refresh-dot.stale { background: var(--warn-col); opacity: 1; }
   </style>
 </head>
 <body>
 <div id="root">
 
-  <!-- Top bar -->
   <header id="topbar">
     <div id="clock">--:--</div>
     <div id="topbar-right">
@@ -370,10 +367,8 @@
     </div>
   </header>
 
-  <!-- Main -->
+  <!-- Dashboard view -->
   <div id="main">
-
-    <!-- Weather panel -->
     <section id="weather-panel">
       <div id="weather-current">
         <div id="weather-icon">☀️</div>
@@ -383,15 +378,16 @@
           <div id="weather-hl">H <span id="wh">--</span>° · L <span id="wl">--</span>°</div>
         </div>
       </div>
-      <div id="forecast-strip"><!-- injected by JS --></div>
+      <div id="forecast-strip"></div>
     </section>
-
-    <!-- Status tile grid -->
-    <section id="status-panel"><!-- injected by JS --></section>
-
+    <section id="status-panel"></section>
   </div>
 
-  <!-- Alert strip -->
+  <!-- Calendar view -->
+  <div id="view-calendar">
+    <div id="calendar-grid"></div>
+  </div>
+
   <footer id="alert-strip">
     <span id="alert-badge">Alert</span>
     <div id="alert-ticker-wrap">
@@ -404,11 +400,21 @@
 </div>
 
 <script>
-  /* ─────────────────────────────────────────────────────────────
-   * DATA FETCH
-   * Keeps last-known data on failure so the kiosk never blanks
-   * during a server restart or brief network hiccup.
-   * ───────────────────────────────────────────────────────────── */
+  /* ── View cycling ───────────────────────────────────────────────── */
+  const VIEWS = ['dashboard', 'calendar'];
+  let _viewIndex = 0;
+
+  function showView(name) {
+    document.getElementById('main').style.display          = name === 'dashboard' ? '' : 'none';
+    document.getElementById('view-calendar').style.display = name === 'calendar'  ? 'block' : 'none';
+  }
+
+  setInterval(() => {
+    _viewIndex = (_viewIndex + 1) % VIEWS.length;
+    showView(VIEWS[_viewIndex]);
+  }, 15_000);
+
+  /* ── Data fetch ─────────────────────────────────────────────────── */
   let _lastData = null;
 
   async function fetchData() {
@@ -418,9 +424,7 @@
     return _lastData;
   }
 
-  /* ─────────────────────────────────────────────────────────────
-   * WEATHER ICONS
-   * ───────────────────────────────────────────────────────────── */
+  /* ── Weather icons ──────────────────────────────────────────────── */
   function weatherIcon(condition) {
     const c = (condition || '').toLowerCase();
     if (c.includes('sun') || c.includes('clear'))     return '☀️';
@@ -433,9 +437,7 @@
     return '🌤️';
   }
 
-  /* ─────────────────────────────────────────────────────────────
-   * RENDER — weather
-   * ───────────────────────────────────────────────────────────── */
+  /* ── Render weather ─────────────────────────────────────────────── */
   function renderWeather(w) {
     document.getElementById('weather-icon').textContent      = weatherIcon(w.condition);
     document.getElementById('weather-temp-big').textContent  = w.temp + '°';
@@ -453,14 +455,10 @@
     `).join('');
   }
 
-  /* ─────────────────────────────────────────────────────────────
-   * RENDER — status tiles
-   * First call builds DOM. Subsequent calls diff values only so
-   * CSS pulse animations are not restarted.
-   * ───────────────────────────────────────────────────────────── */
+  /* ── Render status tiles ────────────────────────────────────────── */
   let _tilesBuilt = false;
   let _fullRebuildCounter = 0;
-  const FULL_REBUILD_EVERY = 30; // force rebuild every ~30 min (60s × 30)
+  const FULL_REBUILD_EVERY = 30;
 
   function renderStatus(status) {
     const panel = document.getElementById('status-panel');
@@ -485,7 +483,6 @@
       `).join('');
     }
 
-    // Diff — only touch what changed
     for (const [key, tile] of entries) {
       const el = panel.querySelector(`[data-key="${key}"]`);
       if (!el) continue;
@@ -494,9 +491,29 @@
     }
   }
 
-  /* ─────────────────────────────────────────────────────────────
-   * ALERT TICKER
-   * ───────────────────────────────────────────────────────────── */
+  /* ── Render calendar ────────────────────────────────────────────── */
+  function renderCalendar(calendar) {
+    if (!calendar?.days?.length) return;
+    const grid = document.getElementById('calendar-grid');
+    grid.innerHTML = calendar.days.map(day => `
+      <div class="cal-col${day.isToday ? ' today' : ''}">
+        <div class="cal-header">
+          <div class="cal-day-name">${day.dayName}</div>
+          <div class="cal-day-num">${day.dayNum}</div>
+        </div>
+        <div class="cal-events">
+          ${day.events.map(ev => `
+            <div class="cal-event">
+              ${ev.allDay ? '' : `<div class="cal-event-time">${ev.time}</div>`}
+              <div class="cal-event-title">${ev.title}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  /* ── Alert ticker ───────────────────────────────────────────────── */
   let _alertIndex = 0;
   let _alerts = [];
   let _prevAlertCount = 0;
@@ -507,18 +524,12 @@
     const ticker = document.getElementById('alert-ticker');
     const badge  = document.getElementById('alert-badge');
 
-    if (_alerts.length !== _prevAlertCount) {
-      _alertIndex = 0;
-      _prevAlertCount = _alerts.length;
-    }
+    if (_alerts.length !== _prevAlertCount) { _alertIndex = 0; _prevAlertCount = _alerts.length; }
 
     strip.classList.remove('has-alerts', 'error', 'stale');
     badge.textContent = 'Alert';
 
-    if (_alerts.length === 0) {
-      ticker.textContent = 'All systems normal';
-      return;
-    }
+    if (_alerts.length === 0) { ticker.textContent = 'All systems normal'; return; }
 
     strip.classList.add('has-alerts');
     ticker.textContent = _alerts[_alertIndex] ?? _alerts[0];
@@ -529,14 +540,12 @@
     _alertIndex = (_alertIndex + 1) % _alerts.length;
     const ticker = document.getElementById('alert-ticker');
     ticker.style.animation = 'none';
-    ticker.offsetHeight; // reflow
+    ticker.offsetHeight;
     ticker.style.animation = 'ticker-fade 0.4s ease';
     ticker.textContent = _alerts[_alertIndex];
   }
 
-  /* ─────────────────────────────────────────────────────────────
-   * STALE / ERROR STATE
-   * ───────────────────────────────────────────────────────────── */
+  /* ── Stale / error state ────────────────────────────────────────── */
   const REFRESH_INTERVAL_MS = 60_000;
   let _lastSuccessfulRefresh = null;
 
@@ -550,15 +559,11 @@
     dot.classList.remove('flash', 'error', 'stale');
 
     if (state === 'error') {
-      strip.classList.add('error');
-      dot.classList.add('error');
-      badge.textContent = 'Error';
-      ticker.textContent = 'Data refresh failed — retrying…';
+      strip.classList.add('error'); dot.classList.add('error');
+      badge.textContent = 'Error'; ticker.textContent = 'Data refresh failed — retrying…';
     } else if (state === 'stale') {
-      strip.classList.add('stale');
-      dot.classList.add('stale');
-      badge.textContent = 'Stale';
-      ticker.textContent = 'Data may be outdated — check connection';
+      strip.classList.add('stale'); dot.classList.add('stale');
+      badge.textContent = 'Stale'; ticker.textContent = 'Data may be outdated — check connection';
     } else {
       dot.classList.add('flash');
       setTimeout(() => dot.classList.remove('flash'), 600);
@@ -567,13 +572,9 @@
 
   function checkStaleness() {
     if (!_lastSuccessfulRefresh) return;
-    const age = Date.now() - _lastSuccessfulRefresh;
-    if (age > REFRESH_INTERVAL_MS * 2) setDataState('stale');
+    if (Date.now() - _lastSuccessfulRefresh > REFRESH_INTERVAL_MS * 2) setDataState('stale');
   }
 
-  /* ─────────────────────────────────────────────────────────────
-   * LAST UPDATED TIMESTAMP
-   * ───────────────────────────────────────────────────────────── */
   function updateTimestamp() {
     if (!_lastSuccessfulRefresh) return;
     const d = new Date(_lastSuccessfulRefresh);
@@ -583,10 +584,7 @@
     document.getElementById('last-updated').textContent = `Updated ${h}:${m}:${s}`;
   }
 
-  /* ─────────────────────────────────────────────────────────────
-   * REFRESH
-   * On failure: shows error state but keeps last-known data rendered.
-   * ───────────────────────────────────────────────────────────── */
+  /* ── Refresh ────────────────────────────────────────────────────── */
   async function refresh() {
     try {
       const data = await fetchData();
@@ -594,17 +592,15 @@
       renderWeather(data.weather);
       renderStatus(data.status);
       renderAlerts(data.alerts);
+      renderCalendar(data.calendar);
       updateTimestamp();
       setDataState('ok');
     } catch (err) {
       setDataState('error');
-      // last-known data stays rendered — no clear
     }
   }
 
-  /* ─────────────────────────────────────────────────────────────
-   * CLOCK — update every 15s (display is HH:MM, seconds don't show)
-   * ───────────────────────────────────────────────────────────── */
+  /* ── Clock ──────────────────────────────────────────────────────── */
   function updateClock() {
     const now  = new Date();
     let h      = now.getHours();
@@ -618,14 +614,10 @@
     document.getElementById('date-label').textContent =
       `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}`;
 
-    // Night dimming — dim 10 PM – 6 AM
-    const hour = now.getHours();
-    document.body.classList.toggle('night', hour >= 22 || hour < 6);
+    document.body.classList.toggle('night', now.getHours() >= 22 || now.getHours() < 6);
   }
 
-  /* ─────────────────────────────────────────────────────────────
-   * BOOT
-   * ───────────────────────────────────────────────────────────── */
+  /* ── Boot ───────────────────────────────────────────────────────── */
   updateClock();
   setInterval(updateClock, 15_000);
 
