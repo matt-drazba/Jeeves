@@ -142,7 +142,14 @@ async function fetchCalendar() {
       }
     }
     if (ev.rrule) {
-      for (const occ of ev.rrule.between(weekStart, weekEnd, true)) {
+      for (let occ of ev.rrule.between(weekStart, weekEnd, true)) {
+        if (ev.start?.tz === 'America/Los_Angeles') {
+          // rrule stores occurrences as "local time in UTC disguise" — UTC values ARE the Pacific hours.
+          // Re-parse as local time so the process TZ (America/Los_Angeles) interprets them correctly.
+          const pad = n => String(n).padStart(2, '0');
+          const local = `${occ.getUTCFullYear()}-${pad(occ.getUTCMonth()+1)}-${pad(occ.getUTCDate())}T${pad(occ.getUTCHours())}:${pad(occ.getUTCMinutes())}:00`;
+          occ = new Date(local);
+        }
         addEvent(occ, ev.summary, allDay);
       }
     } else if (ev.start) {
