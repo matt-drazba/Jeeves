@@ -74,6 +74,7 @@ let cachedStatus = {
     dryer:    { label: 'Dryer',    icon: '🌀', value: 'Idle', alert: false, degraded: false },
     aqiIn:    { label: 'AQI In',   icon: '🏠', value: '—',    alert: false, degraded: false },
     aqiOut:   { label: 'AQI Out',  icon: '🌿', value: '—',    alert: false, degraded: false },
+    dishwasher: { label: 'Dishwasher', icon: '🍽️', value: 'Idle', alert: false, degraded: false },
   },
   alerts: [],
   calendar: { days: [] },
@@ -94,8 +95,11 @@ async function fetchHAState(entityId) {
 
 let washerPrevState = 'stop';
 let washerDone = false;
-let dryerPrevState = 'power_off';
 let dryerDone = false;
+let lastDryerEventTime = null;
+let dishwasherWasRunning = false;
+let dishwasherDone = false;
+const DISHWASHER_WATTS_THRESHOLD = 4;
 
 async function fetchWasher() {
   if (!HA_TOKEN) return;
@@ -141,6 +145,35 @@ async function fetchWasher() {
   console.log(`Washer updated: ${value}`);
 }
 
+async function fetchDishwasher() {
+  if (!HA_TOKEN) return;
+  const res = await fetchHAState('sensor.weaf_current_consumption');
+  const watts = parseFloat(res.state);
+
+  if (watts >= DISHWASHER_WATTS_THRESHOLD) {
+    dishwasherWasRunning = true;
+    dishwasherDone = false;
+  } else if (dishwasherWasRunning) {
+    dishwasherDone = true;
+    dishwasherWasRunning = false;
+  }
+
+  let value, done = false;
+  if (dishwasherDone) {
+    value = 'Done!'; done = true;
+  } else if (watts >= DISHWASHER_WATTS_THRESHOLD) {
+    value = `Running (${Math.round(watts)}W)`;
+  } else {
+    value = 'Idle';
+  }
+
+  cachedStatus.status.dishwasher = { label: 'Dishwasher', icon: '🍽️', value, done, alert: false, degraded: false };
+  console.log(`Dishwasher updated: ${value}`);
+}
+
+fetchDishwasher().catch(err => console.error('Dishwasher fetch failed:', err));
+setInterval(() => fetchDishwasher().catch(err => console.error('Dishwasher fetch failed:', err)), 30 * 1000);
+
 fetchWasher().catch(err => console.error('Washer fetch failed:', err));
 setInterval(() => fetchWasher().catch(err => console.error('Washer fetch failed:', err)), 30 * 1000);
 
@@ -157,10 +190,17 @@ async function fetchDryer() {
 
   if (state === 'running' || state === 'pause') {
     dryerDone = false;
-  } else if (state === 'power_off' && (dryerPrevState === 'running' || dryerPrevState === 'pause')) {
-    dryerDone = true;
   }
-  dryerPrevState = state;
+
+  const [notifRes] = await Promise.allSettled([fetchHAState('event.dryer_notification')]);
+  if (notifRes.status === 'fulfilled') {
+    const eventTime = notifRes.value.state;
+    const eventType = notifRes.value.attributes?.event_type;
+    if (eventTime !== lastDryerEventTime) {
+      lastDryerEventTime = eventTime;
+      if (eventType === 'drying_is_complete') dryerDone = true;
+    }
+  }
 
   let value, alert = false, done = false, degraded = false;
   if (dryerDone) {
@@ -361,6 +401,9 @@ app.post('/api/dismiss/:appliance', (req, res) => {
   } else if (appliance === 'dryer') {
     dryerDone = false;
     cachedStatus.status.dryer = { ...cachedStatus.status.dryer, value: 'Idle', done: false };
+  } else if (appliance === 'dishwasher') {
+    dishwasherDone = false;
+    cachedStatus.status.dishwasher = { ...cachedStatus.status.dishwasher, value: 'Idle', done: false };
   } else {
     return res.status(400).json({ error: 'Unknown appliance' });
   }

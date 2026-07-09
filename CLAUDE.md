@@ -95,28 +95,45 @@ homelab/
 - Dashboard cycles dashboard ↔ calendar every 15s
 - Repo cloned at `~/homelab` on Pi; `.env` at `~/homelab/.env` holds secrets (never committed)
 - **Washer tile live** — Samsung SmartThings via HA REST API, polls every 30s
-  - States: "Done by 10:44 PM" (running), "Paused", "Idle", "Done!" (green, persists until next cycle)
+  - States: "Done by 10:44 PM" (running), "Paused", "Idle", "Done!" (green, persists until next cycle or dismiss)
   - Entity: `sensor.laundry_room_washer_machine_state` + `sensor.laundry_room_washer_completion_time`
-  - "Done!" uses `done: true` flag → `.tile.done` CSS class (solid green background/text); not `alert`
+  - "Done!" uses `done: true` flag → `.tile.done` CSS class (solid green); tap tile to dismiss → `POST /api/dismiss/washer`
   - Limitation: loses "Done!" state if Jeeves restarts mid-cycle (prev-state tracking is in-memory)
 - **Dryer tile live** — LG ThinQ via native HA LG integration, polls every 30s
   - States: "Done by 12:26 AM" (running), "Paused", "Idle", "Done!" (green)
   - Entity: `sensor.dryer_current_status` + `sensor.dryer_remaining_time`
-  - LG has a native `end` state — no prev-state tracking needed
+  - LG end state is `power_off` (not `end`) — uses prev-state tracking like washer
+  - Tap tile to dismiss → `POST /api/dismiss/dryer`
   - LG account auth: sign-in-with-Apple relay email + reset password to get email/password for HA
+- **AQI tiles live** — PurpleAir API, refreshes every 10 min
+  - `aqiOut`: average of 3 nearby outdoor sensors (113020, 81199, 284212) — wildfire early warning
+  - `aqiIn`: indoor sensor (126601) — kitchen smoke / air purifier trigger
+  - Color-coded per PurpleAir scale: green / yellow / orange / red / purple / maroon
+  - API key in `.env` as `PURPLEAIR_API_KEY`; sensor IDs hardcoded in server.js
+  - No door sensor available from SmartThings or LG HA integrations (known upstream limitation)
+- **Tap-to-dismiss** on done tiles — tapping a green tile calls `POST /api/dismiss/:appliance`, resets to Idle
+  - Prevents false "Done!" indicator after laundry has been unloaded
+  - Voice dismiss planned when Whisper/mic hardware is added
+- **TP-Link Kasa** — 3 smart outlets + 1 smart switch (front driveway lights); local integration, auto-discovered
+- **Resideo T10 Pro thermostat** — paired via HomeKit Controller; room sensors in separate rooms all showing; Siri control working via HomeKit Bridge
+- **August Smart Lock (Front Door)** — paired via native August integration; door sensor, battery %, operator entity; Siri control working via HomeKit Bridge
+- **HomeKit Bridge** — HA re-exposed to Apple Home; thermostat + lock accessible via Siri
+- **Tuya** — 5 window shade controllers (cover entities, open/close/position), 1 pool sweep timer (switch), 2 OhmPlugs; all via Tuya cloud integration + Tuya IoT Platform developer account
 
 ### Tile states
 | State | CSS class | Trigger |
 |-------|-----------|---------|
 | Normal | (none) | Default |
-| Done | `.done` | `done: true` — solid green, used for appliance cycle complete |
+| Done | `.done` | `done: true` — solid green, tappable to dismiss |
 | Alert | `.alert` | `alert: true` — red pulse, reserved for urgent/error alerts |
 | Degraded | `.degraded` | `degraded: true` — yellow pulse |
+| AQI color | inline style | `color`/`bg` fields on tile — PurpleAir scale, bypasses class system |
 
 ### Secrets in `~/homelab/.env`
 ```
-CALENDAR_ICS_URL=...   # Google Calendar private ICS URL
-HA_TOKEN=...           # HA long-lived token, created under Profile → Security → Long-lived access tokens, named "Jeeves"
+CALENDAR_ICS_URL=...      # Google Calendar private ICS URL
+HA_TOKEN=...              # HA long-lived token (Profile → Security → Long-lived access tokens, "Jeeves")
+PURPLEAIR_API_KEY=...     # PurpleAir read API key
 ```
 
 ### Deployment workflow (Pi)
@@ -125,9 +142,12 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 # Add --build homeassistant only if docker-compose.yml changed for HA
 ```
 
+### Deferred polish
+- Weather panel has empty grey space below forecast — needs layout fix (low priority)
+- **Dryer "Done!" not firing on cycle end** — FIXED: switched from prev-state tracking on `sensor.dryer_current_status` to polling `event.dryer_notification` (event_type: `drying_is_complete`). Needs verification on next real cycle.
+
 ### Not yet wired up
 - HA device pairing: thermostat + lock (native HomeKit → HA HomeKit Controller), smart plugs/lights/speakers (brands TBD)
-- AQI tile: PurpleAir — needs sensor index + API key in `.env`
 - Chromium kiosk autostart on Pi desktop boot (low priority — open browser manually for now)
 - Homebridge on NAS still running — decommission after HA device migration is confirmed
 
@@ -192,6 +212,8 @@ Homebridge running on NAS (WD MyCloud EX2 Ultra via Portainer). Plan is to shut 
 - **Dishwasher reminder:** Smart plug on the dishwasher monitors power draw. HA automation: if 9:05pm and plug drawing <10W → send notification / dashboard alert ("Start the dishwasher!"). No history needed — purely a time + current-state check. Off-peak timing aligns with energy rate schedule (avoid peak 4–9pm). Smart plug brand TBD — needs energy monitoring capability.
 - **Energy rate awareness (time-of-use):** Utility rates vary by season and time of day (summer peak 4–9pm). Jeeves should know the current rate tier and surface it on the dashboard. Use this to: warn before starting high-draw appliances during peak, suggest optimal run times, factor into weekly energy cost reports. Rate schedule hardcoded in config (changes ~2× per year) or fetched from utility API if available.
 - **Solar panel monitoring:** Dashboard tile showing current solar production (W), daily yield (kWh), and grid import/export. Integration path TBD when ready to work on this.
+- **Main pool pump monitoring + control:** Main circulation pump is separate from the pool sweep (240V Tuya outlet). Hardware path TBD — options: dedicated pool controller (Pentair/Hayward HA integrations), ESPHome CT clamp to detect if pump is drawing power, or a 240V-rated smart relay. Required for the AC pool-heating interlock automation. Research integration path when ready to tackle pool phase.
+- **Pool pump / AC pool-heating interlock:** The home HVAC (Resideo T10 Pro) has a "pool heating mode" — a heat pump mode that rejects heat into the pool water instead of the outside air (HeatSource-type desuperheater). Pool pump MUST be running for this mode to be safe; running pool heating without water flow risks overheating the heat exchanger. Automation: if AC enters pool heating mode and pool pump is not running → start pump; if pump fails to start within N seconds → shut off pool heating mode regardless of thermostat setting. Dependencies: (1) Resideo cloud integration (not just HomeKit Controller — HomeKit does not expose pool heating mode as a readable state), (2) pool pump monitoring (power-monitoring smart plug or dedicated pool controller). Add a dashboard tile showing pool heating active + pump state together.
 
 ## Git
 Remote: `https://github.com/matt-drazba/Jeeves.git`
