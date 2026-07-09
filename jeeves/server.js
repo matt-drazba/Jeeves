@@ -134,6 +134,10 @@ async function fetchCalendar() {
   for (const ev of Object.values(events)) {
     if (ev.type !== 'VEVENT') continue;
     const allDay = !!ev.start?.dateOnly;
+    // Debug: log raw event data to diagnose timezone issues with invited events
+    if (ev.start && !allDay) {
+      console.log(`[CAL-DEBUG] "${ev.summary}" | start=${ev.start.toISOString()} | tz=${ev.start.tz || 'none'} | organizer=${ev.organizer?.val || 'self'}`);
+    }
     if (ev.rrule) {
       for (const occ of ev.rrule.between(weekStart, weekEnd, true)) {
         addEvent(occ, ev.summary, allDay);

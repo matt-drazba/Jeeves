@@ -108,7 +108,7 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 
 ## Hard rules
 - Never commit secrets: API keys, HA long-lived tokens, secrets.yaml
-- **Single file** — all dashboard HTML, CSS, JS lives in `artifacts/api-server/dashboard.html`. No bundler, no splits.
+- **Single file** — all dashboard HTML, CSS, JS lives in `jeeves/public/dashboard.html`. No bundler, no splits.
 - **Vanilla only** — no frameworks, no CDN links, no external resources in the dashboard.
 - Keep the stack minimal — no Node-RED, InfluxDB, Grafana, or MQTT unless explicitly decided
 - Prefer known-working custom Jeeves code over adopting frameworks (MagicMirror was tried and dropped)
@@ -157,6 +157,9 @@ Homebridge running on NAS (WD MyCloud EX2 Ultra via Portainer). Plan is to shut 
 - Weather automation: rain incoming + windows open → notification
 - Frigate local camera AI (person/package detection; wants a Coral USB accelerator)
 - Boss key: one keypress swaps kiosk to a fake spreadsheet
+- **Data history + forecasting:** Time-series storage for door events, energy usage, laundry loads, pool chemistry. Design: SQLite in a Docker volume (not HA's recorder — that's for HA internals). Jeeves server writes and queries it. Pool chemistry history enables dosing trend forecasting. Architecture should be designed with this in mind from the start — status tiles feed history, history feeds forecasting tiles.
+- **Tesla via Home Assistant:** HA has Tesla Fleet / Tessie integration. Target features: charging status tile + notifications (charge complete, low battery warning), voice command via HA Assist ("lock the car", "open the trunk"). Needs Tesla account credentials in `.env`, never committed.
+- **Garage door automation:** Voice-controlled + automated garage doors via HA. Hardware options: myQ (Chamberlain/LiftMaster — cloud-dependent), ratgdo (local, open-source, replaces the wall panel), or generic reed sensor + relay via ESPHome. ratgdo is preferred (local-first). Integrates with HA for automations (e.g., "close at 10pm if open", "leaving home" scene).
 
 ## Git
 Remote: `https://github.com/matt-drazba/Jeeves.git`
