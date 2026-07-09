@@ -121,6 +121,7 @@ async function fetchCalendar() {
     if (idx < 0 || idx >= 7) return;
     const timeStr = allDay ? null : d.toLocaleTimeString('en-US', {
       hour: 'numeric', minute: '2-digit', hour12: true,
+      timeZone: 'America/Los_Angeles',
     });
     days[idx].events.push({
       title: summary || '(No title)',
