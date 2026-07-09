@@ -120,7 +120,7 @@ async function fetchWasher() {
     if (completionRes.status === 'fulfilled') {
       minsLeft = Math.round((new Date(completionRes.value.state) - Date.now()) / 60000);
     }
-    value = minsLeft > 0 ? `Running · ${minsLeft}m` : 'Running';
+    value = (minsLeft > 0 && minsLeft <= 180) ? `Running · ${minsLeft}m` : 'Running';
   } else if (state === 'pause') {
     value = 'Paused';
   } else {
