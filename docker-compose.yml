@@ -17,6 +17,7 @@ services:
     environment:
       - TZ=America/Los_Angeles
       - CALENDAR_ICS_URL=${CALENDAR_ICS_URL}
+      - HA_TOKEN=${HA_TOKEN}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

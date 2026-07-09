@@ -70,12 +70,69 @@ let cachedStatus = {
     ],
   },
   status: {
-    laundry: { label: 'Laundry', icon: '🫧', value: 'Idle', alert: false, degraded: false },
+    washer: { label: 'Washer', icon: '🫧', value: 'Idle', alert: false, degraded: false },
+    dryer:  { label: 'Dryer',  icon: '🌀', value: 'Idle', alert: false, degraded: false },
   },
   alerts: [],
   calendar: { days: [] },
   updatedAt: new Date().toISOString(),
 };
+
+// ── Home Assistant ────────────────────────────────────────────────
+const HA_TOKEN = process.env.HA_TOKEN;
+const HA_URL = 'http://host.docker.internal:8123';
+
+async function fetchHAState(entityId) {
+  const res = await fetch(`${HA_URL}/api/states/${entityId}`, {
+    headers: { Authorization: `Bearer ${HA_TOKEN}` },
+  });
+  if (!res.ok) throw new Error(`HA API ${res.status} for ${entityId}`);
+  return res.json();
+}
+
+let washerPrevState = 'stop';
+let washerDone = false;
+
+async function fetchWasher() {
+  if (!HA_TOKEN) return;
+
+  const [machineRes, completionRes] = await Promise.allSettled([
+    fetchHAState('sensor.laundry_room_washer_machine_state'),
+    fetchHAState('sensor.laundry_room_washer_completion_time'),
+  ]);
+
+  if (machineRes.status === 'rejected') throw machineRes.reason;
+  const state = machineRes.value.state;
+
+  if (state === 'run' || state === 'pause') {
+    washerDone = false;
+  } else if (state === 'stop' && (washerPrevState === 'run' || washerPrevState === 'pause')) {
+    washerDone = true;
+  }
+  washerPrevState = state;
+
+  let value, alert = false, degraded = false;
+  if (washerDone) {
+    value = 'Done!';
+    alert = true;
+  } else if (state === 'run') {
+    let minsLeft = 0;
+    if (completionRes.status === 'fulfilled') {
+      minsLeft = Math.round((new Date(completionRes.value.state) - Date.now()) / 60000);
+    }
+    value = minsLeft > 0 ? `Running · ${minsLeft}m` : 'Running';
+  } else if (state === 'pause') {
+    value = 'Paused';
+  } else {
+    value = 'Idle';
+  }
+
+  cachedStatus.status.washer = { label: 'Washer', icon: '🫧', value, alert, degraded };
+  console.log(`Washer updated: ${value}`);
+}
+
+fetchWasher().catch(err => console.error('Washer fetch failed:', err));
+setInterval(() => fetchWasher().catch(err => console.error('Washer fetch failed:', err)), 30 * 1000);
 
 // Fetch weather on startup, then every 10 minutes
 fetchWeather().catch(err => console.error('Weather fetch failed:', err));
