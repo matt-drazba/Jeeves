@@ -84,15 +84,26 @@ homelab/
 | `jeeves/Dockerfile` | node:22-alpine, no build step |
 | `docker-compose.yml` | Orchestrates HA + Jeeves (repo root) |
 
-## Current state (as of 2026-07-08)
+## Current state (as of 2026-07-09)
 
 ### Working
 - Pi 5 running Docker; HA Container + Jeeves both up via `docker compose`
 - Jeeves dashboard live at `http://192.168.0.189:3000` — accessible from Pi, MacBook, iPad
+- Tailscale installed on Pi — IP `100.99.104.79`, accessible from anywhere on Tailscale network
 - Live weather from Open-Meteo (no API key), refreshes every 10 min
-- Google Calendar weekly view (Sun-Sat grid), fetched from ICS URL every 5 min
+- Google Calendar weekly view (Sun-Sat grid), fetched from ICS URL every 5 min; timezone-correct for both standard and recurring events (rrule fix in place)
 - Dashboard cycles dashboard ↔ calendar every 15s
-- Repo cloned at `~/homelab` on Pi; `.env` at `~/homelab/.env` holds secrets
+- Repo cloned at `~/homelab` on Pi; `.env` at `~/homelab/.env` holds secrets (never committed)
+- **Washer tile live** — Samsung SmartThings via HA REST API, polls every 30s
+  - States: "Done by 10:44 PM" (running), "Paused", "Idle", "Done!" (alert, persists until next cycle)
+  - Entity: `sensor.laundry_room_washer_machine_state` + `sensor.laundry_room_washer_completion_time`
+- **Dryer tile stub** — shows "Idle", wired up once LG ThinQ (smartthinq_sensors HACS) is installed
+
+### Secrets in `~/homelab/.env`
+```
+CALENDAR_ICS_URL=...   # Google Calendar private ICS URL
+HA_TOKEN=...           # HA long-lived token, created under Profile → Security → Long-lived access tokens, named "Jeeves"
+```
 
 ### Deployment workflow (Pi)
 ```bash
@@ -101,10 +112,11 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 ```
 
 ### Not yet wired up
-- HA device pairing (thermostat, lock, plugs — Homebridge migration pending)
-- Real status tiles (all currently stubs)
-- AQI tile (PurpleAir — needs sensor index + API key)
-- Calendar holds secret ICS URL in `~/homelab/.env` — never committed
+- Dryer tile: LG ThinQ via HACS `smartthinq_sensors` — LG credentials go in `.env` as `LG_USERNAME` / `LG_PASSWORD`
+- HA device pairing: thermostat + lock (native HomeKit → HA HomeKit Controller), smart plugs/lights/speakers (brands TBD)
+- AQI tile: PurpleAir — needs sensor index + API key in `.env`
+- Chromium kiosk autostart on Pi desktop boot (low priority — open browser manually for now)
+- Homebridge on NAS still running — decommission after HA device migration is confirmed
 
 ## Hard rules
 - Never commit secrets: API keys, HA long-lived tokens, secrets.yaml
