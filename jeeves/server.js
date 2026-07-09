@@ -120,13 +120,13 @@ async function fetchWasher() {
     if (completionRes.status === 'fulfilled') {
       minsLeft = Math.round((new Date(completionRes.value.state) - Date.now()) / 60000);
     }
-    let timeStr = '';
-    if (minsLeft > 0) {
-      timeStr = minsLeft >= 60
-        ? ` · ${Math.floor(minsLeft / 60)}h ${minsLeft % 60}m`
-        : ` · ${minsLeft}m`;
+    let eta = '';
+    if (completionRes.status === 'fulfilled' && minsLeft > 0) {
+      eta = new Date(completionRes.value.state).toLocaleTimeString('en-US', {
+        hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Los_Angeles',
+      });
     }
-    value = `Running${timeStr}`;
+    value = eta ? `Done by ${eta}` : 'Running';
   } else if (state === 'pause') {
     value = 'Paused';
   } else {
