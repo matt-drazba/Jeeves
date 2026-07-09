@@ -78,10 +78,33 @@ homelab/
 ### Jeeves canonical files
 | File | Purpose |
 |------|---------|
-| `artifacts/api-server/dashboard.html` | **The dashboard — edit this one only** |
-| `artifacts/api-server/src/routes/dashboard.ts` | Serves dashboard HTML at `/api/dashboard` |
-| `artifacts/api-server/src/routes/index.ts` | Route registrations |
-| `artifacts/api-server/src/app.ts` | Express app setup (CORS, logging, JSON) |
+| `jeeves/public/dashboard.html` | **The dashboard — edit this one only** |
+| `jeeves/server.js` | Express server — weather fetch, calendar fetch, `/api/status` |
+| `jeeves/package.json` | Dependencies: express, node-ical |
+| `jeeves/Dockerfile` | node:22-alpine, no build step |
+| `docker-compose.yml` | Orchestrates HA + Jeeves (repo root) |
+
+## Current state (as of 2026-07-08)
+
+### Working
+- Pi 5 running Docker; HA Container + Jeeves both up via `docker compose`
+- Jeeves dashboard live at `http://192.168.0.189:3000` — accessible from Pi, MacBook, iPad
+- Live weather from Open-Meteo (no API key), refreshes every 10 min
+- Google Calendar weekly view (Sun-Sat grid), fetched from ICS URL every 5 min
+- Dashboard cycles dashboard ↔ calendar every 15s
+- Repo cloned at `~/homelab` on Pi; `.env` at `~/homelab/.env` holds secrets
+
+### Deployment workflow (Pi)
+```bash
+cd ~/homelab && git pull && docker compose up -d --build jeeves
+# Add --build homeassistant only if docker-compose.yml changed for HA
+```
+
+### Not yet wired up
+- HA device pairing (thermostat, lock, plugs — Homebridge migration pending)
+- Real status tiles (all currently stubs)
+- AQI tile (PurpleAir — needs sensor index + API key)
+- Calendar holds secret ICS URL in `~/homelab/.env` — never committed
 
 ## Hard rules
 - Never commit secrets: API keys, HA long-lived tokens, secrets.yaml
