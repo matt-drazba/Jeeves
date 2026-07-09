@@ -134,13 +134,6 @@ async function fetchCalendar() {
   for (const ev of Object.values(events)) {
     if (ev.type !== 'VEVENT') continue;
     const allDay = !!ev.start?.dateOnly;
-    if (ev.start && !allDay) {
-      // Debug: keep until timezone issues are fully resolved
-      const inWindow = ev.start >= weekStart && ev.start < weekEnd;
-      if (inWindow) {
-        console.log(`[CAL-DEBUG] "${ev.summary}" | start=${ev.start.toISOString()} | tz=${ev.start.tz || 'none'}`);
-      }
-    }
     if (ev.rrule) {
       for (let occ of ev.rrule.between(weekStart, weekEnd, true)) {
         if (ev.start?.tz === 'America/Los_Angeles') {
