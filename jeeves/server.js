@@ -72,6 +72,7 @@ let cachedStatus = {
   status: {
     washer: { label: 'Washer', icon: '🫧', value: 'Idle', alert: false, degraded: false },
     dryer:  { label: 'Dryer',  icon: '🌀', value: 'Idle', alert: false, degraded: false },
+    aqi:    { label: 'AQI',    icon: '💨', value: '—',    alert: false, degraded: false },
   },
   alerts: [],
   calendar: { days: [] },
@@ -187,6 +188,62 @@ async function fetchDryer() {
 
 fetchDryer().catch(err => console.error('Dryer fetch failed:', err));
 setInterval(() => fetchDryer().catch(err => console.error('Dryer fetch failed:', err)), 30 * 1000);
+
+// ── AQI (PurpleAir) ──────────────────────────────────────────────
+const PURPLEAIR_KEY             = process.env.PURPLEAIR_API_KEY;
+const PURPLEAIR_OUTDOOR_SENSORS = [113020, 81199, 284212];
+
+function pm25ToAqi(pm) {
+  const bp = [
+    [0,    12.0,  0,   50 ],
+    [12.1, 35.4,  51,  100],
+    [35.5, 55.4,  101, 150],
+    [55.5, 150.4, 151, 200],
+    [150.5,250.4, 201, 300],
+    [250.5,500.4, 301, 500],
+  ];
+  for (const [lo, hi, alo, ahi] of bp) {
+    if (pm <= hi) return Math.round(((ahi - alo) / (hi - lo)) * (pm - lo) + alo);
+  }
+  return 500;
+}
+
+function aqiLabel(aqi) {
+  if (aqi <= 50)  return 'Good';
+  if (aqi <= 100) return 'Moderate';
+  if (aqi <= 150) return 'Sensitive';
+  if (aqi <= 200) return 'Unhealthy';
+  if (aqi <= 300) return 'Very Unhealthy';
+  return 'Hazardous';
+}
+
+async function fetchAQI() {
+  if (!PURPLEAIR_KEY) return;
+  const results = await Promise.allSettled(
+    PURPLEAIR_OUTDOOR_SENSORS.map(id =>
+      fetch(`https://api.purpleair.com/v1/sensors/${id}?fields=pm2.5_10minute`,
+        { headers: { 'X-API-Key': PURPLEAIR_KEY } })
+        .then(r => r.ok ? r.json() : Promise.reject(new Error(`PurpleAir ${r.status}`)))
+        .then(d => d.sensor.stats['pm2.5_10minute'])
+    )
+  );
+  const readings = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+  if (readings.length === 0) throw new Error('All PurpleAir sensors failed');
+  const pm = readings.reduce((a, b) => a + b, 0) / readings.length;
+  const aqi = pm25ToAqi(pm);
+  const label = aqiLabel(aqi);
+  cachedStatus.status.aqi = {
+    label: 'AQI', icon: '💨',
+    value: `${aqi} ${label}`,
+    alert:    aqi > 150,
+    degraded: aqi > 100 && aqi <= 150,
+    done: false,
+  };
+  console.log(`AQI updated: ${aqi} ${label}`);
+}
+
+fetchAQI().catch(err => console.error('AQI fetch failed:', err));
+setInterval(() => fetchAQI().catch(err => console.error('AQI fetch failed:', err)), 10 * 60 * 1000);
 
 // Fetch weather on startup, then every 10 minutes
 fetchWeather().catch(err => console.error('Weather fetch failed:', err));

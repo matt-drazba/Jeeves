@@ -18,6 +18,7 @@ services:
       - TZ=America/Los_Angeles
       - CALENDAR_ICS_URL=${CALENDAR_ICS_URL}
       - HA_TOKEN=${HA_TOKEN}
+      - PURPLEAIR_API_KEY=${PURPLEAIR_API_KEY}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
