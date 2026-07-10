@@ -6,17 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Home automation monorepo: a custom kitchen dashboard ("Jeeves"), Home Assistant in Docker, laundry/chore/NFC automations, and pool monitoring. One Raspberry Pi 5 does everything: server + kitchen display.
 
 ## Hardware
-- **Primary:** Raspberry Pi 5, 4GB (CanaKit — official 27W PSU, case, active cooling, SD card). Lives in the kitchen, drives the HDMI panel directly, runs the Chromium kiosk locally → `http://localhost:3000`.
+- **Primary:** Raspberry Pi 5, 4GB (CanaKit — official 27W PSU, case, active cooling, SD card). Pure server — runs Docker, HA Container, and Jeeves. No longer driving a local display; Chromium kiosk on Pi 5 is dropped.
+- **Kitchen display:** Amazon Fire HD 8 (2020 10th gen or newer, standard 2GB RAM) running **Fully Kiosk Browser** pointed at `http://192.168.0.189:3000`. Wall-mount case with power passthrough. Has built-in mic + speaker — sufficient for future voice control (STT/TTS). No Pi needed for the display.
 - **Dev machine:** Mac mini (primary development environment).
-- **Remote display testing:** Old MacBook — simulates a thin-client kiosk or tablet install pointed at `http://<pi5-ip>:3000`. Tests the same path the Zero W would use.
-- **Optional experiment (not on critical path):** Pi Zero W Rev 1.1 as a thin-client kiosk — Chromium on 32-bit Raspberry Pi OS pointed at `http://<pi5-ip>:3000`. Hardware dead end for anything beyond kiosk display — never run Node/servers on the Zero W.
+- **Remote display testing:** Old MacBook — browser pointed at `http://<pi5-ip>:3000`.
+- **Pi Zero W Rev 1.1:** Dropped — 32-bit, too slow for Chromium, dead end. Fire HD 8 replaced this experiment.
 
 ## Architecture
-- Pi 5 OS: Raspberry Pi OS 64-bit desktop (kiosk runs locally)
+- Pi 5 OS: Raspberry Pi OS 64-bit (headless server — no Chromium kiosk)
 - Docker Compose runs all services on the Pi 5; Home Assistant is a Container install (no add-on store — use HACS for custom integrations).
 - NAS is a WD MyCloud EX2 Ultra (Marvell Armada 385, ARMv7 32-bit). Has Portainer/Docker running but cannot host current HA — HA dropped 32-bit ARM support in 2023. Not a viable HA host.
-- Jeeves = lightweight Express server + static HTML/CSS dashboard; binds `0.0.0.0` (keeps thin-client option free), LAN-only, Tailscale for remote access — no port forwarding
-- Dashboard page must stay light — heavy page permanently kills the Zero W kiosk option
+- Jeeves = lightweight Express server + static HTML/CSS dashboard; binds `0.0.0.0`, LAN-only, Tailscale for remote access — no port forwarding
+- Dashboard page must stay light — Fire HD 8 is capable but no reason to bloat it
 - ESPHome devices (future) connect via HA's native API — no MQTT broker unless a specific device requires it
 
 ### Data flow
@@ -173,7 +174,7 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 - **Dryer "Done!" not firing on cycle end** — FIXED: switched from prev-state tracking on `sensor.dryer_current_status` to polling `event.dryer_notification` (event_type: `drying_is_complete`). Needs verification on next real cycle.
 
 ### Not yet wired up
-- Chromium kiosk autostart on Pi desktop boot (low priority — open browser manually for now)
+- ~~Chromium kiosk autostart~~ — dropped; Fire HD 8 + Fully Kiosk Browser is the display path
 - Apple TV 4K (Family Room) — discovered in HA but not yet paired; PIN appears on TV screen during setup
 - AirPort Express units (NuTone, Clips, Block Party) — AirPlay pairing blocked by device restriction; fix is to enable IPv6 on router (Marshall paired successfully, others pending IPv6 fix); controlled indirectly via Mac mini Music bridge in the meantime
 - Resideo cloud integration (developer.resideo.com OAuth) — needed alongside HomeKit Controller for pool heating mode detection
@@ -214,13 +215,16 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 - Zero W thin-client kiosk experiment
 
 ## Parked — decide later (do NOT build unless explicitly asked)
-- Local voice control: HA Assist + Whisper (STT) + Piper (TTS). Requires a USB microphone (Pi 5 has no built-in mic; ~$10 USB mic works). 4GB is tight with Chromium running locally — use a small Whisper model, or revisit if Zero W experiment frees the Pi 5.
-  - Voice dismiss for appliance tiles: "Jeeves, washer done" / "Jeeves, dryer done" → calls `POST /api/dismiss/washer` or `POST /api/dismiss/dryer`. Dashboard tap-to-dismiss is the current fallback.
+- **Local voice control:** HA Assist + Whisper (STT) + Piper (TTS). Fire HD 8 has built-in mic + speaker — no external hardware needed. Whisper inference runs on Pi 5; dropping Chromium kiosk freed meaningful RAM. Use small Whisper model (tiny or base). Fully Kiosk supports mic access + audio playback. Voice dismiss for appliance tiles: "Jeeves, washer done" → `POST /api/dismiss/washer`. Tap-to-dismiss is the current fallback.
 - Library holds tile: BiblioCommons (local library system). Fetch holds/ready items on a schedule — likely via RSS feed or authenticated scrape. Credentials go in env vars, never committed. Research the specific library's BiblioCommons URL first.
 - Zigbee USB dongle + cheap motion/door/temp sensors
 - Energy monitoring via smart plugs (per-device power on the dashboard)
 - AQI-triggered automation: PurpleAir threshold → air purifier smart plug + notification
-- Weather automation: rain incoming + windows open → notification
+- **Rain + windows automation:** If rain is forecast or active and window shades are open → push notification to warn. Two triggers: (1) imminent rain (HA weather entity `forecast` condition changes to rain/storm), (2) bonus: 9pm and overnight rain forecast + windows still open → "Close your windows, rain tonight." Shade state from Tuya cover entities (need to verify they report current position reliably). Rain source: HA weather integration or Open-Meteo via template sensor. Both triggers = HA automations with template conditions. No new hardware needed.
+- **Rheem water heater:** "Smart" Rheem water heater — add to HA via EcoNet integration (HACS: `RhymeWithCream/ha-rheem-econet` or similar). Goals: mode control (heat pump / electric / vacation), temperature setpoint, energy monitoring tile. Research integration before starting — EcoNet cloud auth may require account credentials in `.env`.
+- **Picture frame automation:** Dumb frame on Wemo WSP080. Schedule: on in morning (e.g., 7am–10am) and evening (6pm–10pm), off during the day. Presence condition: also on whenever someone is home (via `person` entity or device tracker). Pure HA automation — no new hardware. Wemo is already in HA via HomeKit Controller.
+- **Migrate automations from native apps to HA:** TP-Link Kasa (driveway lights schedules, any outlet automations), Tuya (shade schedules, pool sweep timer), and any others currently managed in vendor apps. Centralizes all automations in HA; vendor apps become passthrough only. Inventory existing vendor-app automations before migrating.
+- **Bhyve sprinkler automation:** Orbit Bhyve smart sprinkler controller — add to HA via Bhyve integration (HACS: `sebr/hass-bhyve-mqtt` or check HA community for current best option; uses MQTT or cloud API depending on integration). Goals: schedule control from HA, rain-skip automation (skip watering if rain forecast — pairs naturally with rain+windows automation), dashboard tile showing zone status. Research integration before starting.
 - Frigate local camera AI (person/package detection; wants a Coral USB accelerator)
 - Boss key: one keypress swaps kiosk to a fake spreadsheet
 - **Data history + forecasting:** Time-series storage for door events, energy usage, laundry loads, pool chemistry. Design: SQLite in a Docker volume (not HA's recorder — that's for HA internals). Jeeves server writes and queries it. Pool chemistry history enables dosing trend forecasting. Architecture should be designed with this in mind from the start — status tiles feed history, history feeds forecasting tiles.
