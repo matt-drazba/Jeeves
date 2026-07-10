@@ -70,11 +70,12 @@ let cachedStatus = {
     ],
   },
   status: {
-    washer:   { label: 'Washer',   icon: '🫧', value: 'Idle', alert: false, degraded: false },
-    dryer:    { label: 'Dryer',    icon: '🌀', value: 'Idle', alert: false, degraded: false },
-    aqiIn:    { label: 'AQI In',   icon: '🏠', value: '—',    alert: false, degraded: false },
-    aqiOut:   { label: 'AQI Out',  icon: '🌿', value: '—',    alert: false, degraded: false },
-    dishwasher: { label: 'Dishwasher', icon: '🍽️', value: 'Idle', alert: false, degraded: false },
+    washer:     { label: 'Washer',      icon: '🫧', value: 'Idle', alert: false, degraded: false },
+    dryer:      { label: 'Dryer',       icon: '🌀', value: 'Idle', alert: false, degraded: false },
+    aqiIn:      { label: 'AQI In',      icon: '🏠', value: '—',    alert: false, degraded: false },
+    aqiOut:     { label: 'AQI Out',     icon: '🌿', value: '—',    alert: false, degraded: false },
+    dishwasher: { label: 'Dishwasher',  icon: '🍽️', value: 'Idle', alert: false, degraded: false },
+    nowPlaying: { label: 'Now Playing', icon: '🎵', value: '—',    sub: '', alert: false, degraded: false },
   },
   alerts: [],
   calendar: { days: [] },
@@ -297,6 +298,39 @@ async function fetchAQI() {
 
 fetchAQI().catch(err => console.error('AQI fetch failed:', err));
 setInterval(() => fetchAQI().catch(err => console.error('AQI fetch failed:', err)), 10 * 60 * 1000);
+
+// ── Now Playing (Mac mini Music bridge) ──────────────────────────
+const MUSIC_BRIDGE_URL = 'http://192.168.0.204:8181';
+
+async function fetchNowPlaying() {
+  try {
+    const res = await fetch(`${MUSIC_BRIDGE_URL}/now_playing`, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) throw new Error(`Music bridge ${res.status}`);
+    const d = await res.json();
+
+    const playing = d.player_state === 'playing';
+    const paused  = d.player_state === 'paused';
+
+    let value, sub = '';
+    if (playing || paused) {
+      value = d.name || '—';
+      const speakerStr = (d.speakers || []).join(', ');
+      sub = speakerStr ? `${d.artist} · ${speakerStr}` : (d.artist || '');
+    } else {
+      value = '—';
+    }
+
+    cachedStatus.status.nowPlaying = {
+      label: 'Now Playing', icon: paused ? '⏸' : '🎵',
+      value, sub, alert: false, degraded: paused,
+    };
+  } catch (err) {
+    console.error('Music bridge fetch failed:', err.message);
+  }
+}
+
+fetchNowPlaying().catch(() => {});
+setInterval(() => fetchNowPlaying().catch(() => {}), 15 * 1000);
 
 // Fetch weather on startup, then every 10 minutes
 fetchWeather().catch(err => console.error('Weather fetch failed:', err));
