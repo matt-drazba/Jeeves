@@ -76,6 +76,8 @@ let cachedStatus = {
     aqiOut:     { label: 'AQI Out',     icon: '🌿', value: '—',    alert: false, degraded: false },
     dishwasher: { label: 'Dishwasher',  icon: '🍽️', value: 'Idle', alert: false, degraded: false },
     nowPlaying: { label: 'Now Playing', icon: '🎵', value: '—',    sub: '', alert: false, degraded: false },
+    dusty:      { label: 'Dusty',       icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
+    snorlax:    { label: 'Snorlax',     icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
   },
   alerts: [],
   calendar: { days: [] },
@@ -298,6 +300,56 @@ async function fetchAQI() {
 
 fetchAQI().catch(err => console.error('AQI fetch failed:', err));
 setInterval(() => fetchAQI().catch(err => console.error('AQI fetch failed:', err)), 10 * 60 * 1000);
+
+// ── Tesla ─────────────────────────────────────────────────────────
+const TESLA_VEHICLES = [
+  { key: 'dusty',   label: 'Dusty',   prefix: 'dusty'   },
+  { key: 'snorlax', label: 'Snorlax', prefix: 'snorlax' },
+];
+
+async function fetchTesla() {
+  if (!HA_TOKEN) return;
+  for (const { key, label, prefix } of TESLA_VEHICLES) {
+    try {
+      const [battRes, chargingRes, timeRes] = await Promise.allSettled([
+        fetchHAState(`sensor.${prefix}_battery_level`),
+        fetchHAState(`sensor.${prefix}_charging`),
+        fetchHAState(`sensor.${prefix}_time_to_full_charge`),
+      ]);
+
+      const pct = battRes.status === 'fulfilled' ? Math.round(parseFloat(battRes.value.state)) : null;
+      const chargingState = chargingRes.status === 'fulfilled' ? chargingRes.value.state : null;
+      const timeToFull = timeRes.status === 'fulfilled' ? parseFloat(timeRes.value.state) : null;
+
+      const value = pct !== null && !isNaN(pct) ? `${pct}%` : '—';
+
+      let sub = '';
+      if (chargingState === 'Charging') {
+        if (timeToFull && timeToFull > 0) {
+          const h = Math.floor(timeToFull / 60);
+          const m = Math.round(timeToFull % 60);
+          sub = h > 0 ? `Charging · ${h}h ${m}m` : `Charging · ${m}m`;
+        } else {
+          sub = 'Charging';
+        }
+      } else if (chargingState === 'Complete') {
+        sub = 'Full';
+      } else if (chargingState && chargingState !== 'Disconnected' && chargingState !== 'unknown') {
+        sub = chargingState;
+      }
+
+      const degraded = pct !== null && !isNaN(pct) && pct < 20;
+
+      cachedStatus.status[key] = { label, icon: '🚗', value, sub, alert: false, degraded, done: false };
+      console.log(`Tesla ${label} updated: ${value} ${sub}`);
+    } catch (err) {
+      console.error(`Tesla ${label} fetch failed:`, err.message);
+    }
+  }
+}
+
+fetchTesla().catch(err => console.error('Tesla fetch failed:', err));
+setInterval(() => fetchTesla().catch(err => console.error('Tesla fetch failed:', err)), 5 * 60 * 1000);
 
 // ── Now Playing (Mac mini Music bridge) ──────────────────────────
 const MUSIC_BRIDGE_URL = 'http://192.168.0.204:8181';
