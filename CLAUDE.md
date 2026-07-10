@@ -142,8 +142,8 @@ homelab/
   - **Lock/unlock**: via HomeKit Bridge accessory entries (`lock.dusty_lock`, `lock.snorlax_lock`); renamed in Apple Home to "Dusty Doors" / "Snorlax Doors"; Siri: "unlock Dusty Doors"
   - **Siri commands (frunk, trunk, windows, honk, fart)**: implemented as HA Scripts → iOS Shortcuts
     - HA Scripts in Settings → Automations & Scenes → Scripts; each script calls one cover/button service
-    - iOS Shortcuts use Home Assistant → **Call Service** action (domain: `script`, service: script name)
-    - ⚠️ **Tech debt**: "Call Service" is deprecated in the HA Companion app. Used it because "Run Script" action showed "no options available" (sync issue). If a future HA Companion release removes "Call Service", troubleshoot "Run Script" first — likely just a re-sync fix
+    - iOS Shortcuts use Home Assistant → **Run Script** action
+    - If "Run Script" shows "no options available", quit and relaunch the HA Companion app — fixes the sync issue
     - **Naming convention**: avoid car names (Siri routes to Tesla app) and avoid "open"/"trunk" together (triggers media). Use color + action + thing: "open white car trunk", "fart blue car", "honk white car", etc.
 
 ### Tile states
