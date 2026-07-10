@@ -101,8 +101,8 @@ homelab/
   - Limitation: loses "Done!" state if Jeeves restarts mid-cycle (prev-state tracking is in-memory)
 - **Dryer tile live** — LG ThinQ via native HA LG integration, polls every 30s
   - States: "Done by 12:26 AM" (running), "Paused", "Idle", "Done!" (green)
-  - Entity: `sensor.dryer_current_status` + `sensor.dryer_remaining_time`
-  - LG end state is `power_off` (not `end`) — uses prev-state tracking like washer
+  - Entity: `sensor.dryer_current_status` + `sensor.dryer_remaining_time` + `event.dryer_notification`
+  - "Done!" triggered by `event.dryer_notification` event_type `drying_is_complete` (prev-state tracking on power_off was unreliable due to intermediate states)
   - Tap tile to dismiss → `POST /api/dismiss/dryer`
   - LG account auth: sign-in-with-Apple relay email + reset password to get email/password for HA
 - **AQI tiles live** — PurpleAir API, refreshes every 10 min
@@ -118,7 +118,22 @@ homelab/
 - **Resideo T10 Pro thermostat** — paired via HomeKit Controller; room sensors in separate rooms all showing; Siri control working via HomeKit Bridge
 - **August Smart Lock (Front Door)** — paired via native August integration; door sensor, battery %, operator entity; Siri control working via HomeKit Bridge
 - **HomeKit Bridge** — HA re-exposed to Apple Home; thermostat + lock accessible via Siri
-- **Tuya** — 5 window shade controllers (cover entities, open/close/position), 1 pool sweep timer (switch), 2 OhmPlugs; all via Tuya cloud integration + Tuya IoT Platform developer account
+- **Tuya** — 5 window shade controllers (cover entities, open/close/position), 1 pool sweep timer (switch, 240V), 2 OhmPlugs (energy monitoring); all via Tuya cloud integration + Tuya IoT Platform developer account
+- **Wemo WSP080** — provisioned via pywemo (Belkin cloud dead; WPS failed; pywemo connected to device AP and pushed Wi-Fi creds); paired to HA via HomeKit Controller using code on plug
+- **Dishwasher tile live** — TP-Link HS110 ("Weaf", formerly on Nissan Leaf charger) on dishwasher outlet; polls `sensor.weaf_current_consumption` every 30s; threshold 4W; "Done!" when power drops after running; tap to dismiss → `POST /api/dismiss/dishwasher`
+- **Dishwasher reminder automation** — HA automation: 9:15pm, if `sensor.weaf_current_consumption` < 4W → push notification to Matt's iPhone via HA Companion app ("Start the dishwasher!")
+- **Homebridge decommissioned** — all devices migrated to HA; Homebridge container stopped and removed from NAS Portainer
+- **HACS installed** on HA Container (install script run from `~/homelab/homeassistant/`, custom_components at `~/homelab/homeassistant/custom_components/`)
+- **Apple Music tile live** — Now Playing tile on dashboard showing current track + artist + active AirPlay speakers
+  - HACS integration: `apple_music` (domain), from `leguernadrian-boop/apple-music-mac-ha`
+  - Companion server: `~/apple-music-bridge/server.js` on Mac mini — Node.js/Express, AppleScript bridge to Music.app, port 8181
+  - Companion kept alive via launchd: `~/Library/LaunchAgents/com.jeeves.apple-music-bridge.plist`
+  - Jeeves polls `http://192.168.0.204:8181/now_playing` every 15s → `nowPlaying` tile
+  - Tile shows: track name (value), "Artist · Speaker1, Speaker2" (sub line); ⏸ icon + degraded state when paused
+  - AirPlay speaker detection via AppleScript `AirPlay devices whose current is true`
+  - Note: original repo's README server.js was broken (corrupted code, missing `/_ping` endpoint). We wrote a clean replacement. Consider contributing back via PR.
+  - macOS permission required: System Settings → Privacy & Security → Automation → enable Music under Terminal
+- **Tile sub-line** — dashboard tiles now support an optional `sub` field (small muted text below the value); useful for secondary context like artist name or speaker list
 
 ### Tile states
 | State | CSS class | Trigger |
@@ -147,9 +162,10 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 - **Dryer "Done!" not firing on cycle end** — FIXED: switched from prev-state tracking on `sensor.dryer_current_status` to polling `event.dryer_notification` (event_type: `drying_is_complete`). Needs verification on next real cycle.
 
 ### Not yet wired up
-- HA device pairing: thermostat + lock (native HomeKit → HA HomeKit Controller), smart plugs/lights/speakers (brands TBD)
 - Chromium kiosk autostart on Pi desktop boot (low priority — open browser manually for now)
-- Homebridge on NAS still running — decommission after HA device migration is confirmed
+- Apple TV 4K (Family Room) — discovered in HA but not yet paired; PIN appears on TV screen during setup
+- AirPort Express units (NuTone, Clips, Block Party) — AirPlay pairing blocked by device restriction; controlled indirectly via Mac mini Music bridge
+- Resideo cloud integration (developer.resideo.com OAuth) — needed alongside HomeKit Controller for pool heating mode detection
 
 ## Hard rules
 - Never commit secrets: API keys, HA long-lived tokens, secrets.yaml
@@ -186,13 +202,6 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 - Home Assistant entity data on the Jeeves dashboard
 - Zero W thin-client kiosk experiment
 
-## Parked — device/Homebridge migration
-Homebridge running on NAS (WD MyCloud EX2 Ultra via Portainer). Plan is to shut it down and move everything to HA on Pi 5. Before doing that, audit what each device is and whether HA has a native integration:
-- Thermostat + lock: native HomeKit — pair directly to HA via HomeKit Controller integration
-- Smart plugs, lights, speakers: **brands TBD** — identify before migrating
-- HA's HomeKit Bridge integration exposes everything back to Apple Home so Siri/automations keep working
-- Shut down Homebridge container on NAS once migration is confirmed working
-
 ## Parked — decide later (do NOT build unless explicitly asked)
 - Local voice control: HA Assist + Whisper (STT) + Piper (TTS). Requires a USB microphone (Pi 5 has no built-in mic; ~$10 USB mic works). 4GB is tight with Chromium running locally — use a small Whisper model, or revisit if Zero W experiment frees the Pi 5.
   - Voice dismiss for appliance tiles: "Jeeves, washer done" / "Jeeves, dryer done" → calls `POST /api/dismiss/washer` or `POST /api/dismiss/dryer`. Dashboard tap-to-dismiss is the current fallback.
@@ -209,11 +218,15 @@ Homebridge running on NAS (WD MyCloud EX2 Ultra via Portainer). Plan is to shut 
 - **OhmHour visibility + automations:** OhmConnect sends OhmHour events (demand-response windows, typically 1h). Dashboard tile showing active/upcoming OhmHour; HA automations to shed load automatically (turn off dryer, EV charging, etc.) when one starts; warnings on the dashboard before turning on high-draw appliances during an event. OhmConnect has a webhook or IFTTT trigger — needs research on best HA integration path.
 - **Weekly email reports:** Scheduled summary email (Friday evening or Sunday) covering: appliance cycles run, energy used per device, comparison to prior weeks, pool chemistry trends. Generated by Jeeves server, sent via SMTP or a transactional email service (Resend/Mailgun — API key in `.env`). Requires data history (SQLite) to be in place first.
 - **Hourly chimes + status readout:** Big Ben-style chime on the hour via the Pi's audio output, followed by a spoken or displayed status summary ("It's noon. Washer done by 12:34, dryer done by 12:44."). Audio: `aplay` or `mpg123` on the Pi. Text-to-speech: ties into Whisper/Piper voice stack, or a simple pre-recorded chime + dynamic TTS. Chime should respect night-dim hours (10pm–6am = silent).
-- **Dishwasher reminder:** Smart plug on the dishwasher monitors power draw. HA automation: if 9:05pm and plug drawing <10W → send notification / dashboard alert ("Start the dishwasher!"). No history needed — purely a time + current-state check. Off-peak timing aligns with energy rate schedule (avoid peak 4–9pm). Smart plug brand TBD — needs energy monitoring capability.
+- **Dishwasher reminder:** DONE — HA automation at 9:15pm + Jeeves tile via Weaf HS110. See Working section.
 - **Energy rate awareness (time-of-use):** Utility rates vary by season and time of day (summer peak 4–9pm). Jeeves should know the current rate tier and surface it on the dashboard. Use this to: warn before starting high-draw appliances during peak, suggest optimal run times, factor into weekly energy cost reports. Rate schedule hardcoded in config (changes ~2× per year) or fetched from utility API if available.
 - **Solar panel monitoring:** Dashboard tile showing current solar production (W), daily yield (kWh), and grid import/export. Integration path TBD when ready to work on this.
 - **Main pool pump monitoring + control:** Main circulation pump is separate from the pool sweep (240V Tuya outlet). Hardware path TBD — options: dedicated pool controller (Pentair/Hayward HA integrations), ESPHome CT clamp to detect if pump is drawing power, or a 240V-rated smart relay. Required for the AC pool-heating interlock automation. Research integration path when ready to tackle pool phase.
 - **Pool pump / AC pool-heating interlock:** The home HVAC (Resideo T10 Pro) has a "pool heating mode" — a heat pump mode that rejects heat into the pool water instead of the outside air (HeatSource-type desuperheater). Pool pump MUST be running for this mode to be safe; running pool heating without water flow risks overheating the heat exchanger. Automation: if AC enters pool heating mode and pool pump is not running → start pump; if pump fails to start within N seconds → shut off pool heating mode regardless of thermostat setting. Dependencies: (1) Resideo cloud integration (not just HomeKit Controller — HomeKit does not expose pool heating mode as a readable state), (2) pool pump monitoring (power-monitoring smart plug or dedicated pool controller). Add a dashboard tile showing pool heating active + pump state together.
+- **Maintenance tickler / home log:** Track recurring maintenance tasks with due dates — e.g., dishwasher deep clean every 2 months, HVAC filter every quarter, etc. Dashboard tile shows overdue/upcoming items. Backend: SQLite (same store as data history) with task definitions (name, interval, last-done date) and a simple `POST /api/maintenance/done/:task` endpoint to log completion. Smart scheduling: if the dishwasher ran N cycles since last clean, bump the due date forward instead of using calendar time alone. Depends on data history (SQLite) being in place.
+- **Home manual chatbot:** Local Q&A over appliance manuals and home-specific knowledge — "what's the best cycle for delicates on the LG?", "how do I calibrate the T10 pool heating mode?". Source material: PDFs of appliance manuals + custom notes stored in `docs/manuals/` (gitignored if large). Approach: run a local LLM via **Ollama** on the Pi 5 (or Mac mini if Pi 5 RAM is tight with Chromium running); small models like Llama 3.2 3B or Phi-3 Mini fit in 4GB with quantization. Jeeves server exposes a `/chat` endpoint that stuffs the relevant manual text into the prompt context (simple RAG — no vector DB needed at this scale) and calls the Ollama API locally. No cloud, no API key, no data leaves the house. Ties into maintenance tickler — chatbot can surface "you're due for a dishwasher clean" alongside cycle advice. Pi 5 RAM is the main constraint — benchmark Ollama alongside Chromium before committing to on-Pi inference.
+- **Zero-AI grocery shopping assistant:** Given a shopping list, compare prices across Safeway, Whole Foods, Amazon Fresh, and Costco to find the best deal for pickup or delivery. Credentials per store stored in `.env` (never committed). Approach: Jeeves server or a standalone script calls store APIs or scrapes store websites; returns ranked options per item or per cart total. "Zero-AI" framing = deterministic price comparison, not LLM-driven; LLM optionally used only to parse natural-language list input. Scope: Mac/CLI tool first, Jeeves dashboard integration later if useful.
+- **Home recipe repository + ingredient-aware ordering:** Store household recipes (Markdown or JSON in repo, gitignored if containing personal info). For a given recipe, diff against a known pantry state to produce a shopping list, then hand off to the grocery assistant above. Pantry tracking (what's currently stocked) is the hard part — options: manual entry via a simple UI, NFC tap on pantry shelf, or barcode scan via phone. Start with recipe storage + manual shopping list generation; add pantry tracking only if the manual approach proves sustainable.
 
 ## Git
 Remote: `https://github.com/matt-drazba/Jeeves.git`
