@@ -177,7 +177,7 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 - ~~Chromium kiosk autostart~~ — dropped; Fire HD 8 + Fully Kiosk Browser is the display path
 - Apple TV 4K (Family Room) — discovered in HA but not yet paired; PIN appears on TV screen during setup
 - AirPort Express units (NuTone, Clips, Block Party) — AirPlay pairing blocked by device restriction; fix is to enable IPv6 on router (Marshall paired successfully, others pending IPv6 fix); controlled indirectly via Mac mini Music bridge in the meantime
-- Resideo cloud integration (developer.resideo.com OAuth) — needed alongside HomeKit Controller for pool heating mode detection
+- Resideo cloud integration (developer.resideo.com OAuth) — demoted to optional; pool heating mode is sensed locally via the FPH trio 24VAC circuit, not from the thermostat. T10 stays on HomeKit only.
 
 ## Hard rules
 - Never commit secrets: API keys, HA long-lived tokens, secrets.yaml
@@ -201,8 +201,9 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 - NFC tags via HA companion app: front door = "leaving" scene; bedside = "goodnight" scene; poolside = log manual water test / "swim time" scene
 - Chores leaderboard: household tasks logged via NFC taps or buttons → running scoreboard on the Jeeves dashboard
 
-### Pool (see docs/Pool_automation_plan.md)
-- ha-poolchem via HACS for water balance + dosing recommendations
+### Pool (see docs/pool_heat_recovery.md)
+- Heat recovery interlock: HotSpot FPH5 + Pentair IntelliFlo2 VST + IntelliComm II + Tecmark flow switch. Hardware-first safety; HA monitors only. Full spec in docs.
+- ha-poolchem via HACS for water balance + dosing recommendations (future)
 - Probes supply pH/temp only; FC, TA, CH, CYA entered manually via input helpers
 - Alerts: chemical drift, pump failure, low water level, freeze warning
 
@@ -236,8 +237,13 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 - **Dishwasher reminder:** DONE — HA automation at 9:15pm + Jeeves tile via Weaf HS110. See Working section.
 - **Energy rate awareness (time-of-use):** Utility rates vary by season and time of day (summer peak 4–9pm). Jeeves should know the current rate tier and surface it on the dashboard. Use this to: warn before starting high-draw appliances during peak, suggest optimal run times, factor into weekly energy cost reports. Rate schedule hardcoded in config (changes ~2× per year) or fetched from utility API if available.
 - **Solar panel monitoring:** Dashboard tile showing current solar production (W), daily yield (kWh), and grid import/export. Integration path TBD when ready to work on this.
-- **Main pool pump monitoring + control:** Main circulation pump is separate from the pool sweep (240V Tuya outlet). Hardware path TBD — options: dedicated pool controller (Pentair/Hayward HA integrations), ESPHome CT clamp to detect if pump is drawing power, or a 240V-rated smart relay. Required for the AC pool-heating interlock automation. Research integration path when ready to tackle pool phase.
-- **Pool pump / AC pool-heating interlock:** The home HVAC (Resideo T10 Pro) has a "pool heating mode" — a heat pump mode that rejects heat into the pool water instead of the outside air (HeatSource-type desuperheater). Pool pump MUST be running for this mode to be safe; running pool heating without water flow risks overheating the heat exchanger. Automation: if AC enters pool heating mode and pool pump is not running → start pump; if pump fails to start within N seconds → shut off pool heating mode regardless of thermostat setting. Dependencies: (1) Resideo cloud integration (not just HomeKit Controller — HomeKit does not expose pool heating mode as a readable state), (2) pool pump monitoring (power-monitoring smart plug or dedicated pool controller). Add a dashboard tile showing pool heating active + pump state together.
+- **Pool heat recovery + pump interlock:** Design settled 2026-07-10. See `docs/pool_heat_recovery.md` for full spec. Summary:
+  - **Pump:** Pentair IntelliFlo2 VST 3.0 HP, firmware 1.23-VS, classic RS-485 protocol. Comm terminals unused — IntelliComm II goes here.
+  - **FPH:** HotSpot FPH5 (4-ton), min 45 GPM. "Pool heat mode" = 24VAC trio (valve + fan relay + solenoid) on one pair — sensed locally, no Resideo cloud needed.
+  - **L1 (hardware safety):** Tecmark 3010P flow switch in series with trio 24VAC — physically blocks diversion if pump isn't flowing. **Not yet installed — priority 1.**
+  - **L2 (hardware pump start):** FPH pump-call 24VAC → IntelliComm II GPM/RPM input 4 → RS-485 → pump runs Ext. Program 4 at ≥45 GPM. No Pi/HA in the loop.
+  - **L3 (HA monitoring):** ESP32 at pad with opto-isolated AC sense inputs + CT clamp → `binary_sensor.pool_heat_active`, `binary_sensor.fph_pump_call`, `binary_sensor.pool_pump_running`, `sensor.pool_pump_watts`. Alert if L1/L2 fail. HA controls nothing safety-critical.
+  - Shopping list: Tecmark 3010P, 25165BM cover, 12VDC adapter, ESP32, AC opto module, CT clamp (SCT-013) or Shelly EM.
 - **Maintenance tickler / home log:** Track recurring maintenance tasks with due dates — e.g., dishwasher deep clean every 2 months, HVAC filter every quarter, etc. Dashboard tile shows overdue/upcoming items. Backend: SQLite (same store as data history) with task definitions (name, interval, last-done date) and a simple `POST /api/maintenance/done/:task` endpoint to log completion. Smart scheduling: if the dishwasher ran N cycles since last clean, bump the due date forward instead of using calendar time alone. Depends on data history (SQLite) being in place.
 - **Home manual chatbot:** Local Q&A over appliance manuals and home-specific knowledge — "what's the best cycle for delicates on the LG?", "how do I calibrate the T10 pool heating mode?". Source material: PDFs of appliance manuals + custom notes stored in `docs/manuals/` (gitignored if large). Approach: run a local LLM via **Ollama** on the Pi 5 (or Mac mini if Pi 5 RAM is tight with Chromium running); small models like Llama 3.2 3B or Phi-3 Mini fit in 4GB with quantization. Jeeves server exposes a `/chat` endpoint that stuffs the relevant manual text into the prompt context (simple RAG — no vector DB needed at this scale) and calls the Ollama API locally. No cloud, no API key, no data leaves the house. Ties into maintenance tickler — chatbot can surface "you're due for a dishwasher clean" alongside cycle advice. Pi 5 RAM is the main constraint — benchmark Ollama alongside Chromium before committing to on-Pi inference.
 - **Zero-AI grocery shopping assistant:** Given a shopping list, compare prices across Safeway, Whole Foods, Amazon Fresh, and Costco to find the best deal for pickup or delivery. Credentials per store stored in `.env` (never committed). Approach: Jeeves server or a standalone script calls store APIs or scrapes store websites; returns ranked options per item or per cart total. "Zero-AI" framing = deterministic price comparison, not LLM-driven; LLM optionally used only to parse natural-language list input. Scope: Mac/CLI tool first, Jeeves dashboard integration later if useful.
