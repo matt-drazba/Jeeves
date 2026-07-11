@@ -124,7 +124,7 @@ sensor:
   # Standard pool formula: GPM × ΔT(°F) × 500 = BTU/hr
   # Only computed when heat diversion is active (flow switch closed + trio energized).
   - platform: template
-    name: "Pool Heat BTU/hr"
+    name: "Pool Heat BTU⁄hr"
     id: pool_heat_btu_hr
     unit_of_measurement: "BTU/hr"
     accuracy_decimals: 0
