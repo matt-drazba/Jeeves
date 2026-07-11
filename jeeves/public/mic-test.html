@@ -23,6 +23,8 @@
     const status = document.getElementById('status');
 
     btn.addEventListener('click', async () => {
+      // AudioContext must be created inside the user gesture
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         status.textContent = 'Recording 3s…';
@@ -31,14 +33,22 @@
         const recorder = new MediaRecorder(stream);
         const chunks   = [];
         recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-        recorder.onstop = () => {
+        recorder.onstop = async () => {
           stream.getTracks().forEach(t => t.stop());
-          const blob  = new Blob(chunks, { type: 'audio/webm' });
-          const url   = URL.createObjectURL(blob);
-          const audio = new Audio(url);
+          const blob        = new Blob(chunks, { type: 'audio/webm' });
+          const arrayBuffer = await blob.arrayBuffer();
           status.textContent = 'Playing back…';
-          audio.play().catch(err => { status.textContent = `Playback error: ${err.message}`; btn.disabled = false; });
-          audio.onended = () => { status.textContent = 'Mic is working.'; btn.disabled = false; };
+          try {
+            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+            const src = audioCtx.createBufferSource();
+            src.buffer = audioBuffer;
+            src.connect(audioCtx.destination);
+            src.start();
+            src.onended = () => { status.textContent = 'Mic is working.'; btn.disabled = false; };
+          } catch (err) {
+            status.textContent = `Playback error: ${err.message}`;
+            btn.disabled = false;
+          }
         };
 
         recorder.start();
