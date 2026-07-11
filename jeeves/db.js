@@ -158,3 +158,24 @@ export function getOpenErrors() {
     'SELECT * FROM behavior_errors WHERE resolved_at IS NULL ORDER BY occurred_at DESC'
   ).all();
 }
+
+export function getWeeklyStats(sinceTs) {
+  const cycles = db.prepare(`
+    SELECT appliance,
+           COUNT(*)           AS cycle_count,
+           AVG(duration_s)    AS avg_duration_s,
+           MAX(duration_s)    AS max_duration_s,
+           MIN(duration_s)    AS min_duration_s
+    FROM appliance_cycles
+    WHERE started_at >= ? AND ended_at IS NOT NULL
+    GROUP BY appliance
+  `).all(sinceTs);
+
+  const errors = db.prepare(`
+    SELECT * FROM behavior_errors
+    WHERE occurred_at >= ? OR resolved_at IS NULL
+    ORDER BY occurred_at DESC
+  `).all(sinceTs);
+
+  return { cycles, errors };
+}

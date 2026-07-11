@@ -19,6 +19,8 @@ services:
       - CALENDAR_ICS_URL=${CALENDAR_ICS_URL}
       - HA_TOKEN=${HA_TOKEN}
       - PURPLEAIR_API_KEY=${PURPLEAIR_API_KEY}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - REPORT_TO_EMAIL=${REPORT_TO_EMAIL}
     volumes:
       - jeeves_data:/data
     extra_hosts:

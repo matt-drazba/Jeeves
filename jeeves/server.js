@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import ical from 'node-ical';
 import * as db from './db.js';
+import { sendWeeklyReport } from './report.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -619,6 +620,19 @@ app.post('/api/dismiss/:appliance', (req, res) => {
   console.log(`${appliance} dismissed`);
   res.json({ ok: true });
 });
+
+// ── Weekly report (Sunday 9am) ────────────────────────────────────
+let lastReportDate = null;
+setInterval(() => {
+  const now = new Date();
+  if (now.getDay() === 0 && now.getHours() === 9 && now.getMinutes() === 0) {
+    const today = now.toDateString();
+    if (lastReportDate !== today) {
+      lastReportDate = today;
+      sendWeeklyReport().catch(err => console.error('Weekly report failed:', err));
+    }
+  }
+}, 60 * 1000);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Jeeves running on http://0.0.0.0:${PORT}`);
