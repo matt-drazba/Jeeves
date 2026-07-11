@@ -77,6 +77,7 @@ let cachedStatus = {
     aqiIn:      { label: 'AQI In',      icon: '🏠', value: '—',    alert: false, degraded: false },
     aqiOut:     { label: 'AQI Out',     icon: '🌿', value: '—',    alert: false, degraded: false },
     dishwasher: { label: 'Dishwasher',  icon: '🍽️', value: 'Idle', alert: false, degraded: false },
+    sprinklers: { label: 'Sprinklers',  icon: '💧', value: '—',    alert: false, degraded: false },
     nowPlaying: { label: 'Now Playing', icon: '🎵', value: '—',    sub: '', alert: false, degraded: false },
     dusty:      { label: 'Dusty',       icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
     snorlax:    { label: 'Snorlax',     icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
@@ -415,6 +416,38 @@ async function fetchAQI() {
 
 fetchAQI().catch(err => console.error('AQI fetch failed:', err));
 setInterval(() => fetchAQI().catch(err => console.error('AQI fetch failed:', err)), 10 * 60 * 1000);
+
+// ── Bhyve Sprinklers ──────────────────────────────────────────────
+async function fetchBhyve() {
+  if (!HA_TOKEN) return;
+  try {
+    const res = await fetchHAState('sensor.sprinklers_next_watering');
+    const raw = res.state;
+    let value = '—';
+    if (raw && raw !== 'unknown' && raw !== 'unavailable') {
+      const dt = new Date(raw);
+      if (!isNaN(dt)) {
+        const now = new Date();
+        const todayMidnight = new Date(now); todayMidnight.setHours(0,0,0,0);
+        const tomorrowMidnight = new Date(todayMidnight); tomorrowMidnight.setDate(tomorrowMidnight.getDate() + 1);
+        const dtMidnight = new Date(dt); dtMidnight.setHours(0,0,0,0);
+        const timeStr = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Los_Angeles' });
+        if (dtMidnight.getTime() === todayMidnight.getTime()) value = `Today ${timeStr}`;
+        else if (dtMidnight.getTime() === tomorrowMidnight.getTime()) value = `Tomorrow ${timeStr}`;
+        else value = dt.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/Los_Angeles' }) + ` ${timeStr}`;
+      } else {
+        value = raw;
+      }
+    }
+    cachedStatus.status.sprinklers = { label: 'Sprinklers', icon: '💧', value, alert: false, degraded: false };
+    console.log(`Sprinklers updated: ${value}`);
+  } catch (err) {
+    console.error('Bhyve fetch failed:', err.message);
+  }
+}
+
+fetchBhyve().catch(() => {});
+setInterval(() => fetchBhyve().catch(() => {}), 5 * 60 * 1000);
 
 // ── Tesla ─────────────────────────────────────────────────────────
 const TESLA_VEHICLES = [
