@@ -724,8 +724,7 @@
 
       if (audio && !silent) {
         const wav = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
-        console.log('wav bytes:', wav.byteLength, 'first4:', Array.from(wav.slice(0,4)));
-        await _audioCtx.resume();
+await _audioCtx.resume();
         const buf = await _audioCtx.decodeAudioData(wav.buffer);
         const src = _audioCtx.createBufferSource();
         src.buffer = buf;
