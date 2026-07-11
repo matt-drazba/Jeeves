@@ -1,0 +1,151 @@
+esphome:
+  name: pool-pad
+  friendly_name: Pool Pad
+
+esp8266:
+  board: nodemcuv2   # HiLetgo ESP8266 = NodeMCU v2
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "pool-pad-fallback"
+
+captive_portal:
+
+logger:
+  level: INFO
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# ── Pin assignments ────────────────────────────────────────────────────────
+# Set before flashing. Confirm physical wiring at the pad first.
+# Safe NodeMCU GPIO choices for inputs: GPIO5(D1), GPIO4(D2), GPIO14(D5), GPIO12(D6)
+# Avoid boot-sensitive: GPIO0(D3), GPIO2(D4), GPIO15(D8)
+# One-wire needs external 4.7k pull-up resistor to 3.3V.
+substitutions:
+  pin_opto_heat_active: GPIO5    # D1 — opto ch1: heater trio 24VAC (after flow switch)
+  pin_opto_pump_call:   GPIO4    # D2 — opto ch2: FPH pump-call output
+  pin_one_wire:         GPIO14   # D5 — DS18B20 one-wire bus (4.7k pull-up to 3.3V required)
+  pin_flow_pulse:       GPIO12   # D6 — hall-effect flow sensor pulse
+  # pin_boost_relay:    GPIO13   # D7 — phase 2: relay → IntelliComm input 2
+
+# ── Optocoupler inputs ────────────────────────────────────────────────────
+# Module type: 3–24V AC/DC optocoupler, active-low output (pulls low when AC present).
+# Opto ch1: across trio 24VAC AFTER the Tecmark flow switch — true pool heat active state.
+# Opto ch2: across FPH pump-call output — shows FPH is requesting the pump.
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: ${pin_opto_heat_active}
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "Pool Heat Active"
+    id: pool_heat_active
+    device_class: heat
+    filters:
+      - delayed_on: 2s
+      - delayed_off: 2s
+
+  - platform: gpio
+    pin:
+      number: ${pin_opto_pump_call}
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "FPH Pump Call"
+    id: fph_pump_call
+    device_class: running
+    filters:
+      - delayed_on: 2s
+      - delayed_off: 2s
+
+# ── DS18B20 temperature probes ────────────────────────────────────────────
+# First boot: check ESPHome logs for "Found dallastemp device at address 0x..."
+# Fill in the three addresses below. All probes share one bus.
+# Probe placement: in_temp = HX inlet well, out_temp = HX outlet well, pool_temp = pool return.
+one_wire:
+  - platform: gpio
+    pin: ${pin_one_wire}
+
+sensor:
+  - platform: dallas_temp
+    address: 0x0000000000000000   # ← replace after first-boot address scan
+    name: "HX Water In Temp"
+    id: hx_water_in_temp
+    unit_of_measurement: "°F"
+    accuracy_decimals: 1
+    filters:
+      - lambda: return x * 9.0/5.0 + 32.0;
+      - filter_out: nan
+
+  - platform: dallas_temp
+    address: 0x0000000000000001   # ← replace after first-boot address scan
+    name: "HX Water Out Temp"
+    id: hx_water_out_temp
+    unit_of_measurement: "°F"
+    accuracy_decimals: 1
+    filters:
+      - lambda: return x * 9.0/5.0 + 32.0;
+      - filter_out: nan
+
+  - platform: dallas_temp
+    address: 0x0000000000000002   # ← replace after first-boot address scan
+    name: "Pool Temp"
+    id: pool_temp
+    unit_of_measurement: "°F"
+    accuracy_decimals: 1
+    filters:
+      - lambda: return x * 9.0/5.0 + 32.0;
+      - filter_out: nan
+
+  # ── Flow sensor ──────────────────────────────────────────────────────────
+  # Measure pipe diameter before ordering sensor (1.5" vs 2" — different K-factors).
+  # Calibration: run pump at 2200 RPM, compare reading to Blue-White gauge, adjust multiply.
+  # pulse_counter reports pulses/min; multiply converts to GPM using sensor K-factor.
+  - platform: pulse_counter
+    pin:
+      number: ${pin_flow_pulse}
+      mode: INPUT_PULLUP
+    name: "Pool Flow GPM"
+    id: pool_flow_gpm
+    unit_of_measurement: "GPM"
+    accuracy_decimals: 1
+    update_interval: 10s
+    filters:
+      - multiply: 0.1   # placeholder — calibrate against Blue-White at 2200 RPM
+
+  # ── Heat recovery BTU/hr ─────────────────────────────────────────────────
+  # Standard pool formula: GPM × ΔT(°F) × 500 = BTU/hr
+  # Only computed when heat diversion is active (flow switch closed + trio energized).
+  - platform: template
+    name: "Pool Heat BTU/hr"
+    id: pool_heat_btu_hr
+    unit_of_measurement: "BTU/hr"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: |-
+      if (id(pool_heat_active).state) {
+        float dt = id(hx_water_out_temp).state - id(hx_water_in_temp).state;
+        float gpm = id(pool_flow_gpm).state;
+        if (!isnan(dt) && !isnan(gpm) && gpm > 0.0f) {
+          return gpm * dt * 500.0f;
+        }
+      }
+      return 0.0f;
+
+# ── Phase 2: pump-boost relay ────────────────────────────────────────────
+# Uncomment when wired: ESP relay → IntelliComm input 2 → pump Ext. Program 2.
+# Lower priority than FPH (input 4 wins). For pre-swim and HA automations.
+# switch:
+#   - platform: gpio
+#     pin: ${pin_boost_relay}
+#     name: "Pool Pump Boost"
+#     id: pool_pump_boost
+#     icon: mdi:pump
+#     restore_mode: ALWAYS_OFF

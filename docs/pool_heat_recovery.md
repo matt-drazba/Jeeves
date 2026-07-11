@@ -1,95 +1,110 @@
-# Hardware Integrations — Pool Heat Recovery (HotSpot FPH) + IntelliFlo Pump
+# Pool Heat Recovery — HotSpot FPH5 + IntelliFlo2 VST
 
-Status: design settled 2026-07-10. Source: HotSpot FPH installer manual (44p scan, on file),
-Pentair IntelliComm II install guide, TFP/community RS-485 references.
-Authority order: CLAUDE.md → this doc → coder briefs.
+Last updated: 2026-07-10. Authority order: CLAUDE.md → this doc → coder briefs.
+Sources: HotSpot FPH installer manual (44p scan), Pentair IntelliComm II guide, TFP community.
 
 ## System facts (verified)
 
-- **Pump:** Pentair IntelliFlo2 VST 3.0 HP, firmware **1.23-VS** (predates the buggy 3.03/3.04
-  RS-485 firmware — no Pentair flash needed). Classic Pentair RS-485 protocol (011056-family;
-  the protocol break is IntelliFlo3 011075+, not this pump). 8 speed slots: 4 button presets +
-  4 external programs. Comm terminals currently unused. Schedule lives in the pump — keep it.
-- **HVAC:** Bryant 226ANA048-B, 4-ton two-stage heat pump.
-- **FPH:** 4-ton ⇒ **FPH5** per manual sizing table: **min 45 GPM / max 70 GPM**, 75k BTU/h max
-  heat rejection. (Confirm FPH5 on the HX label.)
-- **FPH control topology** (manual p.11, p.23–24, p.28–29, p.38, p.41):
-  - Heat reclaim valve + fan relay + NC solenoid = one parallel trio on a single **24VAC pair**;
-    all energize/de-energize together. This pair IS "pool heat mode."
-  - 90340 relay across condenser Y/C tells the FPH controller the compressor is running.
-    Heat-pump variant also reads the reversing valve so recovery only runs in cooling
-    ("Type of AC" setting, p.41).
-  - On AC start, controller force-runs the pump for a dry-pipe purge delay (default **20 s**)
-    before sampling the PT-100; "Temp Re-Check" periodically re-samples. Controller UI only
-    active while the AC runs.
-  - Pump-call output: controller **switches one side of 24VAC** (HotSpot-supplied transformer)
-    intended to drive a contactor coil — or, for VS pumps, an IntelliComm II input (p.11 diagram,
-    example uses program 2).
+| Item | Value |
+|---|---|
+| Pump | Pentair IntelliFlo2 VST 3.0 HP, firmware **1.23-VS** |
+| Pump protocol | Classic Pentair RS-485 (011056-family). Protocol break is IntelliFlo3 011075+, not this pump. No firmware flash needed. |
+| Pump slots | 8 speed slots: 4 keypad presets + 4 external programs. External programs are a SEPARATE speed list from keypad buttons. |
+| FPH | **FPH5** (confirmed on HX label). Min **45 GPM** / max **70 GPM** / 75k BTU/h max. |
+| HVAC | Bryant 226ANA048-B, 4-ton two-stage heat pump. Recovery runs in **cooling only** (Type of AC setting, p.41). |
+| Baseline flow | **1750 RPM ≈ 45–50 GPM** (measured, Blue-White inline gauge). Flow scales ~1:1 with RPM. |
+| Sanitizer | **Clearwater MineralPURE R-40** copper/silver ionizer (40k gal). Low residual chlorine (~90% reduction; small residual still required). Copper target **0.2–0.4 ppm**. |
 
-## The interlock, layered (design decision)
+## Locked program config
 
-**L1 — hardware flow proof:** Tecmark **3010P** flow switch (+ cover **25165BM**), contacts wired
-**in series with the trio's 24VAC leg** (manual p.28). No flow ⇒ diverter physically cannot engage.
-Adjust: CW = more GPM required; set to open just below the 45 GPM floor.
-Manual p.25 is explicit: pump off during diversion overheats the FPH and can damage FPH/compressor;
-the compressor high-pressure switch is last-resort only.
-**Status: not installed. Purchase + install = priority 1.**
+| Setting | Value | Notes |
+|---|---|---|
+| Ext. Program 4 RPM | **2200 RPM** | ~55–60 GPM. Measured, not estimated. |
+| Program 4 stop delay | Max / ≥60 s | UI shows seconds. HX flush cool-down after FPH releases pump-call. |
+| Input 4 | FPH pump-call (highest priority wins) | Voltage-driven 9–24V AC/DC, NOT dry-contact. Unpolarized. |
+| Input 2 | Reserved — future HA relay (`switch.pool_pump_boost`) | Lower priority than FPH by design. |
 
-**L2 — hardware pump start:** FPH pump-call 24VAC → IntelliComm II **GPM/RPM input 4** →
-RS-485 → pump runs Ext. Program 4. Highest-numbered active input wins, so the FPH always
-outranks other triggers. Pure copper path; no Pi, no network, no HA in the loop.
+Pump display shows "DISPLAY NOT ACTIVE" while an external program runs — normal.
 
-**L3 — HA (monitor + alert only, later control):** HA failure degrades to "no free heat," never danger.
+## FPH control topology (manual p.11, p.23–24, p.28–29, p.38, p.41)
 
-## Wiring job (one afternoon)
+- Heat reclaim valve + fan relay + NC solenoid = **one parallel trio on a single 24VAC pair**. This pair IS "pool heat mode." All three energize/de-energize together.
+- 90340 relay across condenser Y/C tells the FPH controller the compressor is running.
+- On AC start: controller force-runs pump for **20 s purge delay** before sampling PT-100. Temp Re-Check periodically re-samples.
+- Pump-call output: controller switches one side of 24VAC (HotSpot transformer) → IntelliComm II input 4.
 
-- [ ] **Power IntelliComm II:** 9–24 VDC, 200 mA on its power screw-terminal pair.
-      Simplest: 12 VDC wall adapter at the pad. (It is NOT powered by mains directly and NOT
-      reliably by the comm line, despite retail blurbs — Pentair manual is authoritative.)
-- [ ] **Comm:** Pentair cable (P/N 350122, the black cable on hand) IntelliComm II comm
-      terminals → pump green/yellow RS-485 terminals. IntelliComm always addresses pump #1.
-- [ ] **Pump-call:** FPH switched-24VAC pair → **GPM/RPM 4** input. Inputs are voltage-driven
-      (9–24 V DC/AC), NOT dry-contact — do not wire a bare relay contact across them. Unpolarized.
-- [ ] **Pump config:** Ext. Program 4 = RPM for ≥45 GPM. Start 2800–3000, tune down with flow
-      data. Internal schedule unchanged. Pump display reads "DISPLAY NOT ACTIVE" while an
-      external program runs — normal.
-- [ ] **Flow switch:** plumb near HX, wire per p.28 in series with trio 24VAC, adjust threshold.
-- [ ] **Test:** AC on, pool below setpoint, pump timer OFF → pump must start at program-4 RPM
-      within the 20 s purge window; kill pump breaker mid-recovery → trio must drop out
-      (flow switch) and compressor must keep running on the air condenser.
+## The interlock, layered
 
-## HA layer (ESP32 at the pad, Wi-Fi OK)
+### L1 — hardware flow proof (PRIORITY 1 — not yet installed)
+Tecmark **3010P** SPNO flow switch (+ cover **25165BM**), contacts in series with trio 24VAC leg (manual p.28).
+No flow → diverter physically cannot engage. Adjust CW = more GPM required; set to open just below 45 GPM floor.
+Manual p.25: pump off during diversion overheats FPH and can damage FPH/compressor. Compressor high-pressure switch is last resort only.
 
-Sensing (all passive, opto-isolated AC-voltage inputs rated for 24VAC):
-- Across trio 24VAC **after** the flow switch → `binary_sensor.pool_heat_active` (true diverted state)
-- Across FPH pump-call output → `binary_sensor.fph_pump_call`
-- Compressor call: from T10 via HomeKit (`hvac_action`) — no Resideo cloud needed
-- Pump power: CT clamp (Shelly EM or ESP32 + SCT-013) → `binary_sensor.pool_pump_running`,
-  `sensor.pool_pump_watts`
+**Install into HX blue "outlet water temp" port:** pull titanium insert + grommet → 3/4" F fitting → reducer to 1/8" F (stainless) → switch, Teflon tape. 25165BM cover if exposed.
 
-Rules:
-- `pool_heat_active && !pool_pump_running` for >30 s → critical alert (means L1/L2 failed/bypassed)
-- `fph_pump_call && !pool_heat_active` sustained → flow-switch dropout alert (flow problem)
-- Pump off during scheduled hours → alert (existing G1 goal)
+**Calibrate:** run 1500 RPM (~40 GPM, below floor) → adjust CW until trio drops. Run 2200 RPM → must hold. A used unit that won't hold a trip point gets replaced (~$25).
 
-Control (phase 2, after monitoring proven): ESP32 relay switching 12 V into **GPM/RPM 2** →
-`switch.pool_pump_boost` for pre-swim/automations. Lower priority than FPH by design.
-Do NOT add a second RS-485 master (njsPC) while IntelliComm II owns the bus; passive sniffing
-for RPM/watts is a later option if CT-clamp wattage proves insufficient.
+### L2 — hardware pump start
+FPH pump-call 24VAC → IntelliComm II GPM/RPM input 4 → RS-485 → pump runs Ext. Program 4 at 2200 RPM. No Pi, no network, no HA in the loop. **Status: IntelliComm II bench-tested ✓. Wiring to FPH remaining.**
 
-## Shopping list
+### L3 — HA monitoring only
+HA failure degrades to "no free heat," never to danger. See HA layer below.
 
-- [ ] Tecmark 3010P flow switch
-- [ ] 25165BM cover
-- [ ] 12 VDC wall adapter (for IntelliComm II power)
-- [ ] ESP32 dev board
-- [ ] AC opto-isolator module (rated 24VAC, for sensing trio + pump-call)
-- [ ] CT clamp (SCT-013) or Shelly EM
+## Wiring remaining (human)
+
+- [ ] FPH pump-call pair (reads ~24VAC when AC on + pool below setpoint) → 18AWG t-stat wire → IntelliComm input 4
+- [ ] Live test: setpoint > water temp, AC on → pump self-starts at 2200 RPM within ~30 s
+- [ ] Flow switch install + calibrate on arrival (Tecmark 3010P, ~5 days out)
+- [ ] **Breaker-kill acceptance test ONLY after flow switch installed.** Until then it creates the dangerous state with nothing to catch it.
+- [ ] R-40 ionizer → IntelliFlo accessory output per manufacturer instructions (accessory output energizes with motor — hardware interlock, no HA automation)
+
+## HA layer (L3 — monitor + alert only)
+
+**Hardware:** ESP8266 HiLetgo (in hand) + 3–24V AC/DC optocoupler module (2+ ch) + DS18B20 × 3 + hall-effect flow sensor + CT clamp. See `esphome/pool-pad.yaml` for full config.
+
+**Sensors:**
+- `binary_sensor.pool_pad_pool_heat_active` — opto ch1 across trio 24VAC **after** flow switch
+- `binary_sensor.pool_pad_fph_pump_call` — opto ch2 across FPH pump-call output
+- `sensor.pool_pad_hx_water_in_temp`, `sensor.pool_pad_hx_water_out_temp` — DS18B20 probes in FPH tank sensor wells
+- `sensor.pool_pad_pool_temp` — DS18B20 pool return
+- `sensor.pool_pad_pool_flow_gpm` — pulse counter, calibrate against Blue-White gauge
+- `sensor.pool_pad_pool_heat_btu_hr` — template: GPM × ΔT(°F) × 500
+- `binary_sensor.pool_pump_running`, `sensor.pool_pump_watts` — CT clamp (Shelly EM or SCT-013)
+- Compressor call: T10 via HomeKit (`hvac_action`) — no Resideo cloud needed
+
+**Alert rules (HA automations, phase after monitoring proven):**
+- `pool_heat_active && !pool_pump_running` for >30 s → critical alert (L1/L2 failed or bypassed)
+- `fph_pump_call && !pool_heat_active` sustained → flow-switch dropout alert
+- Pump off during scheduled hours → warn
+
+**Phase 2 — HA control (after monitoring proven):**
+ESP32 relay → IntelliComm input 2 → `switch.pool_pump_boost` for pre-swim/automations.
+Do NOT add a second RS-485 master (njsPC) while IntelliComm II owns the bus.
+
+## Chemistry
+
+**Probes: pH + temperature only.** ORP is removed from the plan — copper ions + low FC make ORP readings meaningless.
+Manual testing with Taylor K-2006 feeds ha-poolchem: FC, pH, TA, CH, CYA.
+Copper tracked separately (Taylor K-1730) as its own HA input_number, target 0.2–0.4 ppm — not a ha-poolchem input.
+
+## Parts
+
+**In hand:** ESP8266 HiLetgo, 12VDC adapter (2A), Blue-White inline flow gauge, Tecmark 3010P arriving ~5 days.
+
+**To buy:**
+- 3–24V AC/DC optocoupler module, 2+ channels (~$7)
+- Waterproof DS18B20 × 3
+- Hall-effect pulse flow sensor — **measure pipe first: 1.5" vs 2"**; calibrate against Blue-White
+- CT clamp: Shelly EM or SCT-013 (for pump watts)
+- 3/4" F + 1/8" F reducer fittings (stainless), Teflon tape
+- 18AWG thermostat wire
+- Taylor K-2006 test kit
 
 ## Open items
 
-- [ ] Confirm FPH5 on HX label; note HotSpot transformer VA (p.23 shows 240 VA — ample)
-- [ ] Locate IntelliComm II + black cable (P/N 350122); measure run to pump (cable = 50 ft)
-- [ ] Pick final program-4 RPM once flow measurable
-- [ ] Later sections: pool chemistry probes (ESPHome/ha-poolchem), refrigerant
-      line-temp/ΔT BTU metering, water flow meter (also retires RPM guesswork above)
+- [ ] Confirm IntelliComm II cable P/N 350122 in hand; measure run to pump
+- [ ] Measure pool return pipe diameter before ordering flow sensor
+- [ ] Tune Program 4 stop delay to max available on pump UI
+- [ ] After flow sensor install: calibrate pulse multiplier against Blue-White at 2200 RPM
+- [ ] Open note: confirm whether IntelliFlo accessory output is line-voltage or low-voltage relay signal (check when drive cover is open)
+- [ ] Later: refrigerant line-temp/ΔT BTU metering, flow meter retires RPM guesswork

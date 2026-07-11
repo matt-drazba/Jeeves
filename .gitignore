@@ -149,6 +149,9 @@ local.md
 homeassistant/*
 !homeassistant/.gitkeep
 
+# ESPHome secrets
+esphome/secrets.yaml
+
 # System files
 .DS_Store
 Thumbs.db

@@ -22,3 +22,13 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+
+  esphome:
+    container_name: esphome
+    image: ghcr.io/esphome/esphome:latest
+    volumes:
+      - ./esphome:/config
+      - /etc/localtime:/etc/localtime:ro
+    network_mode: host
+    privileged: true
+    restart: unless-stopped

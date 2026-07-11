@@ -202,10 +202,13 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 - Chores leaderboard: household tasks logged via NFC taps or buttons → running scoreboard on the Jeeves dashboard
 
 ### Pool (see docs/pool_heat_recovery.md)
-- Heat recovery interlock: HotSpot FPH5 + Pentair IntelliFlo2 VST + IntelliComm II + Tecmark flow switch. Hardware-first safety; HA monitors only. Full spec in docs.
-- ha-poolchem via HACS for water balance + dosing recommendations (future)
-- Probes supply pH/temp only; FC, TA, CH, CYA entered manually via input helpers
-- Alerts: chemical drift, pump failure, low water level, freeze warning
+- Heat recovery interlock: HotSpot FPH5 + Pentair IntelliFlo2 VST + IntelliComm II + Tecmark 3010P flow switch. Full spec in docs.
+- **Hardware interlock (L1/L2) is pure copper — no Pi/HA in the safety loop.** HA monitors only (L3).
+- Ext. Program 4 locked at **2200 RPM** (~55–60 GPM), measured against Blue-White gauge.
+- Flow switch arriving ~5 days. Breaker-kill test blocked until then.
+- Sanitizer: Clearwater MineralPURE R-40 copper/silver ionizer. ORP probe removed — meaningless with copper ions + low FC.
+- ESPHome pad node: ESP8266 HiLetgo in hand. Config at `esphome/pool-pad.yaml`. Run ESPHome container first, then flash via USB on Pi.
+- ha-poolchem via HACS: FC/TA/CH/CYA entered manually; copper tracked as separate input_number (target 0.2–0.4 ppm); pH from DS18B20 probe; ORP not used.
 
 ## Deferred (committed, do later)
 - ESPHome pool sensor build (ESP32 + pH/ORP/temp probes)
@@ -237,13 +240,7 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 - **Dishwasher reminder:** DONE — HA automation at 9:15pm + Jeeves tile via Weaf HS110. See Working section.
 - **Energy rate awareness (time-of-use):** Utility rates vary by season and time of day (summer peak 4–9pm). Jeeves should know the current rate tier and surface it on the dashboard. Use this to: warn before starting high-draw appliances during peak, suggest optimal run times, factor into weekly energy cost reports. Rate schedule hardcoded in config (changes ~2× per year) or fetched from utility API if available.
 - **Solar panel monitoring:** Dashboard tile showing current solar production (W), daily yield (kWh), and grid import/export. Integration path TBD when ready to work on this.
-- **Pool heat recovery + pump interlock:** Design settled 2026-07-10. See `docs/pool_heat_recovery.md` for full spec. Summary:
-  - **Pump:** Pentair IntelliFlo2 VST 3.0 HP, firmware 1.23-VS, classic RS-485 protocol. Comm terminals unused — IntelliComm II goes here.
-  - **FPH:** HotSpot FPH5 (4-ton), min 45 GPM. "Pool heat mode" = 24VAC trio (valve + fan relay + solenoid) on one pair — sensed locally, no Resideo cloud needed.
-  - **L1 (hardware safety):** Tecmark 3010P flow switch in series with trio 24VAC — physically blocks diversion if pump isn't flowing. **Not yet installed — priority 1.**
-  - **L2 (hardware pump start):** FPH pump-call 24VAC → IntelliComm II GPM/RPM input 4 → RS-485 → pump runs Ext. Program 4 at ≥45 GPM. No Pi/HA in the loop.
-  - **L3 (HA monitoring):** ESP32 at pad with opto-isolated AC sense inputs + CT clamp → `binary_sensor.pool_heat_active`, `binary_sensor.fph_pump_call`, `binary_sensor.pool_pump_running`, `sensor.pool_pump_watts`. Alert if L1/L2 fail. HA controls nothing safety-critical.
-  - Shopping list: Tecmark 3010P, 25165BM cover, 12VDC adapter, ESP32, AC opto module, CT clamp (SCT-013) or Shelly EM.
+- **Pool heat recovery + pump interlock:** Design settled, implementation in progress. See `docs/pool_heat_recovery.md`. Hardware-first safety (L1 flow switch + L2 IntelliComm II); HA is monitor-only. ESPHome config at `esphome/pool-pad.yaml`.
 - **Maintenance tickler / home log:** Track recurring maintenance tasks with due dates — e.g., dishwasher deep clean every 2 months, HVAC filter every quarter, etc. Dashboard tile shows overdue/upcoming items. Backend: SQLite (same store as data history) with task definitions (name, interval, last-done date) and a simple `POST /api/maintenance/done/:task` endpoint to log completion. Smart scheduling: if the dishwasher ran N cycles since last clean, bump the due date forward instead of using calendar time alone. Depends on data history (SQLite) being in place.
 - **Home manual chatbot:** Local Q&A over appliance manuals and home-specific knowledge — "what's the best cycle for delicates on the LG?", "how do I calibrate the T10 pool heating mode?". Source material: PDFs of appliance manuals + custom notes stored in `docs/manuals/` (gitignored if large). Approach: run a local LLM via **Ollama** on the Pi 5 (or Mac mini if Pi 5 RAM is tight with Chromium running); small models like Llama 3.2 3B or Phi-3 Mini fit in 4GB with quantization. Jeeves server exposes a `/chat` endpoint that stuffs the relevant manual text into the prompt context (simple RAG — no vector DB needed at this scale) and calls the Ollama API locally. No cloud, no API key, no data leaves the house. Ties into maintenance tickler — chatbot can surface "you're due for a dishwasher clean" alongside cycle advice. Pi 5 RAM is the main constraint — benchmark Ollama alongside Chromium before committing to on-Pi inference.
 - **Zero-AI grocery shopping assistant:** Given a shopping list, compare prices across Safeway, Whole Foods, Amazon Fresh, and Costco to find the best deal for pickup or delivery. Credentials per store stored in `.env` (never committed). Approach: Jeeves server or a standalone script calls store APIs or scrapes store websites; returns ranked options per item or per cart total. "Zero-AI" framing = deterministic price comparison, not LLM-driven; LLM optionally used only to parse natural-language list input. Scope: Mac/CLI tool first, Jeeves dashboard integration later if useful.
