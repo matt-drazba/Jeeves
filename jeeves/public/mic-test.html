@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Mic Test</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 400px; margin: 60px auto; padding: 0 24px; }
+    h2 { margin-bottom: 8px; }
+    p { color: #666; margin-bottom: 20px; font-size: 14px; }
+    button { padding: 12px 28px; font-size: 15px; cursor: pointer; border-radius: 8px; border: none; background: #1a73e8; color: #fff; }
+    button:disabled { background: #aaa; cursor: default; }
+    #status { margin-top: 16px; font-size: 14px; color: #444; min-height: 20px; }
+  </style>
+</head>
+<body>
+  <h2>Mic Capture Test</h2>
+  <p>Records 3 seconds and plays back locally. No server involved — this only tests mic access.</p>
+  <button id="btn">Start Recording</button>
+  <div id="status"></div>
+
+  <script>
+    const btn    = document.getElementById('btn');
+    const status = document.getElementById('status');
+
+    btn.addEventListener('click', async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        status.textContent = 'Recording 3s…';
+        btn.disabled = true;
+
+        const recorder = new MediaRecorder(stream);
+        const chunks   = [];
+        recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+        recorder.onstop = () => {
+          stream.getTracks().forEach(t => t.stop());
+          const blob  = new Blob(chunks, { type: 'audio/webm' });
+          const url   = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          status.textContent = 'Playing back…';
+          audio.play().catch(err => { status.textContent = `Playback error: ${err.message}`; btn.disabled = false; });
+          audio.onended = () => { status.textContent = 'Mic is working.'; btn.disabled = false; };
+        };
+
+        recorder.start();
+        setTimeout(() => recorder.stop(), 3000);
+      } catch (err) {
+        status.textContent = `Error: ${err.message}`;
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

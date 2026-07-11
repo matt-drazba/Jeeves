@@ -366,6 +366,24 @@
     #refresh-dot.flash { opacity: 1; }
     #refresh-dot.error { background: var(--error-col); opacity: 1; }
     #refresh-dot.stale { background: var(--warn-col); opacity: 1; }
+
+    /* ── Mic button ──────────────────────────────────────────────── */
+    #mic-btn {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--muted);
+      font-size: 11px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.2s, color 0.2s, border-color 0.2s;
+      user-select: none;
+    }
+    #mic-btn.listening  { background: #3a0000; color: #ff5555; border-color: #ff5555; }
+    #mic-btn.processing { color: var(--accent); border-color: var(--accent); }
+    #mic-btn.playing    { background: #003a00; color: var(--good); border-color: var(--good); }
   </style>
 </head>
 <body>
@@ -407,6 +425,7 @@
     </div>
     <span id="last-updated"></span>
     <div id="refresh-dot"></div>
+    <div id="mic-btn" title="Tap to speak">🎤</div>
   </footer>
 
 </div>
@@ -650,6 +669,79 @@
     tile.querySelector('.tile-value').textContent = 'Idle';
     await fetch(`/api/dismiss/${key}`, { method: 'POST' });
   });
+
+  /* ── Voice control ──────────────────────────────────────────────── */
+  let _micStream, _recorder, _micChunks = [], _voiceState = 'idle';
+  let _audioCtx;
+
+  function setVoiceState(s) {
+    _voiceState = s;
+    const btn = document.getElementById('mic-btn');
+    btn.className = s === 'idle' ? '' : s;
+    btn.title = { idle: 'Tap to speak', listening: 'Tap to stop', processing: 'Processing…', playing: 'Playing…' }[s] || '';
+  }
+
+  async function startListening() {
+    if (_voiceState === 'listening' && _recorder?.state === 'recording') {
+      _recorder.stop();
+      return;
+    }
+    if (_voiceState !== 'idle') return;
+    try {
+      if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      _micStream  = await navigator.mediaDevices.getUserMedia({ audio: true });
+      _micChunks  = [];
+      _recorder   = new MediaRecorder(_micStream, { mimeType: 'audio/webm;codecs=opus' });
+      _recorder.ondataavailable = e => { if (e.data.size > 0) _micChunks.push(e.data); };
+      _recorder.onstop = sendVoiceAudio;
+      _recorder.start();
+      setVoiceState('listening');
+      setTimeout(() => { if (_voiceState === 'listening') _recorder.stop(); }, 10000);
+    } catch (err) {
+      console.error('Mic error:', err.message);
+      setVoiceState('idle');
+    }
+  }
+
+  async function sendVoiceAudio() {
+    setVoiceState('processing');
+    if (_micStream) _micStream.getTracks().forEach(t => t.stop());
+
+    const blob       = new Blob(_micChunks, { type: 'audio/webm' });
+    const controller = new AbortController();
+    const timeout    = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const res = await fetch('/api/voice', {
+        method:  'POST',
+        headers: { 'Content-Type': 'audio/webm' },
+        body:    blob,
+        signal:  controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { audio, silent } = await res.json();
+
+      if (audio && !silent) {
+        const wav = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
+        const buf = await _audioCtx.decodeAudioData(wav.buffer);
+        const src = _audioCtx.createBufferSource();
+        src.buffer = buf;
+        src.connect(_audioCtx.destination);
+        src.start();
+        setVoiceState('playing');
+        src.onended = () => setVoiceState('idle');
+      } else {
+        setVoiceState('idle');
+      }
+    } catch (err) {
+      clearTimeout(timeout);
+      console.error('Voice error:', err.message);
+      setVoiceState('idle');
+    }
+  }
+
+  document.getElementById('mic-btn').addEventListener('click', startListening);
 
   /* ── Boot ───────────────────────────────────────────────────────── */
   updateClock();

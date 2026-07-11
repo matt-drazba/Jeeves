@@ -1,0 +1,4 @@
+faster-whisper
+piper-tts
+fastapi
+uvicorn[standard]

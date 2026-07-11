@@ -88,7 +88,9 @@ let cachedStatus = {
 
 // ── Home Assistant ────────────────────────────────────────────────
 const HA_TOKEN = process.env.HA_TOKEN;
-const HA_URL = 'http://host.docker.internal:8123';
+const HA_URL   = 'http://host.docker.internal:8123';
+
+const VOICE_SERVICE_URL = process.env.VOICE_SERVICE_URL || 'http://voice:5100';
 
 async function fetchHAState(entityId) {
   const res = await fetch(`${HA_URL}/api/states/${entityId}`, {
@@ -619,6 +621,89 @@ app.post('/api/dismiss/:appliance', (req, res) => {
   }
   console.log(`${appliance} dismissed`);
   res.json({ ok: true });
+});
+
+// ── Voice ─────────────────────────────────────────────────────────
+async function dispatchVoice(text) {
+  const t = text.toLowerCase();
+
+  if (/(dismiss|done).*(washer)|(washer).*(dismiss|done)/.test(t)) {
+    washerDone = false;
+    cachedStatus.status.washer = { ...cachedStatus.status.washer, value: 'Idle', done: false };
+    return { action: 'dismiss_washer', responseText: 'Washer dismissed.' };
+  }
+  if (/(dismiss|done).*(dryer)|(dryer).*(dismiss|done)/.test(t)) {
+    dryerDone = false;
+    cachedStatus.status.dryer = { ...cachedStatus.status.dryer, value: 'Idle', done: false };
+    return { action: 'dismiss_dryer', responseText: 'Dryer dismissed.' };
+  }
+  if (/(dismiss|done).*(dishwasher)|(dishwasher).*(dismiss|done)/.test(t)) {
+    dishwasherDone = false;
+    cachedStatus.status.dishwasher = { ...cachedStatus.status.dishwasher, value: 'Idle', done: false };
+    return { action: 'dismiss_dishwasher', responseText: 'Dishwasher dismissed.' };
+  }
+  if (/what.*time|time.*is.*it/.test(t)) {
+    const timeStr = new Date().toLocaleTimeString('en-US', {
+      hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Los_Angeles',
+    });
+    return { action: 'time', responseText: `It's ${timeStr}.` };
+  }
+
+  // Tier 2: HA Assist
+  if (HA_TOKEN) {
+    try {
+      const haRes = await fetch(`${HA_URL}/api/conversation/process`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${HA_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, language: 'en' }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (haRes.ok) {
+        const data = await haRes.json();
+        const speech = data?.response?.speech?.plain?.speech;
+        if (speech) return { action: 'ha_assist', responseText: speech };
+      }
+    } catch (err) {
+      console.error('HA Assist error:', err.message);
+    }
+  }
+
+  return { action: 'no_match', responseText: "I didn't catch that. Try again." };
+}
+
+app.post('/api/voice', express.raw({ type: 'audio/*', limit: '10mb' }), async (req, res) => {
+  try {
+    const transcribeRes = await fetch(`${VOICE_SERVICE_URL}/transcribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': req.headers['content-type'] || 'audio/webm' },
+      body: req.body,
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!transcribeRes.ok) throw new Error(`Voice service ${transcribeRes.status}`);
+    const { text } = await transcribeRes.json();
+
+    if (!text) return res.json({ action: 'no_speech', silent: true });
+
+    const { action, responseText } = await dispatchVoice(text);
+    console.log(`Voice: "${text}" → ${action}`);
+
+    const hour = new Date().getHours();
+    if (hour >= 22 || hour < 6) return res.json({ action, silent: true });
+
+    const speakRes = await fetch(`${VOICE_SERVICE_URL}/speak`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: responseText }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!speakRes.ok) throw new Error(`TTS ${speakRes.status}`);
+
+    const audio = Buffer.from(await speakRes.arrayBuffer()).toString('base64');
+    res.json({ action, audio });
+  } catch (err) {
+    console.error('Voice error:', err.message);
+    res.json({ action: 'error', silent: true });
+  }
 });
 
 // ── Weekly report (Sunday 9am) ────────────────────────────────────
