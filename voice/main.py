@@ -68,10 +68,7 @@ def _transcribe(audio_bytes: bytes) -> str:
 def _speak(text: str) -> bytes:
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(piper_voice.config.sample_rate)
-        piper_voice.synthesize(text, w)
+        piper_voice.synthesize_wav(text, w)
     return buf.getvalue()
 
 
