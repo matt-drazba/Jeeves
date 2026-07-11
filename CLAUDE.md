@@ -3,7 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What this is
-Home automation monorepo: a custom kitchen dashboard ("Jeeves"), Home Assistant in Docker, laundry/chore/NFC automations, and pool monitoring. One Raspberry Pi 5 does everything: server + kitchen display.
+Home automation monorepo: a custom kitchen dashboard ("Jeeves"), Home Assistant in Docker, laundry/chore/NFC automations, and pool monitoring. Pi 5 is the server; a Fire HD 8 tablet is the kitchen display.
 
 ## Hardware
 - **Primary:** Raspberry Pi 5, 4GB (CanaKit — official 27W PSU, case, active cooling, SD card). Pure server — runs Docker, HA Container, and Jeeves. No longer driving a local display; Chromium kiosk on Pi 5 is dropped.
@@ -22,10 +22,10 @@ Home automation monorepo: a custom kitchen dashboard ("Jeeves"), Home Assistant 
 
 ### Data flow
 ```
-Chromium kiosk (localhost:3000) → Express /api/status → dashboard renders
+Fire HD 8 / Fully Kiosk Browser (192.168.0.189:3000) → Express /api/status → dashboard renders
 ```
 
-`fetchData()` in the dashboard is the only integration point. It currently returns hardcoded `TEST_DATA`. To go live, replace its body with `fetch('/api/status')`.
+`fetchData()` in the dashboard calls `fetch('/api/status')`. The dashboard is live — `TEST_DATA` fallback is only used if the fetch fails.
 
 ### Expected `/api/status` shape
 ```json
@@ -73,7 +73,8 @@ homelab/
 ├── docker-compose.yml
 ├── homeassistant/      # HA config; secrets.yaml + database gitignored
 ├── jeeves/             # Express server + dashboard
-└── docs/               # planning .md files (including superseded drafts, kept for history)
+├── esphome/            # ESPHome device configs; secrets.yaml gitignored
+└── docs/               # hardware specs and planning docs
 ```
 
 ### Jeeves canonical files
@@ -83,9 +84,10 @@ homelab/
 | `jeeves/server.js` | Express server — weather fetch, calendar fetch, `/api/status` |
 | `jeeves/package.json` | Dependencies: express, node-ical |
 | `jeeves/Dockerfile` | node:22-alpine, no build step |
-| `docker-compose.yml` | Orchestrates HA + Jeeves (repo root) |
+| `docker-compose.yml` | Orchestrates HA + Jeeves + ESPHome (repo root) |
+| `esphome/pool-pad.yaml` | ESP8266 pool pad node — opto sensing, DS18B20, flow, BTU/hr |
 
-## Current state (as of 2026-07-09)
+## Current state (as of 2026-07-10)
 
 ### Working
 - Pi 5 running Docker; HA Container + Jeeves both up via `docker compose`
@@ -167,6 +169,8 @@ PURPLEAIR_API_KEY=...     # PurpleAir read API key
 ```bash
 cd ~/homelab && git pull && docker compose up -d --build jeeves
 # Add --build homeassistant only if docker-compose.yml changed for HA
+# ESPHome container starts automatically; access web UI at http://192.168.0.189:6052
+# Initial ESP8266 flash: connect via USB on Pi, use ESPHome UI or CLI to flash
 ```
 
 ### Deferred polish
@@ -211,12 +215,12 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 - ha-poolchem via HACS: FC/TA/CH/CYA entered manually; copper tracked as separate input_number (target 0.2–0.4 ppm); pH from DS18B20 probe; ORP not used.
 
 ## Deferred (committed, do later)
-- ESPHome pool sensor build (ESP32 + pH/ORP/temp probes)
-- Pump power monitoring + water level sensor hardware
+- ESPHome pool pad node: flash ESP8266, wire opto inputs + DS18B20 probes + flow sensor, adopt into HA. Config ready at `esphome/pool-pad.yaml`. Blocked on flow switch arrival (~5 days) for full wiring test.
+- ESPHome pH node: separate ESP32 build (8266 ADC too weak for analog pH). After pad node proven.
+- Pool water level sensor hardware
 - NVMe SSD for the Pi 5 (SD card fine to start; trim HA recorder retention to a few days)
 - Freeze-warning automation (winter concern)
-- Home Assistant entity data on the Jeeves dashboard
-- Zero W thin-client kiosk experiment
+- Fire HD 8: buy (eBay), install Fully Kiosk Browser, point at `http://192.168.0.189:3000`, wall-mount
 
 ## Parked — decide later (do NOT build unless explicitly asked)
 - **Local voice control:** HA Assist + Whisper (STT) + Piper (TTS). Fire HD 8 has built-in mic + speaker — no external hardware needed. Whisper inference runs on Pi 5; dropping Chromium kiosk freed meaningful RAM. Use small Whisper model (tiny or base). Fully Kiosk supports mic access + audio playback. Voice dismiss for appliance tiles: "Jeeves, washer done" → `POST /api/dismiss/washer`. Tap-to-dismiss is the current fallback.
@@ -232,7 +236,7 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 - Frigate local camera AI (person/package detection; wants a Coral USB accelerator)
 - Boss key: one keypress swaps kiosk to a fake spreadsheet
 - **Data history + forecasting:** Time-series storage for door events, energy usage, laundry loads, pool chemistry. Design: SQLite in a Docker volume (not HA's recorder — that's for HA internals). Jeeves server writes and queries it. Pool chemistry history enables dosing trend forecasting. Architecture should be designed with this in mind from the start — status tiles feed history, history feeds forecasting tiles.
-- **Tesla via Home Assistant:** Integration live (see Working section). Remaining: dashboard tiles (charge %, range, charging state), notifications (charge complete, low battery), voice commands via HA Assist.
+- **Tesla notifications + voice via HA Assist:** Integration + dashboard tiles live (see Working section). Remaining: charge-complete + low-battery push notifications; voice commands via HA Assist (parked until voice stack is built).
 - **Garage door automation:** Voice-controlled + automated garage doors via HA. Hardware options: myQ (Chamberlain/LiftMaster — cloud-dependent), ratgdo (local, open-source, replaces the wall panel), or generic reed sensor + relay via ESPHome. ratgdo is preferred (local-first). Integrates with HA for automations (e.g., "close at 10pm if open", "leaving home" scene).
 - **OhmHour visibility + automations:** OhmConnect sends OhmHour events (demand-response windows, typically 1h). Dashboard tile showing active/upcoming OhmHour; HA automations to shed load automatically (turn off dryer, EV charging, etc.) when one starts; warnings on the dashboard before turning on high-draw appliances during an event. OhmConnect has a webhook or IFTTT trigger — needs research on best HA integration path.
 - **Weekly email reports:** Scheduled summary email (Friday evening or Sunday) covering: appliance cycles run, energy used per device, comparison to prior weeks, pool chemistry trends. Generated by Jeeves server, sent via SMTP or a transactional email service (Resend/Mailgun — API key in `.env`). Requires data history (SQLite) to be in place first.
