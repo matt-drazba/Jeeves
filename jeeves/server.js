@@ -3,6 +3,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import ical from 'node-ical';
+import * as db from './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -96,13 +97,11 @@ async function fetchHAState(entityId) {
   return res.json();
 }
 
-let washerPrevState = 'stop';
-let washerDone = false;
-let dryerDone = false;
-let lastDryerEventTime = null;
-let dishwasherWasRunning = false;
-let dishwasherDone = false;
-const DISHWASHER_WATTS_THRESHOLD = 4;
+// ── Washer ────────────────────────────────────────────────────────
+let washerPrevState  = 'stop';
+let washerDone       = false;
+let washerCycleId    = null;
+let washerRecovered  = false;
 
 async function fetchWasher() {
   if (!HA_TOKEN) return;
@@ -112,13 +111,39 @@ async function fetchWasher() {
     fetchHAState('sensor.laundry_room_washer_completion_time'),
   ]);
 
-  if (machineRes.status === 'rejected') throw machineRes.reason;
+  if (machineRes.status === 'rejected') {
+    db.logError('washer', 'fetch_failed', machineRes.reason?.message);
+    throw machineRes.reason;
+  }
+  db.resolveError('washer', 'fetch_failed');
+
   const state = machineRes.value.state;
+
+  // Restart recovery: re-attach to any open cycle from before a container restart
+  if (!washerRecovered) {
+    washerRecovered = true;
+    const openId = db.getOpenCycleId('washer');
+    if (openId) {
+      if (state === 'run' || state === 'pause') {
+        washerCycleId = openId; // resume tracking
+      } else {
+        db.closeCycle(openId, { endReason: 'unknown' }); // was running when we restarted, now idle
+      }
+    }
+  }
 
   if (state === 'run' || state === 'pause') {
     washerDone = false;
+    if (!washerCycleId) {
+      try { washerCycleId = db.openCycle('washer'); }
+      catch (err) { console.error('DB washer cycle open failed:', err.message); }
+    }
   } else if (state === 'stop' && (washerPrevState === 'run' || washerPrevState === 'pause')) {
     washerDone = true;
+    if (washerCycleId) {
+      try { db.closeCycle(washerCycleId); } catch (err) { console.error('DB washer cycle close failed:', err.message); }
+      washerCycleId = null;
+    }
   }
   washerPrevState = state;
 
@@ -148,23 +173,76 @@ async function fetchWasher() {
   console.log(`Washer updated: ${value}`);
 }
 
+// ── Dishwasher ────────────────────────────────────────────────────
+const DISHWASHER_WATTS_THRESHOLD = 4;
+const DISHWASHER_END_DELAY_MS    = 5 * 60 * 1000; // 5 min continuous below threshold = cycle ended
+
+let dishwasherWasRunning  = false;
+let dishwasherDone        = false;
+let dishwasherBelowSince  = null;
+let dishwasherPeakWatts   = 0;
+let dishwasherCycleId     = null;
+let dishwasherRecovered   = false;
+
 async function fetchDishwasher() {
   if (!HA_TOKEN) return;
-  const res = await fetchHAState('sensor.weaf_current_consumption');
+
+  let res;
+  try {
+    res = await fetchHAState('sensor.weaf_current_consumption');
+    db.resolveError('dishwasher', 'fetch_failed');
+  } catch (err) {
+    db.logError('dishwasher', 'fetch_failed', err.message);
+    throw err;
+  }
+
   const watts = parseFloat(res.state);
 
-  if (watts >= DISHWASHER_WATTS_THRESHOLD) {
-    dishwasherWasRunning = true;
+  // Restart recovery
+  if (!dishwasherRecovered) {
+    dishwasherRecovered = true;
+    const openId = db.getOpenCycleId('dishwasher');
+    if (openId) {
+      if (watts >= DISHWASHER_WATTS_THRESHOLD) {
+        dishwasherCycleId    = openId;
+        dishwasherWasRunning = true;
+      } else {
+        db.closeCycle(openId, { peakWatts: dishwasherPeakWatts, endReason: 'unknown' });
+      }
+    }
+  }
+
+  db.maybeLogEnergy('dishwasher', isNaN(watts) ? 0 : watts);
+
+  if (!isNaN(watts) && watts >= DISHWASHER_WATTS_THRESHOLD) {
+    dishwasherBelowSince = null;
     dishwasherDone = false;
+    dishwasherPeakWatts = Math.max(dishwasherPeakWatts, watts);
+    if (!dishwasherWasRunning) {
+      dishwasherWasRunning = true;
+      try { dishwasherCycleId = db.openCycle('dishwasher'); }
+      catch (err) { console.error('DB dishwasher cycle open failed:', err.message); }
+    }
   } else if (dishwasherWasRunning) {
-    dishwasherDone = true;
-    dishwasherWasRunning = false;
+    if (dishwasherBelowSince === null) {
+      dishwasherBelowSince = Date.now();
+    } else if (Date.now() - dishwasherBelowSince >= DISHWASHER_END_DELAY_MS) {
+      dishwasherDone       = true;
+      dishwasherWasRunning = false;
+      dishwasherBelowSince = null;
+      if (dishwasherCycleId) {
+        try { db.closeCycle(dishwasherCycleId, { peakWatts: dishwasherPeakWatts }); }
+        catch (err) { console.error('DB dishwasher cycle close failed:', err.message); }
+        dishwasherCycleId   = null;
+        dishwasherPeakWatts = 0;
+      }
+    }
   }
 
   let value, done = false;
   if (dishwasherDone) {
     value = 'Done!'; done = true;
-  } else if (watts >= DISHWASHER_WATTS_THRESHOLD) {
+  } else if (!isNaN(watts) && watts >= DISHWASHER_WATTS_THRESHOLD) {
     value = `Running (${Math.round(watts)}W)`;
   } else {
     value = 'Idle';
@@ -180,6 +258,12 @@ setInterval(() => fetchDishwasher().catch(err => console.error('Dishwasher fetch
 fetchWasher().catch(err => console.error('Washer fetch failed:', err));
 setInterval(() => fetchWasher().catch(err => console.error('Washer fetch failed:', err)), 30 * 1000);
 
+// ── Dryer ─────────────────────────────────────────────────────────
+let dryerDone          = false;
+let lastDryerEventTime = null;
+let dryerCycleId       = null;
+let dryerRecovered     = false;
+
 async function fetchDryer() {
   if (!HA_TOKEN) return;
 
@@ -188,11 +272,33 @@ async function fetchDryer() {
     fetchHAState('sensor.dryer_remaining_time'),
   ]);
 
-  if (statusRes.status === 'rejected') throw statusRes.reason;
+  if (statusRes.status === 'rejected') {
+    db.logError('dryer', 'fetch_failed', statusRes.reason?.message);
+    throw statusRes.reason;
+  }
+  db.resolveError('dryer', 'fetch_failed');
+
   const state = statusRes.value.state;
+
+  // Restart recovery
+  if (!dryerRecovered) {
+    dryerRecovered = true;
+    const openId = db.getOpenCycleId('dryer');
+    if (openId) {
+      if (state === 'running' || state === 'pause') {
+        dryerCycleId = openId;
+      } else {
+        db.closeCycle(openId, { endReason: 'unknown' });
+      }
+    }
+  }
 
   if (state === 'running' || state === 'pause') {
     dryerDone = false;
+    if (!dryerCycleId) {
+      try { dryerCycleId = db.openCycle('dryer'); }
+      catch (err) { console.error('DB dryer cycle open failed:', err.message); }
+    }
   }
 
   const [notifRes] = await Promise.allSettled([fetchHAState('event.dryer_notification')]);
@@ -201,7 +307,13 @@ async function fetchDryer() {
     const eventType = notifRes.value.attributes?.event_type;
     if (eventTime !== lastDryerEventTime) {
       lastDryerEventTime = eventTime;
-      if (eventType === 'drying_is_complete') dryerDone = true;
+      if (eventType === 'drying_is_complete') {
+        dryerDone = true;
+        if (dryerCycleId) {
+          try { db.closeCycle(dryerCycleId); } catch (err) { console.error('DB dryer cycle close failed:', err.message); }
+          dryerCycleId = null;
+        }
+      }
     }
   }
 
@@ -469,6 +581,7 @@ async function fetchCalendar() {
 fetchCalendar().catch(err => console.error('Calendar fetch failed:', err));
 setInterval(() => fetchCalendar().catch(err => console.error('Calendar fetch failed:', err)), 5 * 60 * 1000);
 
+// ── Routes ────────────────────────────────────────────────────────
 app.use(express.static(join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
@@ -477,6 +590,16 @@ app.get('/', (req, res) => {
 
 app.get('/api/status', (req, res) => {
   res.json(cachedStatus);
+});
+
+app.get('/api/history/:appliance', (req, res) => {
+  const { appliance } = req.params;
+  const limit = Math.min(parseInt(req.query.limit) || 10, 100);
+  res.json({ appliance, cycles: db.getRecentCycles(appliance, limit) });
+});
+
+app.get('/api/errors', (req, res) => {
+  res.json({ errors: db.getOpenErrors() });
 });
 
 app.post('/api/dismiss/:appliance', (req, res) => {
