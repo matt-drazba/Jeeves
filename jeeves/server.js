@@ -950,33 +950,60 @@ app.post('/api/chat', express.json(), async (req, res) => {
   const { message, history = [] } = req.body;
   if (!message?.trim()) return res.status(400).json({ error: 'message required' });
 
+  const context = getContext(message.trim());
+  const systemContent = context ? `${CHAT_SYSTEM}\n\n${context}` : CHAT_SYSTEM;
+
   const messages = [
-    { role: 'system', content: CHAT_SYSTEM },
+    { role: 'system', content: systemContent },
     ...history.slice(-10),
     { role: 'user', content: message.trim() },
   ];
 
-  const context = getContext(message.trim());
-  const systemContent = context ? `${CHAT_SYSTEM}\n\n${context}` : CHAT_SYSTEM;
-  messages[0] = { role: 'system', content: systemContent };
-
+  let ollamaRes;
   try {
-    const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
+    ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: CHAT_MODEL, messages, stream: false, options: { num_predict: 400 } }),
-      signal: AbortSignal.timeout(120000),
+      body: JSON.stringify({ model: CHAT_MODEL, messages, stream: true, options: { num_predict: 400 } }),
+      signal: AbortSignal.timeout(10000), // just for the initial connection
     });
-    if (ollamaRes.status === 404) return res.status(503).json({ error: 'Model not ready — run: docker exec ollama ollama pull llama3.2:3b' });
-    if (!ollamaRes.ok) throw new Error(`Ollama ${ollamaRes.status}`);
-    const data = await ollamaRes.json();
-    res.json({ reply: data.message?.content || '' });
   } catch (err) {
-    console.error('Chat error:', err.message);
-    const msg = err.name === 'TimeoutError' ? 'Response timed out — try again'
-      : err.code === 'ECONNREFUSED' ? 'Chat service starting up'
-      : 'Chat unavailable';
-    res.status(503).json({ error: msg });
+    console.error('Chat connect error:', err.message);
+    const msg = err.code === 'ECONNREFUSED' ? 'Chat service starting up' : 'Chat unavailable';
+    return res.status(503).json({ error: msg });
+  }
+
+  if (ollamaRes.status === 404) return res.status(503).json({ error: 'Model not ready — run: docker exec ollama ollama pull llama3.2:3b' });
+  if (!ollamaRes.ok) return res.status(503).json({ error: `Ollama ${ollamaRes.status}` });
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const reader = ollamaRes.body.getReader();
+  const decoder = new TextDecoder();
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of decoder.decode(value).split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const data = JSON.parse(line);
+          if (data.message?.content) {
+            res.write(`data: ${JSON.stringify({ token: data.message.content })}\n\n`);
+          }
+          if (data.done) {
+            res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+          }
+        } catch { /* partial JSON line, skip */ }
+      }
+    }
+  } catch (err) {
+    console.error('Chat stream error:', err.message);
+  } finally {
+    res.end();
   }
 });
 
