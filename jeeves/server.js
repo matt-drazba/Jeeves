@@ -634,7 +634,18 @@ async function fetchBiblio() {
 }
 
 fetchBiblio().catch(() => {});
-setInterval(() => fetchBiblio().catch(() => {}), 30 * 60 * 1000);
+
+let lastBiblioDate = null;
+setInterval(() => {
+  const now = new Date();
+  if (now.getHours() === 2 && now.getMinutes() === 0) {
+    const today = now.toDateString();
+    if (lastBiblioDate !== today) {
+      lastBiblioDate = today;
+      fetchBiblio().catch(() => {});
+    }
+  }
+}, 60 * 1000);
 
 // ── Tesla ─────────────────────────────────────────────────────────
 const TESLA_VEHICLES = [
