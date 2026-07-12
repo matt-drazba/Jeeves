@@ -77,7 +77,8 @@ let cachedStatus = {
     aqiIn:      { label: 'AQI In',      icon: '🏠', value: '—',    alert: false, degraded: false },
     aqiOut:     { label: 'AQI Out',     icon: '🌿', value: '—',    alert: false, degraded: false },
     dishwasher: { label: 'Dishwasher',  icon: '🍽️', value: 'Idle', alert: false, degraded: false },
-    sprinklers: { label: 'Sprinklers',  icon: '💧', value: '—',    alert: false, degraded: false },
+    sprinklers:   { label: 'Sprinklers',   icon: '💧', value: '—',    alert: false, degraded: false },
+    waterHeater:  { label: 'Hot Water',    icon: '🚿', value: '—',    sub: '', alert: false, degraded: false },
     nowPlaying: { label: 'Now Playing', icon: '🎵', value: '—',    sub: '', alert: false, degraded: false },
     dusty:      { label: 'Dusty',       icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
     snorlax:    { label: 'Snorlax',     icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
@@ -448,6 +449,44 @@ async function fetchBhyve() {
 
 fetchBhyve().catch(() => {});
 setInterval(() => fetchBhyve().catch(() => {}), 5 * 60 * 1000);
+
+// ── Water Heater (Rheem EcoNet) ───────────────────────────────────
+async function fetchWaterHeater() {
+  if (!HA_TOKEN) return;
+  try {
+    const [hotWaterRes, runningRes, runningStateRes, alertRes] = await Promise.allSettled([
+      fetchHAState('sensor.heat_pump_water_heater_heat_pump_water_heater_available_hot_water'),
+      fetchHAState('binary_sensor.heat_pump_water_heater_heat_pump_water_heater_running'),
+      fetchHAState('sensor.heat_pump_water_heater_heat_pump_water_heater_running_state'),
+      fetchHAState('sensor.heat_pump_water_heater_heat_pump_water_heater_alert_count'),
+    ]);
+
+    const hotWater = hotWaterRes.status === 'fulfilled' ? parseInt(hotWaterRes.value.state, 10) : null;
+    const running  = runningRes.status === 'fulfilled'  ? runningRes.value.state === 'on' : false;
+    const stateVal = runningStateRes.status === 'fulfilled' ? runningStateRes.value.state : '';
+    const alerts   = alertRes.status === 'fulfilled'   ? parseInt(alertRes.value.state, 10) : 0;
+
+    const value = hotWater !== null && !isNaN(hotWater) ? `${hotWater}%` : '—';
+
+    let sub = '';
+    if (stateVal && stateVal !== 'unknown' && stateVal !== 'unavailable' && stateVal !== '') {
+      sub = stateVal;
+    } else {
+      sub = running ? 'Heating' : 'Idle';
+    }
+
+    const degraded = (hotWater !== null && !isNaN(hotWater) && hotWater < 30) || running;
+    const alert    = !isNaN(alerts) && alerts > 0;
+
+    cachedStatus.status.waterHeater = { label: 'Hot Water', icon: '🚿', value, sub, alert, degraded, done: false };
+    console.log(`Water heater updated: ${value} (${sub})`);
+  } catch (err) {
+    console.error('Water heater fetch failed:', err.message);
+  }
+}
+
+fetchWaterHeater().catch(() => {});
+setInterval(() => fetchWaterHeater().catch(() => {}), 5 * 60 * 1000);
 
 // ── Tesla ─────────────────────────────────────────────────────────
 const TESLA_VEHICLES = [
