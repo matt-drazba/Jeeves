@@ -8,7 +8,7 @@ const _require = createRequire(import.meta.url);
 const DOCS_DIR   = process.env.DOCS_DIR || '/docs/manuals';
 const CHUNK_WORDS = 400;
 const OVERLAP     = 50;
-const TOP_K       = 4;
+const TOP_K       = 2;
 
 const STOPWORDS = new Set([
   'a','an','the','and','or','but','in','on','at','to','for','of','with','by',
@@ -119,9 +119,11 @@ export function getContext(query) {
 
   if (scored.length === 0) return '';
 
-  const body = scored
+  const sources = [...new Set(scored.map(x => x.chunk.source))].join(', ');
+  const body    = scored
     .map(({ chunk }) => `[${chunk.source}]\n${chunk.text}`)
     .join('\n\n---\n\n');
 
-  return `Relevant information from your knowledge base:\n\n${body}`;
+  return `The following is from the user's document library (source: ${sources}). ` +
+    `Refer to the appliance by the name in the source document, not from the general appliance list.\n\n${body}`;
 }
