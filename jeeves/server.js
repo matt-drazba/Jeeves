@@ -964,8 +964,8 @@ app.post('/api/chat', express.json(), async (req, res) => {
     const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: CHAT_MODEL, messages, stream: false }),
-      signal: AbortSignal.timeout(60000),
+      body: JSON.stringify({ model: CHAT_MODEL, messages, stream: false, options: { num_predict: 400 } }),
+      signal: AbortSignal.timeout(120000),
     });
     if (ollamaRes.status === 404) return res.status(503).json({ error: 'Model not ready — run: docker exec ollama ollama pull llama3.2:3b' });
     if (!ollamaRes.ok) throw new Error(`Ollama ${ollamaRes.status}`);
