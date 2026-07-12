@@ -179,46 +179,69 @@
     .pin-panel {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 24px 20px 20px;
-      width: 240px;
+      border-radius: 20px;
+      padding: 28px 24px 24px;
+      width: 320px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 18px;
+      gap: 22px;
     }
-    #pin-title { font-size: 13px; color: var(--muted); text-align: center; line-height: 1.4; }
-    .pin-dots { display: flex; gap: 14px; }
+    #pin-title { font-size: 15px; color: var(--muted); text-align: center; line-height: 1.4; }
+    #pin-result {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--good);
+      text-align: center;
+      display: none;
+      line-height: 1.3;
+    }
+    .pin-dots { display: flex; gap: 18px; }
     .pin-dot {
-      width: 13px; height: 13px;
+      width: 16px; height: 16px;
       border-radius: 50%;
       border: 2px solid var(--border);
       background: transparent;
-      transition: background 0.1s, border-color 0.1s;
+      transition: background 0.12s, border-color 0.12s, transform 0.12s;
     }
-    .pin-dot.filled { background: var(--accent); border-color: var(--accent); }
+    .pin-dot.filled { background: var(--accent); border-color: var(--accent); transform: scale(1.2); }
     .pin-dot.wrong  { background: var(--alert-col); border-color: var(--alert-col); }
     .pin-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
+      gap: 12px;
       width: 100%;
     }
     .pin-key {
       background: var(--surface2);
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: 14px;
       color: var(--text);
-      font-size: 1.2em;
+      font-size: 1.6em;
+      font-weight: 600;
       font-family: inherit;
-      padding: 13px 0;
+      padding: 18px 0;
       cursor: pointer;
       text-align: center;
       user-select: none;
       -webkit-user-select: none;
+      transition: transform 0.08s, opacity 0.08s;
     }
-    .pin-key:active { opacity: 0.6; }
-    .pin-key-skip { font-size: 0.8em; color: var(--muted); }
+    .pin-key:active { transform: scale(0.92); opacity: 0.7; }
+    .pin-key-skip { font-size: 1em; font-weight: 400; color: var(--muted); }
+
+    @keyframes float-up {
+      0%   { transform: translateY(0) rotate(0deg) scale(1);   opacity: 1; }
+      80%  { opacity: 1; }
+      100% { transform: translateY(-280px) rotate(540deg) scale(0.6); opacity: 0; }
+    }
+    .celebrate-emoji {
+      position: fixed;
+      font-size: 2em;
+      pointer-events: none;
+      z-index: 300;
+      animation: float-up 1.6s ease-out forwards;
+    }
 
     /* ── Weather tiles ───────────────────────────────────────────── */
     .tile.weather-current-tile .tile-value { font-size: 30px; letter-spacing: -0.5px; }
@@ -577,6 +600,7 @@
 <div id="pin-overlay" class="hidden">
   <div class="pin-panel">
     <div id="pin-title">Who unloaded it?</div>
+    <div id="pin-result"></div>
     <div class="pin-dots">
       <span class="pin-dot" id="pd0"></span>
       <span class="pin-dot" id="pd1"></span>
@@ -929,6 +953,29 @@
     setTimeout(() => { _pinInput = ''; _updateDots(); }, 600);
   }
 
+  function _celebrate(name) {
+    const emojis = ['🎉','🎊','🎈','⭐','🌟','✨','🥳','💫','🏆','🎯','🌈','💥'];
+    const count = 22;
+    for (let i = 0; i < count; i++) {
+      const el = document.createElement('span');
+      el.className = 'celebrate-emoji';
+      el.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+      el.style.left   = (10 + Math.random() * 80) + 'vw';
+      el.style.top    = (30 + Math.random() * 45) + 'vh';
+      el.style.fontSize = (1.4 + Math.random() * 1.8) + 'em';
+      el.style.animationDelay    = (Math.random() * 0.4) + 's';
+      el.style.animationDuration = (1.2 + Math.random() * 0.8) + 's';
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 2400);
+    }
+
+    const result = document.getElementById('pin-result');
+    result.textContent = `Nice work, ${name}! 🎉`;
+    result.style.display = 'block';
+    document.getElementById('pin-grid').style.display = 'none';
+    document.querySelector('.pin-dots').style.visibility = 'hidden';
+  }
+
   async function _submitDismiss(pin) {
     const overlay = document.getElementById('pin-overlay');
     const tile = _pendingTile;
@@ -941,7 +988,6 @@
       return;
     }
 
-    // PIN entered — submit, wait for result, then give feedback
     const res = await fetch(`/api/dismiss/${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -950,10 +996,15 @@
     const data = await res.json();
 
     if (data.creditedTo) {
-      overlay.classList.add('hidden');
       if (tile) { tile.classList.remove('done'); const v = tile.querySelector('.tile-value'); if (v) v.textContent = 'Idle'; }
+      _celebrate(data.creditedTo);
+      setTimeout(() => {
+        overlay.classList.add('hidden');
+        document.getElementById('pin-result').style.display = 'none';
+        document.getElementById('pin-grid').style.display = 'grid';
+        document.querySelector('.pin-dots').style.visibility = 'visible';
+      }, 1800);
     } else {
-      // Wrong PIN — flash red, let them retry or skip
       _flashWrong();
     }
   }
