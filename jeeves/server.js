@@ -965,7 +965,6 @@ app.post('/api/chat', express.json(), async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: CHAT_MODEL, messages, stream: true, options: { num_predict: 400 } }),
-      signal: AbortSignal.timeout(10000), // just for the initial connection
     });
   } catch (err) {
     console.error('Chat connect error:', err.message);
