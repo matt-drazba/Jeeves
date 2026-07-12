@@ -26,8 +26,10 @@ services:
       - BIBLIO_CARD=${BIBLIO_CARD}
       - BIBLIO_PIN=${BIBLIO_PIN}
       - OLLAMA_URL=http://ollama:11434
+      - DOCS_DIR=/docs/manuals
     volumes:
       - jeeves_data:/data
+      - ./docs/manuals:/docs/manuals:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

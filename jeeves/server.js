@@ -5,6 +5,7 @@ import { dirname, join } from 'path';
 import ical from 'node-ical';
 import * as db from './db.js';
 import { sendWeeklyReport } from './report.js';
+import { loadDocs, getContext } from './rag.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -944,6 +945,10 @@ app.post('/api/chat', express.json(), async (req, res) => {
     { role: 'user', content: message.trim() },
   ];
 
+  const context = getContext(message.trim());
+  const systemContent = context ? `${CHAT_SYSTEM}\n\n${context}` : CHAT_SYSTEM;
+  messages[0] = { role: 'system', content: systemContent };
+
   try {
     const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
       method: 'POST',
@@ -976,6 +981,8 @@ setInterval(() => {
     }
   }
 }, 60 * 1000);
+
+loadDocs().catch(err => console.error('RAG load failed:', err));
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Jeeves running on http://0.0.0.0:${PORT}`);

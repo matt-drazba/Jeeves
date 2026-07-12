@@ -152,6 +152,9 @@ homeassistant/*
 # ESPHome secrets
 esphome/secrets.yaml
 
+# Manuals — commit .md/.txt, PDFs are too large
+docs/manuals/*.pdf
+
 # System files
 .DS_Store
 Thumbs.db

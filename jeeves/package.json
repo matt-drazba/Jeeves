@@ -8,6 +8,7 @@
   "dependencies": {
     "better-sqlite3": "^11",
     "express": "^5",
-    "node-ical": "^0.19.0"
+    "node-ical": "^0.19.0",
+    "pdf-parse": "^1.1.1"
   }
 }
