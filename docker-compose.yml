@@ -25,10 +25,18 @@ services:
       - REPORT_TO_EMAIL=${REPORT_TO_EMAIL}
       - BIBLIO_CARD=${BIBLIO_CARD}
       - BIBLIO_PIN=${BIBLIO_PIN}
+      - OLLAMA_URL=http://ollama:11434
     volumes:
       - jeeves_data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  ollama:
+    container_name: ollama
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
     restart: unless-stopped
 
   esphome:
@@ -54,3 +62,4 @@ services:
 volumes:
   jeeves_data:
   voice_models:
+  ollama_data:

@@ -925,6 +925,45 @@ app.post('/api/voice', express.raw({ type: 'audio/*', limit: '10mb' }), async (r
   }
 });
 
+// ── Chat (Ollama) ─────────────────────────────────────────────────
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://ollama:11434';
+const CHAT_MODEL = 'llama3.2:3b';
+const CHAT_SYSTEM = `You are Jeeves, a smart home assistant for a house in Redwood City, CA. \
+Answer questions concisely and practically. The home has: a Samsung washer, LG dryer, \
+dishwasher (monitored via power draw), Rheem heat pump water heater, Resideo T10 Pro thermostat, \
+August Smart Lock, Tesla vehicles named Dusty (white) and Snorlax (blue), Bhyve sprinkler system, \
+TP-Link Kasa smart outlets, and Tuya window shades. Home automation runs on Home Assistant.`;
+
+app.post('/api/chat', express.json(), async (req, res) => {
+  const { message, history = [] } = req.body;
+  if (!message?.trim()) return res.status(400).json({ error: 'message required' });
+
+  const messages = [
+    { role: 'system', content: CHAT_SYSTEM },
+    ...history.slice(-10),
+    { role: 'user', content: message.trim() },
+  ];
+
+  try {
+    const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: CHAT_MODEL, messages, stream: false }),
+      signal: AbortSignal.timeout(60000),
+    });
+    if (ollamaRes.status === 404) return res.status(503).json({ error: 'Model not ready — run: docker exec ollama ollama pull llama3.2:3b' });
+    if (!ollamaRes.ok) throw new Error(`Ollama ${ollamaRes.status}`);
+    const data = await ollamaRes.json();
+    res.json({ reply: data.message?.content || '' });
+  } catch (err) {
+    console.error('Chat error:', err.message);
+    const msg = err.name === 'TimeoutError' ? 'Response timed out — try again'
+      : err.code === 'ECONNREFUSED' ? 'Chat service starting up'
+      : 'Chat unavailable';
+    res.status(503).json({ error: msg });
+  }
+});
+
 // ── Weekly report (Sunday 9am) ────────────────────────────────────
 let lastReportDate = null;
 setInterval(() => {
