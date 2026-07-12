@@ -596,14 +596,14 @@ async function fetchBiblio() {
 
     // ── Books Out tile ─────────────────────────────────────────────
     const checkouts = Object.values(checkoutsData?.entities?.checkouts || {});
-    checkouts.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    checkouts.sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''));
 
-    const todayStr    = new Date().toISOString().slice(0, 10);
-    const soonCutoff  = new Date(); soonCutoff.setDate(soonCutoff.getDate() + 5);
-    const soonStr     = soonCutoff.toISOString().slice(0, 10);
+    const todayStr   = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+    const soonCutoff = new Date(); soonCutoff.setDate(soonCutoff.getDate() + 5);
+    const soonStr    = soonCutoff.toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
 
     const overdue          = checkouts.filter(c => c.dueDate < todayStr || c.fines > 0);
-    const nonRenewableSoon = checkouts.filter(c => c.dueDate <= soonStr && !c.actions.includes('renew'));
+    const nonRenewableSoon = checkouts.filter(c => c.dueDate <= soonStr && !(c.actions ?? []).includes('renew'));
 
     const booksAlert    = overdue.length > 0;
     const booksDegraded = !booksAlert && nonRenewableSoon.length > 0;
