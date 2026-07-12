@@ -99,6 +99,7 @@ const VOICE_SERVICE_URL = process.env.VOICE_SERVICE_URL || 'http://voice:5100';
 async function fetchHAState(entityId) {
   const res = await fetch(`${HA_URL}/api/states/${entityId}`, {
     headers: { Authorization: `Bearer ${HA_TOKEN}` },
+    signal: AbortSignal.timeout(5000),
   });
   if (!res.ok) throw new Error(`HA API ${res.status} for ${entityId}`);
   return res.json();
@@ -215,6 +216,7 @@ async function fetchDishwasher() {
         dishwasherWasRunning = true;
       } else {
         db.closeCycle(openId, { peakWatts: dishwasherPeakWatts, endReason: 'unknown' });
+        dishwasherDone = true; // was running before restart, now below threshold = likely done
       }
     }
   }
@@ -386,7 +388,9 @@ async function fetchPM25(sensorId) {
     { headers: { 'X-API-Key': PURPLEAIR_KEY } });
   if (!r.ok) throw new Error(`PurpleAir ${r.status}`);
   const d = await r.json();
-  return d.sensor.stats['pm2.5_10minute'];
+  const pm = d.sensor.stats['pm2.5_10minute'];
+  if (pm == null || isNaN(pm)) throw new Error(`PurpleAir ${sensorId}: invalid pm2.5 value`);
+  return pm;
 }
 
 function buildAqiTile(label, icon, aqi) {

@@ -28,7 +28,7 @@ os.environ["HF_HOME"] = os.path.join(MODELS_DIR, "whisper")
 os.makedirs(PIPER_DIR, exist_ok=True)
 
 # ── Download Piper voice model on first start ──────────────────────────────────
-if not os.path.exists(PIPER_ONNX):
+if not os.path.exists(PIPER_ONNX) or not os.path.exists(PIPER_JSON):
     url = PIPER_URLS.get(PIPER_VOICE)
     if not url:
         raise RuntimeError(f"No download URL configured for Piper voice: {PIPER_VOICE}")

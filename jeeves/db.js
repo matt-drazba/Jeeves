@@ -173,9 +173,9 @@ export function getWeeklyStats(sinceTs) {
 
   const errors = db.prepare(`
     SELECT * FROM behavior_errors
-    WHERE occurred_at >= ? OR resolved_at IS NULL
+    WHERE occurred_at >= ? OR resolved_at >= ? OR resolved_at IS NULL
     ORDER BY occurred_at DESC
-  `).all(sinceTs);
+  `).all(sinceTs, sinceTs);
 
   return { cycles, errors };
 }
