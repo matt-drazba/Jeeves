@@ -23,6 +23,8 @@ services:
       - PURPLEAIR_API_KEY=${PURPLEAIR_API_KEY}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - REPORT_TO_EMAIL=${REPORT_TO_EMAIL}
+      - BIBLIO_CARD=${BIBLIO_CARD}
+      - BIBLIO_PIN=${BIBLIO_PIN}
     volumes:
       - jeeves_data:/data
     extra_hosts:

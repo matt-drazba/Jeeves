@@ -79,6 +79,8 @@ let cachedStatus = {
     dishwasher: { label: 'Dishwasher',  icon: '🍽️', value: 'Idle', alert: false, degraded: false },
     sprinklers:   { label: 'Sprinklers',   icon: '💧', value: '—',    alert: false, degraded: false },
     waterHeater:  { label: 'Hot Water',    icon: '🚿', value: '—',    sub: '', alert: false, degraded: false },
+    library:      { label: 'Library',      icon: '📚', value: '—',    sub: '', alert: false, degraded: false },
+    booksOut:     { label: 'Books Out',    icon: '📖', value: '—',    sub: '', alert: false, degraded: false },
     nowPlaying: { label: 'Now Playing', icon: '🎵', value: '—',    sub: '', alert: false, degraded: false },
     dusty:      { label: 'Dusty',       icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
     snorlax:    { label: 'Snorlax',     icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
@@ -487,6 +489,147 @@ async function fetchWaterHeater() {
 
 fetchWaterHeater().catch(() => {});
 setInterval(() => fetchWaterHeater().catch(() => {}), 5 * 60 * 1000);
+
+// ── BiblioCommons (RCPL library holds) ───────────────────────────
+const BIBLIO_LIBRARY = 'rcpl';
+const BIBLIO_CARD    = process.env.BIBLIO_CARD;
+const BIBLIO_PIN     = process.env.BIBLIO_PIN;
+const BIBLIO_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+
+let biblioSession = null; // { accessToken, sessionId, accountId, loginAt }
+
+function _extractCookies(response) {
+  const cookies = {};
+  for (const cookie of (response.headers.getSetCookie?.() || [])) {
+    const eqIdx = cookie.indexOf('=');
+    const semi  = cookie.indexOf(';');
+    if (eqIdx === -1) continue;
+    const name  = cookie.slice(0, eqIdx).trim();
+    const value = cookie.slice(eqIdx + 1, semi === -1 ? undefined : semi).trim();
+    cookies[name] = value;
+  }
+  return cookies;
+}
+
+function _cookieStr(cookies) {
+  return Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join('; ');
+}
+
+async function _biblioLogin() {
+  const loginUrl = `https://${BIBLIO_LIBRARY}.bibliocommons.com/user/login?destination=x`;
+
+  const pageRes = await fetch(loginUrl, { redirect: 'follow' });
+  if (!pageRes.ok) throw new Error(`BiblioCommons login page ${pageRes.status}`);
+  const html = await pageRes.text();
+  const pageCookies = _extractCookies(pageRes);
+
+  // authenticity_token may have attributes in any order
+  const tokenMatch = html.match(/name="authenticity_token"[^>]+value="([^"]+)"|value="([^"]+)"[^>]+name="authenticity_token"/);
+  const authToken = tokenMatch?.[1] || tokenMatch?.[2];
+  if (!authToken) throw new Error('BiblioCommons: authenticity_token not found');
+
+  // POST with redirect:manual so the 302 Set-Cookie headers are accessible
+  const loginRes = await fetch(loginUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Cookie': _cookieStr(pageCookies),
+    },
+    body: new URLSearchParams({ authenticity_token: authToken, name: BIBLIO_CARD, user_pin: BIBLIO_PIN }).toString(),
+    redirect: 'manual',
+  });
+
+  const allCookies  = { ...pageCookies, ..._extractCookies(loginRes) };
+  const accessToken = allCookies['bc_access_token'];
+  const sessionId   = allCookies['session_id'];
+  if (!accessToken || !sessionId) throw new Error('BiblioCommons: login failed — check BIBLIO_CARD/BIBLIO_PIN');
+
+  const accountId = parseInt(sessionId.split('-').pop(), 10) + 1;
+  biblioSession = { accessToken, sessionId, accountId, loginAt: Date.now() };
+  console.log(`BiblioCommons: logged in, accountId=${accountId}`);
+}
+
+async function _biblioGet(path, params = {}) {
+  const { accessToken, sessionId, accountId } = biblioSession;
+  const url = new URL(`https://gateway.bibliocommons.com/v2/libraries/${BIBLIO_LIBRARY}${path}`);
+  url.searchParams.set('accountId', accountId);
+  url.searchParams.set('size', '100');
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  const res = await fetch(url.toString(), {
+    headers: { 'X-Access-Token': accessToken, 'X-Session-Id': sessionId, 'Accept': 'application/json' },
+  });
+  if (res.status === 401) { biblioSession = null; throw new Error('BiblioCommons 401'); }
+  if (!res.ok) throw new Error(`BiblioCommons ${path} ${res.status}`);
+  return res.json();
+}
+
+async function fetchBiblio() {
+  if (!BIBLIO_CARD || !BIBLIO_PIN) return;
+  try {
+    if (!biblioSession || Date.now() - biblioSession.loginAt > BIBLIO_SESSION_TTL_MS) {
+      await _biblioLogin();
+    }
+
+    const [holdsData, checkoutsData] = await Promise.all([
+      _biblioGet('/holds'),
+      _biblioGet('/checkouts'),
+    ]);
+
+    // ── Holds tile ─────────────────────────────────────────────────
+    const holds = Object.values(holdsData?.entities?.holds || {});
+    const holdBibs = holdsData?.entities?.bibs || {};
+    const ready       = holds.filter(h => h.status === 'READY_FOR_PICKUP');
+    const readyTitles = ready.map(h => holdBibs[h.metadataId]?.briefInfo?.title || 'Unknown');
+
+    let holdsValue, holdsSub;
+    if (ready.length > 0) {
+      holdsValue = `${ready.length} Ready`;
+      holdsSub   = readyTitles.slice(0, 2).join(', ') + (readyTitles.length > 2 ? '…' : '');
+    } else if (holds.length > 0) {
+      holdsValue = `${holds.length} Waiting`;
+      holdsSub   = '';
+    } else {
+      holdsValue = 'No Holds';
+      holdsSub   = '';
+    }
+    cachedStatus.status.library = { label: 'Library', icon: '📚', value: holdsValue, sub: holdsSub, alert: ready.length > 0, degraded: false, done: false };
+
+    // ── Books Out tile ─────────────────────────────────────────────
+    const checkouts = Object.values(checkoutsData?.entities?.checkouts || {});
+    checkouts.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+    const todayStr    = new Date().toISOString().slice(0, 10);
+    const soonCutoff  = new Date(); soonCutoff.setDate(soonCutoff.getDate() + 5);
+    const soonStr     = soonCutoff.toISOString().slice(0, 10);
+
+    const overdue          = checkouts.filter(c => c.dueDate < todayStr || c.fines > 0);
+    const nonRenewableSoon = checkouts.filter(c => c.dueDate <= soonStr && !c.actions.includes('renew'));
+
+    const booksAlert    = overdue.length > 0;
+    const booksDegraded = !booksAlert && nonRenewableSoon.length > 0;
+
+    let booksValue = checkouts.length > 0 ? `${checkouts.length} Out` : 'None Out';
+    let booksSub   = '';
+    if (checkouts.length > 0) {
+      const soonest = new Date(checkouts[0].dueDate + 'T12:00:00');
+      const label   = soonest.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles' });
+      booksSub = `Due ${label}`;
+    }
+    cachedStatus.status.booksOut = { label: 'Books Out', icon: '📖', value: booksValue, sub: booksSub, alert: booksAlert, degraded: booksDegraded, done: false };
+
+    console.log(`BiblioCommons updated: holds=${holdsValue}, books=${booksValue}`);
+  } catch (err) {
+    if (err.message === 'BiblioCommons 401') {
+      // session expired — retry once with fresh login
+      try { await _biblioLogin(); return fetchBiblio(); } catch (e2) { /* fall through */ }
+    }
+    biblioSession = null;
+    console.error('BiblioCommons fetch failed:', err.message);
+  }
+}
+
+fetchBiblio().catch(() => {});
+setInterval(() => fetchBiblio().catch(() => {}), 30 * 60 * 1000);
 
 // ── Tesla ─────────────────────────────────────────────────────────
 const TESLA_VEHICLES = [
