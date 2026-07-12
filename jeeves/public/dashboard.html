@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=800, initial-scale=1.0" />
+  <meta name="viewport" content="width=1280, initial-scale=1.0" />
   <title>Kitchen Dashboard</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -32,8 +32,8 @@
     #root { opacity: var(--dim); transition: opacity 2s ease; }
 
     html, body {
-      width: 800px;
-      height: 480px;
+      width: 1280px;
+      height: 800px;
       overflow: hidden;
       background: var(--bg);
       color: var(--text);
@@ -44,8 +44,8 @@
 
     #root {
       display: grid;
-      grid-template-rows: 72px 1fr 38px;
-      height: 480px;
+      grid-template-rows: 90px 1fr 50px;
+      height: 800px;
     }
 
     /* ── Top bar ─────────────────────────────────────────────────── */
@@ -53,15 +53,15 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 20px;
+      padding: 0 28px;
       background: var(--surface);
       border-bottom: 1px solid var(--border);
     }
 
     #clock {
-      font-size: 46px;
+      font-size: 58px;
       font-weight: 700;
-      letter-spacing: -1px;
+      letter-spacing: -2px;
       color: var(--text);
       line-height: 1;
       font-variant-numeric: tabular-nums;
@@ -70,100 +70,37 @@
     #topbar-right { text-align: right; }
 
     #date-label {
-      font-size: 15px;
+      font-size: 17px;
       color: var(--muted);
       line-height: 1.3;
     }
 
     #location-label {
-      font-size: 13px;
+      font-size: 14px;
       color: var(--accent);
       font-weight: 500;
     }
 
     /* ── Views ───────────────────────────────────────────────────── */
-    #main {
-      overflow: hidden;
-      display: grid;
-      grid-template-columns: 200px 1fr;
-    }
+    #main { overflow: hidden; }
+    #view-calendar { display: none; overflow: hidden; }
 
-    #view-calendar {
-      display: none;
-      overflow: hidden;
-    }
-
-    /* ── Weather panel ───────────────────────────────────────────── */
-    #weather-panel {
-      background: var(--surface);
-      border-right: 1px solid var(--border);
-      padding: 16px 18px 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    #weather-current { display: flex; align-items: flex-start; gap: 8px; }
-    #weather-icon { font-size: 36px; line-height: 1; margin-top: 2px; }
-    #weather-temps { display: flex; flex-direction: column; }
-
-    #weather-temp-big {
-      font-size: 42px;
-      font-weight: 700;
-      line-height: 1;
-      letter-spacing: -2px;
-      color: var(--text);
-    }
-
-    #weather-condition { font-size: 12px; color: var(--muted); margin-top: 2px; }
-    #weather-hl { font-size: 12px; color: var(--muted); margin-top: 2px; }
-    #weather-hl span { color: var(--text); font-weight: 600; }
-
-    #forecast-strip {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
-
-    .forecast-day {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 5px 8px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 6px;
-    }
-
-    .forecast-day-name {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      width: 28px;
-    }
-
-    .forecast-day-icon { font-size: 18px; line-height: 1; }
-    .forecast-day-hl { font-size: 11px; color: var(--muted); }
-    .forecast-day-hl strong { color: var(--text); }
-
-    /* ── Status tiles ────────────────────────────────────────────── */
+    /* ── Status panel ────────────────────────────────────────────── */
     #status-panel {
-      padding: 10px 12px;
+      padding: 14px 16px;
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-      grid-auto-rows: 110px;
-      gap: 8px;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      grid-auto-rows: 130px;
+      gap: 10px;
       align-content: start;
     }
 
+    /* ── Tiles ───────────────────────────────────────────────────── */
     .tile {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 10px 12px 8px;
+      padding: 12px 14px 10px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -172,11 +109,11 @@
       overflow: hidden;
     }
 
-    .tile-header { display: flex; align-items: center; gap: 6px; }
-    .tile-icon { font-size: 18px; line-height: 1; }
+    .tile-header { display: flex; align-items: center; gap: 7px; }
+    .tile-icon { font-size: 20px; line-height: 1; }
 
     .tile-label {
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 600;
       color: var(--muted);
       text-transform: uppercase;
@@ -184,7 +121,7 @@
     }
 
     .tile-value {
-      font-size: 18px;
+      font-size: 22px;
       font-weight: 700;
       color: var(--text);
       line-height: 1.2;
@@ -192,7 +129,7 @@
     }
 
     .tile-sub {
-      font-size: 10px;
+      font-size: 11px;
       color: var(--muted);
       margin-top: 2px;
       line-height: 1.3;
@@ -206,7 +143,7 @@
 
     @keyframes pulse-red {
       0%, 100% { box-shadow: 0 0 0 0 rgba(255,107,53,0); }
-      50%       { box-shadow: 0 0 0 4px rgba(255,107,53,0.25); }
+      50%       { box-shadow: 0 0 0 6px rgba(255,107,53,0.25); }
     }
 
     .tile.degraded { background: var(--warn-bg); border-color: var(--warn-bdr); animation: pulse-yellow 2.4s ease-in-out infinite; }
@@ -214,11 +151,37 @@
 
     @keyframes pulse-yellow {
       0%, 100% { box-shadow: 0 0 0 0 rgba(240,192,64,0); }
-      50%       { box-shadow: 0 0 0 4px rgba(240,192,64,0.2); }
+      50%       { box-shadow: 0 0 0 6px rgba(240,192,64,0.2); }
     }
 
     .tile.done { background: #0a1a0a; border-color: var(--good); cursor: pointer; }
     .tile.done .tile-value { color: var(--good); }
+
+    /* ── Weather tiles ───────────────────────────────────────────── */
+    .tile.weather-current-tile .tile-value { font-size: 30px; letter-spacing: -0.5px; }
+
+    .forecast-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-evenly;
+      margin-top: 6px;
+    }
+
+    .forecast-row { display: flex; align-items: center; gap: 9px; }
+
+    .forecast-day {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+      width: 26px;
+    }
+
+    .forecast-icon { font-size: 15px; line-height: 1; }
+    .forecast-hl { font-size: 11px; color: var(--muted); }
+    .forecast-hl strong { color: var(--text); }
 
     /* ── Calendar view ───────────────────────────────────────────── */
     #calendar-grid {
@@ -238,20 +201,17 @@
     .cal-col:last-child { border-right: none; }
 
     .cal-header {
-      padding: 8px 6px;
+      padding: 10px 8px;
       text-align: center;
       border-bottom: 1px solid var(--border);
       background: var(--surface);
       flex-shrink: 0;
     }
 
-    .cal-col.today .cal-header {
-      background: #0d2a38;
-      border-bottom-color: var(--accent);
-    }
+    .cal-col.today .cal-header { background: #0d2a38; border-bottom-color: var(--accent); }
 
     .cal-day-name {
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -261,7 +221,7 @@
     .cal-col.today .cal-day-name { color: var(--accent); }
 
     .cal-day-num {
-      font-size: 22px;
+      font-size: 26px;
       font-weight: 700;
       color: var(--text);
       line-height: 1.1;
@@ -272,22 +232,22 @@
     .cal-events {
       flex: 1;
       overflow: hidden;
-      padding: 4px 3px;
+      padding: 5px 4px;
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 4px;
     }
 
     .cal-event {
       background: var(--surface2);
       border: 1px solid var(--border);
       border-radius: 4px;
-      padding: 3px 5px;
+      padding: 4px 6px;
       overflow: hidden;
     }
 
     .cal-event-time {
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 700;
       color: var(--accent);
       line-height: 1.2;
@@ -295,7 +255,7 @@
     }
 
     .cal-event-title {
-      font-size: 10px;
+      font-size: 11px;
       color: var(--text);
       white-space: nowrap;
       overflow: hidden;
@@ -307,16 +267,16 @@
     #alert-strip {
       background: var(--surface);
       border-top: 1px solid var(--border);
-      padding: 0 16px;
+      padding: 0 20px;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
       overflow: hidden;
     }
 
     #alert-strip.has-alerts { background: #1a0800; border-top-color: var(--alert-bdr); }
-    #alert-strip.error { background: #1a0000; border-top-color: var(--error-col); }
-    #alert-strip.stale { background: #1a1500; border-top-color: var(--warn-bdr); }
+    #alert-strip.error      { background: #1a0000; border-top-color: var(--error-col); }
+    #alert-strip.stale      { background: #1a1500; border-top-color: var(--warn-bdr); }
 
     #alert-badge {
       font-size: 10px;
@@ -326,7 +286,7 @@
       color: var(--alert-col);
       white-space: nowrap;
       border: 1px solid var(--alert-col);
-      padding: 2px 7px;
+      padding: 2px 8px;
       border-radius: 4px;
       display: none;
     }
@@ -343,7 +303,7 @@
       align-items: center;
     }
 
-    #alert-ticker { font-size: 13px; color: var(--muted); white-space: nowrap; }
+    #alert-ticker { font-size: 14px; color: var(--muted); white-space: nowrap; }
     #alert-strip.has-alerts #alert-ticker { color: #ffb380; }
     #alert-strip.error      #alert-ticker { color: #ff8a80; }
     #alert-strip.stale      #alert-ticker { color: var(--warn-col); }
@@ -353,10 +313,15 @@
       to   { opacity: 1; transform: translateY(0); }
     }
 
-    #last-updated { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    /* ── Page dots ───────────────────────────────────────────────── */
+    #page-dots { display: flex; gap: 7px; align-items: center; }
+    .page-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); transition: background 0.3s; }
+    .page-dot.active { background: var(--accent); }
+
+    #last-updated { font-size: 12px; color: var(--muted); white-space: nowrap; }
 
     #refresh-dot {
-      width: 6px; height: 6px;
+      width: 7px; height: 7px;
       border-radius: 50%;
       background: var(--good);
       flex-shrink: 0;
@@ -369,12 +334,12 @@
 
     /* ── Mic button ──────────────────────────────────────────────── */
     #mic-btn {
-      width: 22px; height: 22px;
+      width: 26px; height: 26px;
       border-radius: 50%;
       border: 1px solid var(--border);
       background: var(--surface2);
       color: var(--muted);
-      font-size: 11px;
+      font-size: 13px;
       display: flex; align-items: center; justify-content: center;
       cursor: pointer;
       flex-shrink: 0;
@@ -399,17 +364,6 @@
 
   <!-- Dashboard view -->
   <div id="main">
-    <section id="weather-panel">
-      <div id="weather-current">
-        <div id="weather-icon">☀️</div>
-        <div id="weather-temps">
-          <div id="weather-temp-big">--°</div>
-          <div id="weather-condition">--</div>
-          <div id="weather-hl">H <span id="wh">--</span>° · L <span id="wl">--</span>°</div>
-        </div>
-      </div>
-      <div id="forecast-strip"></div>
-    </section>
     <section id="status-panel"></section>
   </div>
 
@@ -423,6 +377,7 @@
     <div id="alert-ticker-wrap">
       <span id="alert-ticker">All systems normal</span>
     </div>
+    <div id="page-dots"></div>
     <span id="last-updated"></span>
     <div id="refresh-dot"></div>
     <div id="mic-btn" title="Tap to speak">🎤</div>
@@ -468,42 +423,93 @@
     return '🌤️';
   }
 
-  /* ── Render weather ─────────────────────────────────────────────── */
-  function renderWeather(w) {
-    document.getElementById('weather-icon').textContent      = weatherIcon(w.condition);
-    document.getElementById('weather-temp-big').textContent  = w.temp + '°';
-    document.getElementById('weather-condition').textContent = w.condition;
-    document.getElementById('wh').textContent                = w.high;
-    document.getElementById('wl').textContent                = w.low;
-    document.getElementById('location-label').textContent    = w.location;
+  /* ── Weather tile ───────────────────────────────────────────────── */
+  let _weatherData = null;
 
-    document.getElementById('forecast-strip').innerHTML = w.forecast.map(f => `
-      <div class="forecast-day">
-        <div class="forecast-day-name">${f.day}</div>
-        <div class="forecast-day-icon">${weatherIcon(f.condition)}</div>
-        <div class="forecast-day-hl"><strong>${f.high}</strong> / ${f.low}</div>
-      </div>
-    `).join('');
+  function renderWeather(w) {
+    _weatherData = w;
+    document.getElementById('location-label').textContent = w.location;
+    _patchWeatherTile();
+  }
+
+  function _patchWeatherTile() {
+    const w = _weatherData;
+    if (!w) return;
+    const icon = document.getElementById('wt-icon');
+    if (!icon) return; // weather tiles not in DOM on this page
+    icon.textContent = weatherIcon(w.condition);
+    document.getElementById('wt-temp').textContent = w.temp + '°';
+    document.getElementById('wt-sub').textContent = `${w.condition} · H ${w.high}° / L ${w.low}°`;
+    const fore = document.getElementById('wt-forecast');
+    if (fore) {
+      fore.innerHTML = (w.forecast || []).slice(0, 3).map(f => `
+        <div class="forecast-row">
+          <span class="forecast-day">${f.day}</span>
+          <span class="forecast-icon">${weatherIcon(f.condition)}</span>
+          <span class="forecast-hl"><strong>${f.high}</strong> / ${f.low}</span>
+        </div>
+      `).join('');
+    }
   }
 
   /* ── Render status tiles ────────────────────────────────────────── */
-  let _tilesBuilt = false;
+  let _tilesBuilt     = false;
   let _fullRebuildCounter = 0;
+  let _renderedPage   = -1;
   const FULL_REBUILD_EVERY = 30;
+  const TILES_PER_PAGE     = 20;
+  let _tilePage       = 0;
+  let _totalTilePages = 1;
+
+  function updatePageDots() {
+    const dots = document.getElementById('page-dots');
+    if (_totalTilePages <= 1) { dots.innerHTML = ''; return; }
+    dots.innerHTML = Array.from({ length: _totalTilePages }, (_, i) =>
+      `<span class="page-dot${i === _tilePage ? ' active' : ''}"></span>`
+    ).join('');
+  }
 
   function renderStatus(status) {
-    const panel = document.getElementById('status-panel');
-    const entries = Object.entries(status);
-    _fullRebuildCounter++;
+    const panel      = document.getElementById('status-panel');
+    const allEntries = Object.entries(status);
 
+    _totalTilePages = Math.max(1, Math.ceil(allEntries.length / TILES_PER_PAGE));
+    if (_tilePage >= _totalTilePages) _tilePage = 0;
+    updatePageDots();
+
+    const pageStart   = _tilePage * TILES_PER_PAGE;
+    const pageEntries = allEntries.slice(pageStart, pageStart + TILES_PER_PAGE);
+    const showWeather = _tilePage === 0;
+
+    _fullRebuildCounter++;
     const needsRebuild = !_tilesBuilt
-      || panel.children.length !== entries.length
+      || _renderedPage !== _tilePage
       || _fullRebuildCounter >= FULL_REBUILD_EVERY;
 
     if (needsRebuild) {
       _fullRebuildCounter = 0;
-      _tilesBuilt = true;
-      panel.innerHTML = entries.map(([key, tile]) => `
+      _tilesBuilt   = true;
+      _renderedPage = _tilePage;
+
+      let html = '';
+      if (showWeather) {
+        html += `<div class="tile weather-current-tile" data-key="__weather">
+          <div class="tile-header">
+            <span class="tile-icon" id="wt-icon">🌤️</span>
+            <span class="tile-label">Weather</span>
+          </div>
+          <div id="wt-temp" class="tile-value">--°</div>
+          <div id="wt-sub" class="tile-sub">--</div>
+        </div>
+        <div class="tile" data-key="__forecast">
+          <div class="tile-header">
+            <span class="tile-icon">📅</span>
+            <span class="tile-label">Forecast</span>
+          </div>
+          <div class="forecast-body" id="wt-forecast"></div>
+        </div>`;
+      }
+      html += pageEntries.map(([key, tile]) => `
         <div class="tile" data-key="${key}">
           <div class="tile-header">
             <span class="tile-icon">${tile.icon || '●'}</span>
@@ -513,9 +519,12 @@
           <div class="tile-sub">${tile.sub || ''}</div>
         </div>
       `).join('');
+      panel.innerHTML = html;
+
+      if (showWeather) _patchWeatherTile();
     }
 
-    for (const [key, tile] of entries) {
+    for (const [key, tile] of pageEntries) {
       const el = panel.querySelector(`[data-key="${key}"]`);
       if (!el) continue;
       el.className = 'tile' + (tile.done ? ' done' : tile.alert ? ' alert' : tile.degraded ? ' degraded' : '');
@@ -533,6 +542,13 @@
       if (subEl) subEl.textContent = tile.sub || '';
     }
   }
+
+  /* ── Tile page cycling ──────────────────────────────────────────── */
+  setInterval(() => {
+    if (VIEWS[_viewIndex] !== 'dashboard' || _totalTilePages <= 1) return;
+    _tilePage = (_tilePage + 1) % _totalTilePages;
+    if (_lastData) renderStatus(_lastData.status);
+  }, 25_000);
 
   /* ── Render calendar ────────────────────────────────────────────── */
   function renderCalendar(calendar) {
@@ -724,7 +740,7 @@
 
       if (audio && !silent) {
         const wav = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
-await _audioCtx.resume();
+        await _audioCtx.resume();
         const buf = await _audioCtx.decodeAudioData(wav.buffer);
         const src = _audioCtx.createBufferSource();
         src.buffer = buf;
