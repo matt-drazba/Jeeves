@@ -886,6 +886,16 @@ app.post('/api/dismiss/:appliance', express.json(), async (req, res) => {
   res.json({ ok: true, creditedTo: null });
 });
 
+// ── Test helper (LAN only) ────────────────────────────────────────
+app.post('/api/test/done/:appliance', (req, res) => {
+  const { appliance } = req.params;
+  if (appliance === 'washer')     { washerDone = true;     cachedStatus.status.washer     = { ...cachedStatus.status.washer,     value: 'Done!', done: true }; }
+  else if (appliance === 'dryer') { dryerDone = true;      cachedStatus.status.dryer      = { ...cachedStatus.status.dryer,      value: 'Done!', done: true }; }
+  else if (appliance === 'dishwasher') { dishwasherDone = true; cachedStatus.status.dishwasher = { ...cachedStatus.status.dishwasher, value: 'Done!', done: true }; }
+  else return res.status(400).json({ error: 'unknown' });
+  res.json({ ok: true });
+});
+
 // ── Voice ─────────────────────────────────────────────────────────
 async function dispatchVoice(text) {
   const t = text.toLowerCase();
