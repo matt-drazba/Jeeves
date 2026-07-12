@@ -1,6 +1,7 @@
 // @ts-check
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'fs';
+import bcrypt from 'bcryptjs';
 
 const DB_PATH = process.env.DB_PATH || '/data/jeeves.db';
 mkdirSync('/data', { recursive: true });
@@ -61,6 +62,24 @@ function migrate() {
     `);
     db.pragma('user_version = 1');
     console.log('DB: migrated to v1');
+  }
+  if (v < 2) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS members (
+        id        INTEGER PRIMARY KEY,
+        name      TEXT NOT NULL UNIQUE,
+        pin_hash  TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS task_credits (
+        id         INTEGER PRIMARY KEY,
+        member_id  INTEGER NOT NULL REFERENCES members(id),
+        task       TEXT NOT NULL,
+        ts         INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_credits_member_ts ON task_credits(member_id, ts);
+    `);
+    db.pragma('user_version = 2');
+    console.log('DB: migrated to v2');
   }
 }
 
@@ -177,5 +196,59 @@ export function getWeeklyStats(sinceTs) {
     ORDER BY occurred_at DESC
   `).all(sinceTs, sinceTs);
 
-  return { cycles, errors };
+  const credits = db.prepare(`
+    SELECT m.name, COUNT(tc.id) AS count,
+           GROUP_CONCAT(tc.task) AS tasks
+    FROM members m
+    LEFT JOIN task_credits tc ON tc.member_id = m.id AND tc.ts >= ?
+    GROUP BY m.id, m.name
+    ORDER BY count DESC, m.name ASC
+  `).all(sinceTs);
+
+  return { cycles, errors, credits };
+}
+
+// ── Members + chore credits ────────────────────────────────────────
+
+// MEMBERS env var format: "Matt:1234,Jess:5678,Paul:2345,Zack:3456,Tim:4567"
+export async function seedMembers(membersEnv) {
+  if (!membersEnv) return;
+  const upsert = db.prepare(
+    'INSERT INTO members (name, pin_hash) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET pin_hash = excluded.pin_hash'
+  );
+  const pairs = membersEnv.split(',').map(s => s.trim()).filter(Boolean);
+  for (const pair of pairs) {
+    const colon = pair.indexOf(':');
+    if (colon === -1) continue;
+    const name = pair.slice(0, colon).trim();
+    const pin  = pair.slice(colon + 1).trim();
+    if (!name || !pin) continue;
+    const hash = await bcrypt.hash(pin, 10);
+    upsert.run(name, hash);
+  }
+  console.log(`DB: seeded ${pairs.length} members`);
+}
+
+export async function recordCredit(pin, task) {
+  if (!pin) return null;
+  const members = db.prepare('SELECT id, name, pin_hash FROM members').all();
+  for (const m of members) {
+    if (await bcrypt.compare(String(pin), m.pin_hash)) {
+      db.prepare('INSERT INTO task_credits (member_id, task, ts) VALUES (?, ?, ?)')
+        .run(m.id, task, Math.floor(Date.now() / 1000));
+      return m.name;
+    }
+  }
+  return null;
+}
+
+export function getWeeklyCredits(sinceTs) {
+  return db.prepare(`
+    SELECT m.name, COUNT(tc.id) AS count,
+           GROUP_CONCAT(tc.task) AS tasks
+    FROM members m
+    LEFT JOIN task_credits tc ON tc.member_id = m.id AND tc.ts >= ?
+    GROUP BY m.id, m.name
+    ORDER BY count DESC, m.name ASC
+  `).all(sinceTs);
 }

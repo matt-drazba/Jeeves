@@ -13,6 +13,34 @@ function fmtDuration(seconds) {
   return `${m}m`;
 }
 
+function buildCreditsSection(credits) {
+  if (!credits || credits.length === 0) return '';
+  const withCredits = credits.filter(m => m.count > 0);
+  const rows = credits.map(m => {
+    const taskList = m.tasks ? [...new Set(m.tasks.split(','))].join(', ') : '—';
+    const countColor = m.count > 0 ? '#1a9b5c' : '#6b7589';
+    return `<tr style="border-bottom:1px solid #e8edf5">
+      <td style="padding:6px 8px;font-size:14px">${m.name}</td>
+      <td style="padding:6px 8px;font-size:14px;font-weight:700;color:${countColor}">${m.count}</td>
+      <td style="padding:6px 8px;font-size:13px;color:#6b7589;text-transform:capitalize">${taskList}</td>
+    </tr>`;
+  }).join('');
+  const topLine = withCredits.length === 0
+    ? `<p style="color:#6b7589;font-size:14px;margin:0 0 16px">No chore credits recorded this week.</p>`
+    : `<p style="color:#6b7589;font-size:13px;margin:0 0 12px">${withCredits.map(m => `${m.name} ${m.count}`).join(' · ')}</p>`;
+  return `<h2 style="font-size:15px;margin:0 0 8px">🏆 Chore Credits</h2>
+    ${topLine}
+    ${withCredits.length > 0 ? `<table style="width:100%;border-collapse:collapse;font-size:14px">
+      <thead><tr style="border-bottom:2px solid #d0d8e8">
+        <th style="text-align:left;padding:6px 8px;color:#6b7589;font-weight:600">Member</th>
+        <th style="text-align:left;padding:6px 8px;color:#6b7589;font-weight:600">Credits</th>
+        <th style="text-align:left;padding:6px 8px;color:#6b7589;font-weight:600">Tasks</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>` : ''}
+    <hr style="border:none;border-top:1px solid #d0d8e8;margin:24px 0">`;
+}
+
 function buildHtml(stats, weekLabel) {
   const applianceOrder = ['washer', 'dryer', 'dishwasher'];
   const applianceEmoji = { washer: '🫧', dryer: '🌀', dishwasher: '🍽️' };
@@ -48,6 +76,7 @@ function buildHtml(stats, weekLabel) {
     : '';
 
   const totalCycles = stats.cycles.reduce((s, r) => s + r.cycle_count, 0);
+  const creditsSection = buildCreditsSection(stats.credits);
 
   return `<!DOCTYPE html>
 <html>
@@ -77,6 +106,8 @@ function buildHtml(stats, weekLabel) {
     ${resolvedNote}
 
     <hr style="border:none;border-top:1px solid #d0d8e8;margin:24px 0">
+
+    ${creditsSection}
 
     <p style="color:#6b7589;font-size:12px;margin:0">
       Energy tracking limited to dishwasher until Emporia Vue is installed.<br>

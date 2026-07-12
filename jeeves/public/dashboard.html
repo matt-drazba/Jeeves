@@ -157,6 +157,69 @@
     .tile.done { background: #0a1a0a; border-color: var(--good); cursor: pointer; }
     .tile.done .tile-value { color: var(--good); }
 
+    /* ── Scoreboard tile ─────────────────────────────────────────── */
+    .scoreboard-rows { display: flex; flex-direction: column; justify-content: space-evenly; flex: 1; margin-top: 6px; }
+    .sb-row { display: flex; justify-content: space-between; align-items: center; padding: 1px 0; }
+    .sb-name { font-size: 12px; color: var(--text); font-weight: 500; }
+    .sb-count { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 20px; text-align: right; }
+    .sb-count-pos { color: var(--good); }
+    .sb-count-zero { color: var(--muted); }
+
+    /* ── PIN overlay ─────────────────────────────────────────────── */
+    #pin-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.78);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+    #pin-overlay.hidden { display: none; }
+    .pin-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px 20px 20px;
+      width: 240px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+    }
+    #pin-title { font-size: 13px; color: var(--muted); text-align: center; line-height: 1.4; }
+    .pin-dots { display: flex; gap: 14px; }
+    .pin-dot {
+      width: 13px; height: 13px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: transparent;
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .pin-dot.filled { background: var(--accent); border-color: var(--accent); }
+    .pin-dot.wrong  { background: var(--alert-col); border-color: var(--alert-col); }
+    .pin-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      width: 100%;
+    }
+    .pin-key {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 1.2em;
+      font-family: inherit;
+      padding: 13px 0;
+      cursor: pointer;
+      text-align: center;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .pin-key:active { opacity: 0.6; }
+    .pin-key-skip { font-size: 0.8em; color: var(--muted); }
+
     /* ── Weather tiles ───────────────────────────────────────────── */
     .tile.weather-current-tile .tile-value { font-size: 30px; letter-spacing: -0.5px; }
 
@@ -511,6 +574,32 @@
   </div>
 </div>
 
+<div id="pin-overlay" class="hidden">
+  <div class="pin-panel">
+    <div id="pin-title">Who unloaded it?</div>
+    <div class="pin-dots">
+      <span class="pin-dot" id="pd0"></span>
+      <span class="pin-dot" id="pd1"></span>
+      <span class="pin-dot" id="pd2"></span>
+      <span class="pin-dot" id="pd3"></span>
+    </div>
+    <div class="pin-grid" id="pin-grid">
+      <button class="pin-key" data-val="1">1</button>
+      <button class="pin-key" data-val="2">2</button>
+      <button class="pin-key" data-val="3">3</button>
+      <button class="pin-key" data-val="4">4</button>
+      <button class="pin-key" data-val="5">5</button>
+      <button class="pin-key" data-val="6">6</button>
+      <button class="pin-key" data-val="7">7</button>
+      <button class="pin-key" data-val="8">8</button>
+      <button class="pin-key" data-val="9">9</button>
+      <button class="pin-key" data-val="back">⌫</button>
+      <button class="pin-key" data-val="0">0</button>
+      <button class="pin-key pin-key-skip" data-val="skip">Skip</button>
+    </div>
+  </div>
+</div>
+
 <script>
   /* ── View cycling ───────────────────────────────────────────────── */
   const VIEWS = ['dashboard', 'calendar'];
@@ -635,16 +724,25 @@
           <div class="forecast-body" id="wt-forecast"></div>
         </div>`;
       }
-      html += pageEntries.map(([key, tile]) => `
-        <div class="tile" data-key="${key}">
+      html += pageEntries.map(([key, tile]) => {
+        if (key === 'scoreboard') {
+          return `<div class="tile" data-key="${key}">
+            <div class="tile-header">
+              <span class="tile-icon">🏆</span>
+              <span class="tile-label">Chores</span>
+            </div>
+            <div class="scoreboard-rows" id="scoreboard-rows"></div>
+          </div>`;
+        }
+        return `<div class="tile" data-key="${key}">
           <div class="tile-header">
             <span class="tile-icon">${tile.icon || '●'}</span>
             <span class="tile-label">${tile.label}</span>
           </div>
           <div class="tile-value">${tile.value}</div>
           <div class="tile-sub">${tile.sub || ''}</div>
-        </div>
-      `).join('');
+        </div>`;
+      }).join('');
       panel.innerHTML = html;
 
       if (showWeather) _patchWeatherTile();
@@ -654,6 +752,20 @@
       const el = panel.querySelector(`[data-key="${key}"]`);
       if (!el) continue;
       el.className = 'tile' + (tile.done ? ' done' : tile.alert ? ' alert' : tile.degraded ? ' degraded' : '');
+
+      if (key === 'scoreboard') {
+        const rows = el.querySelector('.scoreboard-rows');
+        if (rows && tile.members?.length) {
+          rows.innerHTML = tile.members.map(m =>
+            `<div class="sb-row">
+              <span class="sb-name">${m.name}</span>
+              <span class="sb-count ${m.count > 0 ? 'sb-count-pos' : 'sb-count-zero'}">${m.count}</span>
+            </div>`
+          ).join('');
+        }
+        continue;
+      }
+
       if (tile.color) {
         el.style.borderColor = tile.color;
         el.style.background  = tile.bg || '';
@@ -802,14 +914,76 @@
     document.body.classList.toggle('night', now.getHours() >= 22 || now.getHours() < 6);
   }
 
-  /* ── Tap-to-dismiss done tiles ─────────────────────────────────── */
-  document.getElementById('status-panel').addEventListener('click', async (e) => {
+  /* ── Tap-to-dismiss with PIN overlay ───────────────────────────── */
+  let _pendingKey = null, _pendingTile = null, _pinInput = '';
+
+  function _updateDots() {
+    for (let i = 0; i < 4; i++) {
+      const d = document.getElementById(`pd${i}`);
+      d.className = 'pin-dot' + (_pinInput.length > i ? ' filled' : '');
+    }
+  }
+
+  function _flashWrong() {
+    for (let i = 0; i < 4; i++) document.getElementById(`pd${i}`).className = 'pin-dot wrong';
+    setTimeout(() => { _pinInput = ''; _updateDots(); }, 600);
+  }
+
+  async function _submitDismiss(pin) {
+    const overlay = document.getElementById('pin-overlay');
+    const tile = _pendingTile;
+    const key  = _pendingKey;
+
+    if (!pin) {
+      overlay.classList.add('hidden');
+      if (tile) { tile.classList.remove('done'); const v = tile.querySelector('.tile-value'); if (v) v.textContent = 'Idle'; }
+      fetch(`/api/dismiss/${key}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: null }) });
+      return;
+    }
+
+    // PIN entered — submit, wait for result, then give feedback
+    const res = await fetch(`/api/dismiss/${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    });
+    const data = await res.json();
+
+    if (data.creditedTo) {
+      overlay.classList.add('hidden');
+      if (tile) { tile.classList.remove('done'); const v = tile.querySelector('.tile-value'); if (v) v.textContent = 'Idle'; }
+    } else {
+      // Wrong PIN — flash red, let them retry or skip
+      _flashWrong();
+    }
+  }
+
+  document.getElementById('status-panel').addEventListener('click', (e) => {
     const tile = e.target.closest('.tile.done');
     if (!tile) return;
-    const key = tile.dataset.key;
-    tile.classList.remove('done');
-    tile.querySelector('.tile-value').textContent = 'Idle';
-    await fetch(`/api/dismiss/${key}`, { method: 'POST' });
+    _pendingKey  = tile.dataset.key;
+    _pendingTile = tile;
+    _pinInput    = '';
+    _updateDots();
+    const label = tile.querySelector('.tile-label')?.textContent || 'it';
+    document.getElementById('pin-title').textContent = `Who unloaded the ${label.toLowerCase()}?`;
+    document.getElementById('pin-overlay').classList.remove('hidden');
+  });
+
+  document.getElementById('pin-grid').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.pin-key');
+    if (!btn) return;
+    const val = btn.dataset.val;
+    if (val === 'skip') {
+      await _submitDismiss(null);
+    } else if (val === 'back') {
+      _pinInput = _pinInput.slice(0, -1);
+      _updateDots();
+    } else if (_pinInput.length < 4) {
+      _pinInput += val;
+      _updateDots();
+      if (_pinInput.length === 4) await _submitDismiss(_pinInput);
+    }
   });
 
   /* ── Voice control ──────────────────────────────────────────────── */

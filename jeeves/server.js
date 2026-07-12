@@ -85,6 +85,7 @@ let cachedStatus = {
     nowPlaying: { label: 'Now Playing', icon: '🎵', value: '—',    sub: '', alert: false, degraded: false },
     dusty:      { label: 'Dusty',       icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
     snorlax:    { label: 'Snorlax',     icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
+    scoreboard: { label: 'Chores',      icon: '🏆', value: '—',    sub: 'This week', members: [], alert: false, degraded: false },
   },
   alerts: [],
   calendar: { days: [] },
@@ -836,8 +837,20 @@ app.get('/api/errors', (req, res) => {
   res.json({ errors: db.getOpenErrors() });
 });
 
-app.post('/api/dismiss/:appliance', (req, res) => {
-  const { appliance } = req.params;
+function refreshScoreboard() {
+  const sinceTs = Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000);
+  const credits = db.getWeeklyCredits(sinceTs);
+  const members = credits.map(m => ({ name: m.name, count: m.count }));
+  const withCredits = members.filter(m => m.count > 0);
+  const value = withCredits.length === 0
+    ? 'All square'
+    : withCredits.map(m => `${m.name} ${m.count}`).join(' · ');
+  cachedStatus.status.scoreboard = { label: 'Chores', icon: '🏆', value, sub: 'This week', members, alert: false, degraded: false };
+}
+
+refreshScoreboard();
+
+function _dismissAppliance(appliance) {
   if (appliance === 'washer') {
     washerDone = false;
     cachedStatus.status.washer = { ...cachedStatus.status.washer, value: 'Idle', done: false };
@@ -848,10 +861,29 @@ app.post('/api/dismiss/:appliance', (req, res) => {
     dishwasherDone = false;
     cachedStatus.status.dishwasher = { ...cachedStatus.status.dishwasher, value: 'Idle', done: false };
   } else {
-    return res.status(400).json({ error: 'Unknown appliance' });
+    return false;
   }
-  console.log(`${appliance} dismissed`);
-  res.json({ ok: true });
+  return true;
+}
+
+app.post('/api/dismiss/:appliance', express.json(), async (req, res) => {
+  const { appliance } = req.params;
+  const { pin } = req.body || {};
+
+  if (pin) {
+    // With PIN: only dismiss if PIN is valid
+    const creditedTo = await db.recordCredit(pin, appliance);
+    if (!creditedTo) return res.json({ ok: false, creditedTo: null }); // wrong PIN
+    if (!_dismissAppliance(appliance)) return res.status(400).json({ error: 'Unknown appliance' });
+    refreshScoreboard();
+    console.log(`${appliance} dismissed by ${creditedTo}`);
+    return res.json({ ok: true, creditedTo });
+  }
+
+  // No PIN (skip): always dismiss
+  if (!_dismissAppliance(appliance)) return res.status(400).json({ error: 'Unknown appliance' });
+  console.log(`${appliance} dismissed (no credit)`);
+  res.json({ ok: true, creditedTo: null });
 });
 
 // ── Voice ─────────────────────────────────────────────────────────
@@ -859,18 +891,15 @@ async function dispatchVoice(text) {
   const t = text.toLowerCase();
 
   if (/(dismiss|done).*(washer)|(washer).*(dismiss|done)/.test(t)) {
-    washerDone = false;
-    cachedStatus.status.washer = { ...cachedStatus.status.washer, value: 'Idle', done: false };
+    _dismissAppliance('washer');
     return { action: 'dismiss_washer', responseText: 'Washer dismissed.' };
   }
   if (/(dismiss|done).*(dryer)|(dryer).*(dismiss|done)/.test(t)) {
-    dryerDone = false;
-    cachedStatus.status.dryer = { ...cachedStatus.status.dryer, value: 'Idle', done: false };
+    _dismissAppliance('dryer');
     return { action: 'dismiss_dryer', responseText: 'Dryer dismissed.' };
   }
   if (/(dismiss|done).*(dishwasher)|(dishwasher).*(dismiss|done)/.test(t)) {
-    dishwasherDone = false;
-    cachedStatus.status.dishwasher = { ...cachedStatus.status.dishwasher, value: 'Idle', done: false };
+    _dismissAppliance('dishwasher');
     return { action: 'dismiss_dishwasher', responseText: 'Dishwasher dismissed.' };
   }
   if (/what.*time|time.*is.*it/.test(t)) {
@@ -1020,6 +1049,7 @@ setInterval(() => {
 }, 60 * 1000);
 
 loadDocs().catch(err => console.error('RAG load failed:', err));
+db.seedMembers(process.env.MEMBERS).catch(err => console.error('Member seed failed:', err));
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Jeeves running on http://0.0.0.0:${PORT}`);
