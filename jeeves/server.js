@@ -758,7 +758,7 @@ async function fetchCalendar() {
   const fmtLocal = d =>
     `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
 
-  const url = `${HA_URL}/api/calendars/${CALENDAR_ENTITY}/events` +
+  const url = `${HA_URL}/api/calendars/${CALENDAR_ENTITY}` +
     `?start=${encodeURIComponent(fmtLocal(weekStart))}&end=${encodeURIComponent(fmtLocal(weekEnd))}`;
 
   const res = await fetch(url, {
