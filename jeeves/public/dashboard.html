@@ -98,7 +98,7 @@
     /* ── Tiles ───────────────────────────────────────────────────── */
     .tile {
       background: var(--surface);
-      border: 1px solid var(--border);
+      border: 1px solid #424242;
       border-radius: var(--radius);
       padding: 12px 14px 10px;
       display: flex;
@@ -156,6 +156,10 @@
 
     .tile.done { background: #0a1a0a; border-color: var(--good); cursor: pointer; }
     .tile.done .tile-value { color: var(--good); }
+
+    .tile.chore-tile { background: #001c2e; border-color: var(--accent); cursor: pointer; }
+    .tile.chore-tile .tile-value { color: var(--accent); font-size: 16px; }
+    .tile.chore-tile:active { transform: scale(0.97); }
 
     /* ── Scoreboard tile ─────────────────────────────────────────── */
     .scoreboard-rows { display: flex; flex-direction: column; justify-content: space-evenly; flex: 1; margin-top: 6px; }
@@ -546,6 +550,100 @@
       cursor: pointer;
     }
     #chat-send:disabled { opacity: 0.4; cursor: default; }
+
+    /* ── Chore button ────────────────────────────────────────────── */
+    #chore-btn {
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--muted);
+      font-size: 13px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.2s, color 0.2s, border-color 0.2s;
+      user-select: none;
+    }
+    #chore-btn.open { background: #001c2e; color: var(--accent); border-color: var(--accent); }
+
+    /* ── Chore overlay ───────────────────────────────────────────── */
+    #chore-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.78);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+    #chore-overlay.hidden { display: none; }
+    .chore-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      width: 420px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .chore-panel-title { font-size: 16px; font-weight: 600; color: var(--text); text-align: center; }
+    .chore-presets {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .chore-preset {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+      padding: 13px 10px;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .chore-preset:active { background: #001c2e; border-color: var(--accent); }
+    .chore-custom-row { display: flex; gap: 8px; }
+    #chore-custom-input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      padding: 10px 12px;
+      outline: none;
+      font-family: inherit;
+    }
+    #chore-custom-input:focus { border-color: var(--accent); }
+    #chore-custom-input::placeholder { color: var(--muted); }
+    #chore-custom-add {
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      color: #000;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 10px 16px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    #chore-cancel {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 14px;
+      font-family: inherit;
+      padding: 10px;
+      cursor: pointer;
+      text-align: center;
+      width: 100%;
+    }
   </style>
 </head>
 <body>
@@ -579,6 +677,7 @@
     <div id="refresh-dot"></div>
     <div id="mic-btn" title="Tap to speak">🎤</div>
     <div id="chat-btn" title="Ask Jeeves">💬</div>
+    <div id="chore-btn" title="Add Chore">📋</div>
   </footer>
 
 </div>
@@ -621,6 +720,20 @@
       <button class="pin-key" data-val="0">0</button>
       <button class="pin-key pin-key-skip" data-val="skip">Skip</button>
     </div>
+  </div>
+</div>
+
+<div id="chore-overlay" class="hidden">
+  <div class="chore-panel">
+    <div class="chore-panel-title">Assign a Chore</div>
+    <div class="chore-presets" id="chore-presets">
+      <!-- populated dynamically from /api/chores/presets (jeeves/chores.json) -->
+    </div>
+    <div class="chore-custom-row">
+      <input id="chore-custom-input" type="text" placeholder="Custom chore…" autocomplete="off" />
+      <button id="chore-custom-add">Add</button>
+    </div>
+    <button id="chore-cancel">Cancel</button>
   </div>
 </div>
 
@@ -720,10 +833,17 @@
     const pageEntries = allEntries.slice(pageStart, pageStart + TILES_PER_PAGE);
     const showWeather = _tilePage === 0;
 
+    // Detect key-set changes (chore tiles added/removed) to force a rebuild
+    const panelKeys = new Set([...panel.querySelectorAll('[data-key]')].map(el => el.dataset.key));
+    const entryKeys = new Set(pageEntries.map(([k]) => k));
+    if (showWeather) { entryKeys.add('__weather'); entryKeys.add('__forecast'); }
+    const keysChanged = panelKeys.size !== entryKeys.size || [...entryKeys].some(k => !panelKeys.has(k));
+
     _fullRebuildCounter++;
     const needsRebuild = !_tilesBuilt
       || _renderedPage !== _tilePage
-      || _fullRebuildCounter >= FULL_REBUILD_EVERY;
+      || _fullRebuildCounter >= FULL_REBUILD_EVERY
+      || keysChanged;
 
     if (needsRebuild) {
       _fullRebuildCounter = 0;
@@ -758,6 +878,16 @@
             <div class="scoreboard-rows" id="scoreboard-rows"></div>
           </div>`;
         }
+        if (tile.isChore) {
+          return `<div class="tile chore-tile" data-key="${key}" data-chore-id="${tile.choreId}">
+            <div class="tile-header">
+              <span class="tile-icon">${tile.icon || '🧹'}</span>
+              <span class="tile-label">${tile.label}</span>
+            </div>
+            <div class="tile-value">Tap to claim!</div>
+            <div class="tile-sub">Hold to remove</div>
+          </div>`;
+        }
         return `<div class="tile" data-key="${key}">
           <div class="tile-header">
             <span class="tile-icon">${tile.icon || '●'}</span>
@@ -775,6 +905,7 @@
     for (const [key, tile] of pageEntries) {
       const el = panel.querySelector(`[data-key="${key}"]`);
       if (!el) continue;
+      if (tile.isChore) continue; // chore tiles are static; class/value set at build time
       el.className = 'tile' + (tile.done ? ' done' : tile.alert ? ' alert' : tile.degraded ? ' degraded' : '');
 
       if (key === 'scoreboard') {
@@ -939,7 +1070,7 @@
   }
 
   /* ── Tap-to-dismiss with PIN overlay ───────────────────────────── */
-  let _pendingKey = null, _pendingTile = null, _pinInput = '';
+  let _pendingKey = null, _pendingTile = null, _pinInput = '', _pendingType = null, _pendingChoreId = null;
 
   function _updateDots() {
     for (let i = 0; i < 4; i++) {
@@ -976,11 +1107,42 @@
     document.querySelector('.pin-dots').style.visibility = 'hidden';
   }
 
+  function _closePinOverlay() {
+    document.getElementById('pin-overlay').classList.add('hidden');
+    document.getElementById('pin-result').style.display = 'none';
+    document.getElementById('pin-grid').style.display = 'grid';
+    document.querySelector('.pin-dots').style.visibility = 'visible';
+    _pinInput = '';
+  }
+
   async function _submitDismiss(pin) {
     const overlay = document.getElementById('pin-overlay');
     const tile = _pendingTile;
     const key  = _pendingKey;
 
+    if (_pendingType === 'chore') {
+      if (!pin) {
+        // Skip: close overlay but leave the chore tile in place
+        _closePinOverlay();
+        return;
+      }
+      const res = await fetch(`/api/chores/${_pendingChoreId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin }),
+      });
+      const data = await res.json();
+      if (data.creditedTo) {
+        if (tile) tile.remove();
+        _celebrate(data.creditedTo);
+        setTimeout(_closePinOverlay, 1800);
+      } else {
+        _flashWrong();
+      }
+      return;
+    }
+
+    // Appliance dismiss
     if (!pin) {
       overlay.classList.add('hidden');
       if (tile) { tile.classList.remove('done'); const v = tile.querySelector('.tile-value'); if (v) v.textContent = 'Idle'; }
@@ -1009,15 +1171,45 @@
     }
   }
 
-  document.getElementById('status-panel').addEventListener('click', (e) => {
-    const tile = e.target.closest('.tile.done');
+  let _longPressTimer = null, _longPressFired = false;
+
+  document.getElementById('status-panel').addEventListener('pointerdown', (e) => {
+    const tile = e.target.closest('.tile.chore-tile');
     if (!tile) return;
-    _pendingKey  = tile.dataset.key;
-    _pendingTile = tile;
-    _pinInput    = '';
+    _longPressFired = false;
+    _longPressTimer = setTimeout(() => {
+      _longPressFired = true;
+      _longPressTimer = null;
+      fetch(`/api/chores/${tile.dataset.choreId}`, { method: 'DELETE' });
+      tile.remove();
+    }, 700);
+  });
+  document.getElementById('status-panel').addEventListener('pointerup', () => {
+    if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
+  });
+  document.getElementById('status-panel').addEventListener('pointercancel', () => {
+    if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
+  });
+
+  document.getElementById('status-panel').addEventListener('click', (e) => {
+    if (_longPressFired) { _longPressFired = false; return; }
+    const tile = e.target.closest('.tile');
+    if (!tile) return;
+    const isChore = tile.classList.contains('chore-tile');
+    const isDone  = tile.classList.contains('done');
+    if (!isChore && !isDone) return;
+
+    _pendingKey      = tile.dataset.key;
+    _pendingTile     = tile;
+    _pendingType     = isChore ? 'chore' : 'appliance';
+    _pendingChoreId  = tile.dataset.choreId || null;
+    _pinInput        = '';
     _updateDots();
+
     const label = tile.querySelector('.tile-label')?.textContent || 'it';
-    document.getElementById('pin-title').textContent = `Who unloaded the ${label.toLowerCase()}?`;
+    document.getElementById('pin-title').textContent = isChore
+      ? `Who did ${label.toLowerCase()}?`
+      : `Who unloaded the ${label.toLowerCase()}?`;
     document.getElementById('pin-overlay').classList.remove('hidden');
   });
 
@@ -1230,6 +1422,51 @@
   document.getElementById('chat-send').addEventListener('click', sendChat);
   document.getElementById('chat-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') sendChat();
+  });
+
+  /* ── Chore overlay ──────────────────────────────────────────────── */
+  async function openChoreOverlay() {
+    const presets = await fetch('/api/chores/presets').then(r => r.json()).catch(() => []);
+    const container = document.getElementById('chore-presets');
+    container.innerHTML = presets.map(p =>
+      `<button class="chore-preset" data-name="${p.name}" data-icon="${p.icon}">${p.icon} ${p.name}</button>`
+    ).join('');
+    container.querySelectorAll('.chore-preset').forEach(btn => {
+      btn.addEventListener('click', () => submitChore(btn.dataset.name, btn.dataset.icon));
+    });
+    document.getElementById('chore-overlay').classList.remove('hidden');
+    document.getElementById('chore-btn').classList.add('open');
+  }
+  function closeChoreOverlay() {
+    document.getElementById('chore-overlay').classList.add('hidden');
+    document.getElementById('chore-btn').classList.remove('open');
+    document.getElementById('chore-custom-input').value = '';
+  }
+
+  async function submitChore(name, icon) {
+    if (!name) return;
+    await fetch('/api/chores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, icon }),
+    });
+    closeChoreOverlay();
+    refresh(); // show the new tile immediately
+  }
+
+  document.getElementById('chore-btn').addEventListener('click', openChoreOverlay);
+  document.getElementById('chore-cancel').addEventListener('click', closeChoreOverlay);
+
+  document.getElementById('chore-custom-add').addEventListener('click', () => {
+    const name = document.getElementById('chore-custom-input').value.trim();
+    if (name) submitChore(name, '🧹');
+  });
+
+  document.getElementById('chore-custom-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const name = document.getElementById('chore-custom-input').value.trim();
+      if (name) submitChore(name, '🧹');
+    }
   });
 
   /* ── Boot ───────────────────────────────────────────────────────── */

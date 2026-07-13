@@ -1,0 +1,8 @@
+[
+  { "name": "Clean up kitchen", "icon": "🧹" },
+  { "name": "Kids laundry",     "icon": "👕" },
+  { "name": "Parents laundry",  "icon": "🧺" },
+  { "name": "Clean bathroom",   "icon": "🚿" },
+  { "name": "Take out trash",   "icon": "🗑️" },
+  { "name": "Pick up toys",     "icon": "🧸" }
+]

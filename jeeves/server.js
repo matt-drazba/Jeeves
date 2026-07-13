@@ -2,7 +2,7 @@
 import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import ical from 'node-ical';
+import { readFileSync } from 'fs';
 import * as db from './db.js';
 import { sendWeeklyReport } from './report.js';
 import { loadDocs, getContext } from './rag.js';
@@ -735,19 +735,17 @@ setInterval(() => fetchNowPlaying().catch(() => {}), 15 * 1000);
 fetchWeather().catch(err => console.error('Weather fetch failed:', err));
 setInterval(() => fetchWeather().catch(err => console.error('Weather fetch failed:', err)), 10 * 60 * 1000);
 
-// ── Calendar ──────────────────────────────────────────────────────
-const CALENDAR_ICS_URL = process.env.CALENDAR_ICS_URL;
+// ── Calendar (HA Google Calendar API) ────────────────────────────
+const CALENDAR_ENTITY = 'calendar.matthew_drazba';
 const CAL_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 async function fetchCalendar() {
-  if (!CALENDAR_ICS_URL) return;
-
-  const events = await ical.async.fromURL(CALENDAR_ICS_URL);
+  if (!HA_TOKEN) return;
 
   const now = new Date();
   const weekStart = new Date(now);
   weekStart.setHours(0, 0, 0, 0);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // back to Sunday
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
 
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 7);
@@ -755,11 +753,27 @@ async function fetchCalendar() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  // HA calendar API expects local-time ISO strings (no Z / offset)
+  const pad = n => String(n).padStart(2, '0');
+  const fmtLocal = d =>
+    `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+
+  const url = `${HA_URL}/api/calendars/${CALENDAR_ENTITY}/events` +
+    `?start=${encodeURIComponent(fmtLocal(weekStart))}&end=${encodeURIComponent(fmtLocal(weekEnd))}`;
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${HA_TOKEN}` },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) throw new Error(`HA Calendar ${res.status}`);
+  const events = await res.json();
+
   const days = Array.from({ length: 7 }, (_, i) => {
     const date = new Date(weekStart);
     date.setDate(weekStart.getDate() + i);
+    const dateStr = `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`;
     return {
-      date: date.toISOString().slice(0, 10),
+      date: dateStr,
       dayName: CAL_DAYS[i],
       dayNum: date.getDate(),
       isToday: date.getTime() === today.getTime(),
@@ -767,40 +781,33 @@ async function fetchCalendar() {
     };
   });
 
-  const addEvent = (startDate, summary, allDay) => {
-    const d = new Date(startDate);
-    const midnight = new Date(d);
-    midnight.setHours(0, 0, 0, 0);
-    const idx = Math.round((midnight - weekStart) / 86400000);
-    if (idx < 0 || idx >= 7) return;
-    const timeStr = allDay ? null : d.toLocaleTimeString('en-US', {
-      hour: 'numeric', minute: '2-digit', hour12: true,
-      timeZone: 'America/Los_Angeles',
-    });
-    days[idx].events.push({
-      title: summary || '(No title)',
-      time: timeStr,
-      allDay,
-      sortKey: allDay ? -1 : d.getHours() * 60 + d.getMinutes(),
-    });
-  };
-
-  for (const ev of Object.values(events)) {
-    if (ev.type !== 'VEVENT') continue;
-    const allDay = !!ev.start?.dateOnly;
-    if (ev.rrule) {
-      for (let occ of ev.rrule.between(weekStart, weekEnd, true)) {
-        if (ev.start?.tz === 'America/Los_Angeles') {
-          // rrule stores occurrences as "local time in UTC disguise" — UTC values ARE the Pacific hours.
-          // Re-parse as local time so the process TZ (America/Los_Angeles) interprets them correctly.
-          const pad = n => String(n).padStart(2, '0');
-          const local = `${occ.getUTCFullYear()}-${pad(occ.getUTCMonth()+1)}-${pad(occ.getUTCDate())}T${pad(occ.getUTCHours())}:${pad(occ.getUTCMinutes())}:00`;
-          occ = new Date(local);
-        }
-        addEvent(occ, ev.summary, allDay);
+  for (const ev of events) {
+    const allDay = !!ev.start?.date;
+    if (allDay) {
+      // HA returns date strings directly: "2026-07-13" — no TZ conversion needed
+      const startStr = ev.start.date;
+      const endStr   = ev.end?.date;   // exclusive end
+      for (const day of days) {
+        const covers = endStr ? (day.date >= startStr && day.date < endStr) : day.date === startStr;
+        if (covers) day.events.push({ title: ev.summary || '(No title)', time: null, allDay: true, sortKey: -1 });
       }
-    } else if (ev.start) {
-      addEvent(ev.start, ev.summary, allDay);
+    } else {
+      // dateTime includes UTC offset — new Date() handles it correctly
+      const d = new Date(ev.start.dateTime);
+      const midnight = new Date(d);
+      midnight.setHours(0, 0, 0, 0);
+      const idx = Math.round((midnight - weekStart) / 86400000);
+      if (idx < 0 || idx >= 7) continue;
+      const timeStr = d.toLocaleTimeString('en-US', {
+        hour: 'numeric', minute: '2-digit', hour12: true,
+        timeZone: 'America/Los_Angeles',
+      });
+      days[idx].events.push({
+        title: ev.summary || '(No title)',
+        time: timeStr,
+        allDay: false,
+        sortKey: d.getHours() * 60 + d.getMinutes(),
+      });
     }
   }
 
@@ -810,7 +817,7 @@ async function fetchCalendar() {
 
   cachedStatus.calendar = { days };
   cachedStatus.updatedAt = new Date().toISOString();
-  console.log('Calendar updated');
+  console.log(`Calendar updated: ${events.length} events`);
 }
 
 fetchCalendar().catch(err => console.error('Calendar fetch failed:', err));
@@ -865,6 +872,58 @@ function _dismissAppliance(appliance) {
   }
   return true;
 }
+
+// ── Chore tiles ───────────────────────────────────────────────────
+let _choreIdCounter = 1;
+
+function _addChore(name, icon) {
+  const id = _choreIdCounter++;
+  cachedStatus.status[`chore_${id}`] = {
+    label: name, icon: icon || '🧹', value: 'Tap to claim!',
+    isChore: true, choreId: id,
+    alert: false, degraded: false, done: false,
+  };
+  return id;
+}
+
+function _removeChore(id) {
+  delete cachedStatus.status[`chore_${id}`];
+}
+
+app.get('/api/chores/presets', (req, res) => {
+  try {
+    res.json(JSON.parse(readFileSync('/app/chores.json', 'utf-8')));
+  } catch {
+    res.json([]);
+  }
+});
+
+app.post('/api/chores', express.json(), (req, res) => {
+  const { name, icon } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: 'name required' });
+  const id = _addChore(name.trim(), icon);
+  res.json({ ok: true, choreId: id });
+});
+
+app.post('/api/chores/:id/complete', express.json(), async (req, res) => {
+  const id  = parseInt(req.params.id);
+  const key = `chore_${id}`;
+  const { pin } = req.body || {};
+  if (!cachedStatus.status[key]) return res.status(404).json({ error: 'Chore not found' });
+  if (!pin) return res.status(400).json({ error: 'pin required' });
+  const choreName  = cachedStatus.status[key].label;
+  const creditedTo = await db.recordCredit(pin, choreName);
+  if (!creditedTo) return res.json({ ok: false, creditedTo: null });
+  _removeChore(id);
+  refreshScoreboard();
+  console.log(`Chore "${choreName}" completed by ${creditedTo}`);
+  res.json({ ok: true, creditedTo });
+});
+
+app.delete('/api/chores/:id', (req, res) => {
+  _removeChore(parseInt(req.params.id));
+  res.json({ ok: true });
+});
 
 app.post('/api/dismiss/:appliance', express.json(), async (req, res) => {
   const { appliance } = req.params;
