@@ -81,6 +81,13 @@ function migrate() {
     db.pragma('user_version = 2');
     console.log('DB: migrated to v2');
   }
+  if (v < 3) {
+    db.exec(`
+      INSERT OR IGNORE INTO devices (name, kind) VALUES ('home', 'consumption');
+    `);
+    db.pragma('user_version = 3');
+    console.log('DB: migrated to v3');
+  }
 }
 
 migrate();

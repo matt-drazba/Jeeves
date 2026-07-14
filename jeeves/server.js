@@ -86,6 +86,7 @@ let cachedStatus = {
     dusty:      { label: 'Dusty',       icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
     snorlax:    { label: 'Snorlax',     icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
     scoreboard: { label: 'Chores',      icon: '🏆', value: '—',    sub: 'This week', members: [], alert: false, degraded: false },
+    homeEnergy: { label: 'Home Energy', icon: '⚡', value: '—',    sub: '', alert: false, degraded: false },
   },
   alerts: [],
   calendar: { days: [] },
@@ -495,6 +496,33 @@ async function fetchWaterHeater() {
 
 fetchWaterHeater().catch(() => {});
 setInterval(() => fetchWaterHeater().catch(() => {}), 5 * 60 * 1000);
+
+// ── Home Energy (Emporia Vue) ─────────────────────────────────────
+async function fetchHomeEnergy() {
+  if (!HA_TOKEN) return;
+  try {
+    const [powerRes, todayRes] = await Promise.allSettled([
+      fetchHAState('sensor.edgecliff_power_minute_average'),
+      fetchHAState('sensor.edgecliff_energy_today'),
+    ]);
+
+    const watts = powerRes.status === 'fulfilled' ? parseFloat(powerRes.value.state) : NaN;
+    const today = todayRes.status === 'fulfilled' ? parseFloat(todayRes.value.state) : NaN;
+
+    const value = !isNaN(watts) ? `${(watts / 1000).toFixed(1)} kW` : '—';
+    const sub   = !isNaN(today) ? `${today.toFixed(1)} kWh today` : '';
+
+    if (!isNaN(watts)) db.maybeLogEnergy('home', watts);
+
+    cachedStatus.status.homeEnergy = { label: 'Home Energy', icon: '⚡', value, sub, alert: false, degraded: false };
+    console.log(`Home energy updated: ${value} (${sub})`);
+  } catch (err) {
+    console.error('Home energy fetch failed:', err.message);
+  }
+}
+
+fetchHomeEnergy().catch(() => {});
+setInterval(() => fetchHomeEnergy().catch(() => {}), 30 * 1000);
 
 // ── BiblioCommons (RCPL library holds) ───────────────────────────
 const BIBLIO_LIBRARY = 'rcpl';
