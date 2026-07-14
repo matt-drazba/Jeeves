@@ -614,6 +614,10 @@ async function fetchBiblio() {
     const holdBibs = holdsData?.entities?.bibs || {};
     const ready       = holds.filter(h => h.status === 'READY_FOR_PICKUP');
     const readyTitles = ready.map(h => holdBibs[h.metadataId]?.briefInfo?.title || 'Unknown');
+    if (ready.length > 0) {
+      console.log('DEBUG ready hold sample:', JSON.stringify(ready[0], null, 2));
+      console.log('DEBUG branches entity:', JSON.stringify(holdsData?.entities?.branches || {}, null, 2));
+    }
 
     let holdsValue, holdsSub;
     if (ready.length > 0) {
