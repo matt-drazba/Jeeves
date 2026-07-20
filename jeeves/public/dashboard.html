@@ -692,6 +692,8 @@
     }
     .library-row-title { font-size: 14px; font-weight: 600; color: var(--text); }
     .library-row-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .library-row.overdue { border-color: var(--alert-col); }
+    .library-row.overdue .library-row-sub { color: var(--alert-col); }
     .library-empty { font-size: 13px; color: var(--muted); text-align: center; padding: 20px 0; }
   </style>
 </head>
@@ -789,7 +791,7 @@
 <div id="library-overlay">
   <div class="library-panel">
     <div class="library-panel-header">
-      <div class="library-panel-title">Ready for Pickup</div>
+      <div class="library-panel-title" id="library-panel-title-text">Ready for Pickup</div>
       <button id="library-close">✕</button>
     </div>
     <div id="library-list"></div>
@@ -1255,6 +1257,7 @@
     const tile = e.target.closest('.tile');
     if (!tile) return;
     if (tile.dataset.key === 'library') { openLibraryOverlay(); return; }
+    if (tile.dataset.key === 'booksOut') { openBooksOutOverlay(); return; }
     const isChore = tile.classList.contains('chore-tile');
     const isDone  = tile.classList.contains('done');
     if (!isChore && !isDone) return;
@@ -1517,21 +1520,34 @@
   document.getElementById('chore-btn').addEventListener('click', openChoreOverlay);
   document.getElementById('chore-cancel').addEventListener('click', closeChoreOverlay);
 
-  /* ── Library overlay ────────────────────────────────────────────── */
+  /* ── Library / Books Out overlay ──────────────────────────────────── */
+  function _fmtDate(iso) {
+    return iso
+      ? new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles' })
+      : '';
+  }
   function openLibraryOverlay() {
     const holds = _lastData?.status?.library?.readyHolds || [];
-    const list  = document.getElementById('library-list');
+    document.getElementById('library-panel-title-text').textContent = 'Ready for Pickup';
+    const list = document.getElementById('library-list');
     list.innerHTML = holds.length
-      ? holds.map(h => {
-          const dateLabel = h.pickupBy
-            ? new Date(h.pickupBy + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles' })
-            : '';
-          return `<div class="library-row">
-            <div class="library-row-title">${h.title}</div>
-            <div class="library-row-sub">${h.branch}${dateLabel ? ' · Pick up by ' + dateLabel : ''}</div>
-          </div>`;
-        }).join('')
+      ? holds.map(h => `<div class="library-row">
+          <div class="library-row-title">${h.title}</div>
+          <div class="library-row-sub">${h.branch}${h.pickupBy ? ' · Pick up by ' + _fmtDate(h.pickupBy) : ''}</div>
+        </div>`).join('')
       : '<div class="library-empty">No holds ready for pickup</div>';
+    document.getElementById('library-overlay').classList.add('open');
+  }
+  function openBooksOutOverlay() {
+    const books = _lastData?.status?.booksOut?.checkedOut || [];
+    document.getElementById('library-panel-title-text').textContent = 'Books Out';
+    const list = document.getElementById('library-list');
+    list.innerHTML = books.length
+      ? books.map(b => `<div class="library-row${b.overdue ? ' overdue' : ''}">
+          <div class="library-row-title">${b.title}</div>
+          <div class="library-row-sub">${b.branch}${b.dueDate ? ' · ' + (b.overdue ? 'Overdue since ' : 'Due ') + _fmtDate(b.dueDate) : ''}${!b.renewable && !b.overdue ? ' · Not renewable' : ''}</div>
+        </div>`).join('')
+      : '<div class="library-empty">No books checked out</div>';
     document.getElementById('library-overlay').classList.add('open');
   }
   function closeLibraryOverlay() {

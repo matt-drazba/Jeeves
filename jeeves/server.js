@@ -81,7 +81,7 @@ let cachedStatus = {
     sprinklers:   { label: 'Sprinklers',   icon: '💧', value: '—',    alert: false, degraded: false },
     waterHeater:  { label: 'Hot Water',    icon: '🚿', value: '—',    sub: '', alert: false, degraded: false },
     library:      { label: 'Library',      icon: '📚', value: '—',    sub: '', alert: false, degraded: false, readyHolds: [] },
-    booksOut:     { label: 'Books Out',    icon: '📖', value: '—',    sub: '', alert: false, degraded: false },
+    booksOut:     { label: 'Books Out',    icon: '📖', value: '—',    sub: '', alert: false, degraded: false, checkedOut: [] },
     nowPlaying: { label: 'Now Playing', icon: '🎵', value: '—',    sub: '', alert: false, degraded: false },
     dusty:      { label: 'Dusty',       icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
     snorlax:    { label: 'Snorlax',     icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
@@ -639,9 +639,6 @@ async function fetchBiblio() {
     // ── Books Out tile ─────────────────────────────────────────────
     const checkouts = Object.values(checkoutsData?.entities?.checkouts || {});
     checkouts.sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''));
-    if (checkouts.length > 0) {
-      console.log('DEBUG checkout sample:', JSON.stringify(checkouts[0], null, 2));
-    }
 
     const todayStr   = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
     const soonCutoff = new Date(); soonCutoff.setDate(soonCutoff.getDate() + 5);
@@ -660,7 +657,15 @@ async function fetchBiblio() {
       const label   = soonest.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles' });
       booksSub = `Due ${label}`;
     }
-    cachedStatus.status.booksOut = { label: 'Books Out', icon: '📖', value: booksValue, sub: booksSub, alert: booksAlert, degraded: booksDegraded, done: false };
+    const checkedOut = checkouts.map(c => ({
+      title:     (c.bibTitle || 'Unknown').split(' / ')[0],
+      branch:    (c.branch?.name || '').trim(),
+      dueDate:   c.dueDate || null,
+      overdue:   c.dueDate < todayStr || c.fines > 0,
+      renewable: (c.actions ?? []).includes('renew'),
+    }));
+
+    cachedStatus.status.booksOut = { label: 'Books Out', icon: '📖', value: booksValue, sub: booksSub, alert: booksAlert, degraded: booksDegraded, done: false, checkedOut };
 
     console.log(`BiblioCommons updated: holds=${holdsValue}, books=${booksValue}`);
   } catch (err) {
