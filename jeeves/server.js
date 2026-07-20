@@ -639,6 +639,9 @@ async function fetchBiblio() {
     // ── Books Out tile ─────────────────────────────────────────────
     const checkouts = Object.values(checkoutsData?.entities?.checkouts || {});
     checkouts.sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''));
+    if (checkouts.length > 0) {
+      console.log('DEBUG checkout sample:', JSON.stringify(checkouts[0], null, 2));
+    }
 
     const todayStr   = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
     const soonCutoff = new Date(); soonCutoff.setDate(soonCutoff.getDate() + 5);
