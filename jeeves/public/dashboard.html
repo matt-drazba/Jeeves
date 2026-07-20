@@ -273,6 +273,30 @@
     .forecast-hl { font-size: 11px; color: var(--muted); }
     .forecast-hl strong { color: var(--text); }
 
+    /* ── Up Next tile ─────────────────────────────────────────────── */
+    .upnext-rows {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-evenly;
+      margin-top: 6px;
+    }
+    .upnext-row { display: flex; align-items: center; gap: 9px; }
+    .upnext-time {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      width: 48px;
+      flex-shrink: 0;
+    }
+    .upnext-title {
+      font-size: 12px;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     /* ── Calendar view ───────────────────────────────────────────── */
     #calendar-grid {
       display: grid;
@@ -799,19 +823,28 @@
 </div>
 
 <script>
-  /* ── View cycling ───────────────────────────────────────────────── */
-  const VIEWS = ['dashboard', 'calendar'];
-  let _viewIndex = 0;
+  /* ── View switching ─────────────────────────────────────────────── */
+  // Calendar is no longer part of the auto-rotation — it's opened by
+  // tapping the "Today" tile and auto-returns after a short timeout.
+  let _onCalendar = false;
+  let _calendarReturnTimer = null;
 
-  function showView(name) {
-    document.getElementById('main').style.display          = name === 'dashboard' ? '' : 'none';
-    document.getElementById('view-calendar').style.display = name === 'calendar'  ? 'block' : 'none';
+  function showDashboardView() {
+    _onCalendar = false;
+    clearTimeout(_calendarReturnTimer);
+    document.getElementById('main').style.display          = '';
+    document.getElementById('view-calendar').style.display = 'none';
   }
 
-  setInterval(() => {
-    _viewIndex = (_viewIndex + 1) % VIEWS.length;
-    showView(VIEWS[_viewIndex]);
-  }, 15_000);
+  function showCalendarView() {
+    _onCalendar = true;
+    document.getElementById('main').style.display          = 'none';
+    document.getElementById('view-calendar').style.display = 'block';
+    clearTimeout(_calendarReturnTimer);
+    _calendarReturnTimer = setTimeout(showDashboardView, 20_000);
+  }
+
+  document.getElementById('view-calendar').addEventListener('click', showDashboardView);
 
   /* ── Data fetch ─────────────────────────────────────────────────── */
   let _lastData = null;
@@ -930,6 +963,16 @@
         </div>`;
       }
       html += pageEntries.map(([key, tile]) => {
+        if (key === 'upNext') {
+          return `<div class="tile" data-key="${key}">
+            <div class="tile-header">
+              <span class="tile-icon">${tile.icon || '🗓️'}</span>
+              <span class="tile-label">${tile.label}</span>
+            </div>
+            <div class="tile-value">${tile.value}</div>
+            <div class="upnext-rows" id="upnext-rows"></div>
+          </div>`;
+        }
         if (key === 'scoreboard') {
           return `<div class="tile" data-key="${key}">
             <div class="tile-header">
@@ -969,6 +1012,17 @@
       if (tile.isChore) continue; // chore tiles are static; class/value set at build time
       el.className = 'tile' + (tile.done ? ' done' : tile.alert ? ' alert' : tile.degraded ? ' degraded' : '');
 
+      if (key === 'upNext') {
+        el.querySelector('.tile-value').textContent = tile.value;
+        const rows = el.querySelector('#upnext-rows');
+        if (rows) {
+          rows.innerHTML = (tile.events || [])
+            .map(ev => `<div class="upnext-row"><span class="upnext-time">${ev.time}</span><span class="upnext-title">${ev.title}</span></div>`)
+            .join('');
+        }
+        continue;
+      }
+
       if (key === 'scoreboard') {
         const rows = el.querySelector('.scoreboard-rows');
         if (rows && tile.members?.length) {
@@ -999,7 +1053,7 @@
 
   /* ── Tile page cycling ──────────────────────────────────────────── */
   setInterval(() => {
-    if (VIEWS[_viewIndex] !== 'dashboard' || _totalTilePages <= 1) return;
+    if (_onCalendar || _totalTilePages <= 1) return;
     _tilePage = (_tilePage + 1) % _totalTilePages;
     if (_lastData) renderStatus(_lastData.status);
   }, 25_000);
@@ -1258,6 +1312,7 @@
     if (!tile) return;
     if (tile.dataset.key === 'library') { openLibraryOverlay(); return; }
     if (tile.dataset.key === 'booksOut') { openBooksOutOverlay(); return; }
+    if (tile.dataset.key === 'upNext') { showCalendarView(); return; }
     const isChore = tile.classList.contains('chore-tile');
     const isDone  = tile.classList.contains('done');
     if (!isChore && !isDone) return;

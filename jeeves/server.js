@@ -73,6 +73,7 @@ let cachedStatus = {
     ],
   },
   status: {
+    upNext:     { label: 'Today',       icon: '🗓️', value: '—',    sub: '', alert: false, degraded: false, done: false, events: [] },
     washer:     { label: 'Washer',      icon: '🫧', value: 'Idle', alert: false, degraded: false },
     dryer:      { label: 'Dryer',       icon: '🌀', value: 'Idle', alert: false, degraded: false },
     aqiIn:      { label: 'AQI In',      icon: '🏠', value: '—',    alert: false, degraded: false },
@@ -877,6 +878,32 @@ async function fetchCalendar() {
 fetchCalendar().catch(err => console.error('Calendar fetch failed:', err));
 setInterval(() => fetchCalendar().catch(err => console.error('Calendar fetch failed:', err)), 5 * 60 * 1000);
 
+// "Today" tile: next up to 3 upcoming events, computed fresh each request
+// so it reflects the current time even between 5-min calendar refreshes.
+function computeUpNext() {
+  const days = cachedStatus.calendar?.days || [];
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  const today = days.find(d => d.date === todayStr);
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const upcoming = today
+    ? today.events.filter(ev => ev.allDay || ev.sortKey >= nowMinutes).slice(0, 3)
+    : [];
+
+  return {
+    label: 'Today',
+    icon: '🗓️',
+    value: upcoming.length ? `${upcoming.length} Upcoming` : 'All Clear',
+    sub: upcoming.length ? (upcoming[0].allDay ? upcoming[0].title : `Next: ${upcoming[0].time}`) : '',
+    alert: false,
+    degraded: false,
+    done: upcoming.length === 0,
+    events: upcoming.map(ev => ({ time: ev.allDay ? 'All day' : ev.time, title: ev.title })),
+  };
+}
+
 // ── Routes ────────────────────────────────────────────────────────
 app.use(express.static(join(__dirname, 'public')));
 
@@ -885,7 +912,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api/status', (req, res) => {
-  res.json(cachedStatus);
+  res.json({ ...cachedStatus, status: { ...cachedStatus.status, upNext: computeUpNext() } });
 });
 
 app.get('/api/history/:appliance', (req, res) => {
