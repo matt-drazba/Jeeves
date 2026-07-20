@@ -80,7 +80,7 @@ let cachedStatus = {
     dishwasher: { label: 'Dishwasher',  icon: '🍽️', value: 'Idle', alert: false, degraded: false },
     sprinklers:   { label: 'Sprinklers',   icon: '💧', value: '—',    alert: false, degraded: false },
     waterHeater:  { label: 'Hot Water',    icon: '🚿', value: '—',    sub: '', alert: false, degraded: false },
-    library:      { label: 'Library',      icon: '📚', value: '—',    sub: '', alert: false, degraded: false },
+    library:      { label: 'Library',      icon: '📚', value: '—',    sub: '', alert: false, degraded: false, readyHolds: [] },
     booksOut:     { label: 'Books Out',    icon: '📖', value: '—',    sub: '', alert: false, degraded: false },
     nowPlaying: { label: 'Now Playing', icon: '🎵', value: '—',    sub: '', alert: false, degraded: false },
     dusty:      { label: 'Dusty',       icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
@@ -614,10 +614,14 @@ async function fetchBiblio() {
     const holdBibs = holdsData?.entities?.bibs || {};
     const ready       = holds.filter(h => h.status === 'READY_FOR_PICKUP');
     const readyTitles = ready.map(h => holdBibs[h.metadataId]?.briefInfo?.title || 'Unknown');
-    if (ready.length > 0) {
-      console.log('DEBUG ready hold sample:', JSON.stringify(ready[0], null, 2));
-      console.log('DEBUG branches entity:', JSON.stringify(holdsData?.entities?.branches || {}, null, 2));
-    }
+
+    const readyHolds = ready
+      .map(h => ({
+        title:     (h.bibTitle || 'Unknown').split(' / ')[0],
+        branch:    (h.pickupLocation?.name || '').trim(),
+        pickupBy:  h.pickupByDate || null,
+      }))
+      .sort((a, b) => (a.pickupBy || '').localeCompare(b.pickupBy || ''));
 
     let holdsValue, holdsSub;
     if (ready.length > 0) {
@@ -630,7 +634,7 @@ async function fetchBiblio() {
       holdsValue = 'No Holds';
       holdsSub   = '';
     }
-    cachedStatus.status.library = { label: 'Library', icon: '📚', value: holdsValue, sub: holdsSub, alert: ready.length > 0, degraded: false, done: false };
+    cachedStatus.status.library = { label: 'Library', icon: '📚', value: holdsValue, sub: holdsSub, alert: ready.length > 0, degraded: false, done: false, readyHolds };
 
     // ── Books Out tile ─────────────────────────────────────────────
     const checkouts = Object.values(checkoutsData?.entities?.checkouts || {});

@@ -644,6 +644,55 @@
       text-align: center;
       width: 100%;
     }
+
+    /* ── Library overlay ─────────────────────────────────────────── */
+    #library-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.78);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+    #library-overlay.open { display: flex; }
+    .library-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      width: 440px;
+      max-height: 70vh;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .library-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .library-panel-title { font-size: 16px; font-weight: 600; color: var(--text); }
+    #library-close {
+      background: none; border: none;
+      color: var(--muted); font-size: 18px;
+      cursor: pointer; padding: 0 4px; line-height: 1;
+    }
+    #library-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+    }
+    .library-row {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .library-row-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    .library-row-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .library-empty { font-size: 13px; color: var(--muted); text-align: center; padding: 20px 0; }
   </style>
 </head>
 <body>
@@ -734,6 +783,16 @@
       <button id="chore-custom-add">Add</button>
     </div>
     <button id="chore-cancel">Cancel</button>
+  </div>
+</div>
+
+<div id="library-overlay">
+  <div class="library-panel">
+    <div class="library-panel-header">
+      <div class="library-panel-title">Ready for Pickup</div>
+      <button id="library-close">✕</button>
+    </div>
+    <div id="library-list"></div>
   </div>
 </div>
 
@@ -1195,6 +1254,7 @@
     if (_longPressFired) { _longPressFired = false; return; }
     const tile = e.target.closest('.tile');
     if (!tile) return;
+    if (tile.dataset.key === 'library') { openLibraryOverlay(); return; }
     const isChore = tile.classList.contains('chore-tile');
     const isDone  = tile.classList.contains('done');
     if (!isChore && !isDone) return;
@@ -1456,6 +1516,31 @@
 
   document.getElementById('chore-btn').addEventListener('click', openChoreOverlay);
   document.getElementById('chore-cancel').addEventListener('click', closeChoreOverlay);
+
+  /* ── Library overlay ────────────────────────────────────────────── */
+  function openLibraryOverlay() {
+    const holds = _lastData?.status?.library?.readyHolds || [];
+    const list  = document.getElementById('library-list');
+    list.innerHTML = holds.length
+      ? holds.map(h => {
+          const dateLabel = h.pickupBy
+            ? new Date(h.pickupBy + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles' })
+            : '';
+          return `<div class="library-row">
+            <div class="library-row-title">${h.title}</div>
+            <div class="library-row-sub">${h.branch}${dateLabel ? ' · Pick up by ' + dateLabel : ''}</div>
+          </div>`;
+        }).join('')
+      : '<div class="library-empty">No holds ready for pickup</div>';
+    document.getElementById('library-overlay').classList.add('open');
+  }
+  function closeLibraryOverlay() {
+    document.getElementById('library-overlay').classList.remove('open');
+  }
+  document.getElementById('library-close').addEventListener('click', closeLibraryOverlay);
+  document.getElementById('library-overlay').addEventListener('click', e => {
+    if (e.target === document.getElementById('library-overlay')) closeLibraryOverlay();
+  });
 
   document.getElementById('chore-custom-add').addEventListener('click', () => {
     const name = document.getElementById('chore-custom-input').value.trim();
