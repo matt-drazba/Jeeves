@@ -624,9 +624,19 @@ async function fetchBiblio() {
       .sort((a, b) => (a.pickupBy || '').localeCompare(b.pickupBy || ''));
 
     let holdsValue, holdsSub;
+    let holdsAlert = false, holdsDegraded = false, holdsDone = false;
     if (ready.length > 0) {
       holdsValue = `${ready.length} Ready`;
       holdsSub   = readyTitles.slice(0, 2).join(', ') + (readyTitles.length > 2 ? '…' : '');
+
+      const soonestPickupBy = readyHolds[0]?.pickupBy;
+      const daysLeft = soonestPickupBy
+        ? Math.ceil((new Date(soonestPickupBy + 'T23:59:59') - new Date()) / 86400000)
+        : -1; // no date on record — treat as urgent
+
+      if (daysLeft <= 3)      holdsAlert    = true;
+      else if (daysLeft <= 6) holdsDegraded = true;
+      else                    holdsDone     = true;
     } else if (holds.length > 0) {
       holdsValue = `${holds.length} Waiting`;
       holdsSub   = '';
@@ -634,7 +644,7 @@ async function fetchBiblio() {
       holdsValue = 'No Holds';
       holdsSub   = '';
     }
-    cachedStatus.status.library = { label: 'Library', icon: '📚', value: holdsValue, sub: holdsSub, alert: ready.length > 0, degraded: false, done: false, readyHolds };
+    cachedStatus.status.library = { label: 'Library', icon: '📚', value: holdsValue, sub: holdsSub, alert: holdsAlert, degraded: holdsDegraded, done: holdsDone, readyHolds };
 
     // ── Books Out tile ─────────────────────────────────────────────
     const checkouts = Object.values(checkoutsData?.entities?.checkouts || {});
