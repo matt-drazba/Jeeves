@@ -88,6 +88,13 @@ function migrate() {
     db.pragma('user_version = 3');
     console.log('DB: migrated to v3');
   }
+  if (v < 4) {
+    db.exec(`
+      INSERT OR IGNORE INTO devices (name, kind) VALUES ('pool_pump', 'consumption');
+    `);
+    db.pragma('user_version = 4');
+    console.log('DB: migrated to v4');
+  }
 }
 
 migrate();

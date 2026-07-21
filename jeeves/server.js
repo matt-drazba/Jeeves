@@ -88,6 +88,7 @@ let cachedStatus = {
     snorlax:    { label: 'Snorlax',     icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
     scoreboard: { label: 'Chores',      icon: '🏆', value: '—',    sub: 'This week', members: [], alert: false, degraded: false },
     homeEnergy: { label: 'Home Energy', icon: '⚡', value: '—',    sub: '', alert: false, degraded: false },
+    poolPump:   { label: 'Pool Pump',   icon: '🏊', value: '—',    sub: '', alert: false, degraded: false },
   },
   alerts: [],
   calendar: { days: [] },
@@ -524,6 +525,32 @@ async function fetchHomeEnergy() {
 
 fetchHomeEnergy().catch(() => {});
 setInterval(() => fetchHomeEnergy().catch(() => {}), 30 * 1000);
+
+// ── Pool Pump (Shelly EM Gen3) ─────────────────────────────────────
+const POOL_PUMP_WATTS_THRESHOLD = 20; // matches the Shelly on-device ionizer script's threshold
+
+async function fetchPoolPump() {
+  if (!HA_TOKEN) return;
+  try {
+    const res = await fetchHAState('sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power');
+    const watts = Math.abs(parseFloat(res.state));
+    if (isNaN(watts)) throw new Error(`unexpected state: ${res.state}`);
+
+    db.maybeLogEnergy('pool_pump', watts);
+
+    const running = watts > POOL_PUMP_WATTS_THRESHOLD;
+    const value = running ? 'Running' : 'Idle';
+    const sub   = running ? `${Math.round(watts)}W` : '';
+
+    cachedStatus.status.poolPump = { label: 'Pool Pump', icon: '🏊', value, sub, alert: false, degraded: false };
+    console.log(`Pool pump updated: ${value} ${sub}`);
+  } catch (err) {
+    console.error('Pool pump fetch failed:', err.message);
+  }
+}
+
+fetchPoolPump().catch(() => {});
+setInterval(() => fetchPoolPump().catch(() => {}), 30 * 1000);
 
 // ── BiblioCommons (RCPL library holds) ───────────────────────────
 const BIBLIO_LIBRARY = 'rcpl';

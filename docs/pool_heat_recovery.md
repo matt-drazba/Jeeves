@@ -40,7 +40,7 @@ Tecmark **3010P** SPNO flow switch (+ cover **25165BM**), contacts in series wit
 No flow → diverter physically cannot engage. Adjust CW = more GPM required; set to open just below 45 GPM floor.
 Manual p.25: pump off during diversion overheats FPH and can damage FPH/compressor. Compressor high-pressure switch is last resort only.
 
-**Install into HX blue "outlet water temp" port:** pull titanium insert + grommet → 3/4" F fitting → reducer to 1/8" F (stainless) → switch, Teflon tape. 25165BM cover if exposed.
+**Install into HX blue "outlet water temp" port:** pull titanium insert + grommet → 3/4" MPT x 1/8" FPT reducer bushing (stainless) threads into the port → Tecmark switch (male 1/8" MPT) threads into the bushing, Teflon tape on both joints. 25165BM cover if exposed.
 
 **Calibrate:** run 1500 RPM (~40 GPM, below floor) → adjust CW until trio drops. Run 2200 RPM → must hold. A used unit that won't hold a trip point gets replaced (~$25).
 
@@ -56,7 +56,7 @@ HA failure degrades to "no free heat," never to danger. See HA layer below.
 - [ ] Live test: setpoint > water temp, AC on → pump self-starts at 2200 RPM within ~30 s
 - [ ] Flow switch install + calibrate on arrival (Tecmark 3010P, ~5 days out)
 - [ ] **Breaker-kill acceptance test ONLY after flow switch installed.** Until then it creates the dangerous state with nothing to catch it.
-- [ ] R-40 ionizer → IntelliFlo accessory output per manufacturer instructions (accessory output energizes with motor — hardware interlock, no HA automation)
+- [x] R-40 ionizer control — **DONE, plan changed:** not wired to IntelliFlo accessory output. Instead, Shelly EM Gen3 (`shellyemg3-dcb4d9ce63a4`) on-device script watches `EM1.GetStatus` channel 0 (pump circuit CT) and drives `switch.shellyemg3_dcb4d9ce63a4` (relay → R-40) directly. Threshold 20W, 60s on-delay after pump starts (flow establishment), watts<=0 turns ionizer off immediately. Runs locally on the Shelly — no HA/network dependency, same resilience as the original hardware-interlock plan.
 
 ## HA layer (L3 — monitor + alert only)
 
@@ -69,7 +69,7 @@ HA failure degrades to "no free heat," never to danger. See HA layer below.
 - `sensor.pool_pad_pool_temp` — DS18B20 pool return
 - `sensor.pool_pad_pool_flow_gpm` — pulse counter, calibrate against Blue-White gauge
 - `sensor.pool_pad_pool_heat_btu_hr` — template: GPM × ΔT(°F) × 500
-- `binary_sensor.pool_pump_running`, `sensor.pool_pump_watts` — CT clamp (Shelly EM or SCT-013)
+- `sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power` — Shelly EM Gen3, 50A CT on one pump leg (240V, single leg only — see Jeeves tile for running-state derivation). `switch.shellyemg3_dcb4d9ce63a4` drives the R-40 ionizer relay (see ionizer note above).
 - Compressor call: T10 via HomeKit (`hvac_action`) — no Resideo cloud needed
 
 **Alert rules (HA automations, phase after monitoring proven):**
@@ -96,7 +96,7 @@ Copper tracked separately (Taylor K-1730) as its own HA input_number, target 0.2
 - Waterproof DS18B20 × 3
 - Hall-effect pulse flow sensor — **measure pipe first: 1.5" vs 2"**; calibrate against Blue-White
 - CT clamp: Shelly EM or SCT-013 (for pump watts)
-- 3/4" F + 1/8" F reducer fittings (stainless), Teflon tape
+- 3/4" MPT x 1/8" FPT reducer bushing (stainless), Teflon tape
 - 18AWG thermostat wire
 - Taylor K-2006 test kit
 

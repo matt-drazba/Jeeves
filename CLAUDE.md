@@ -148,6 +148,12 @@ homelab/
     - iOS Shortcuts use Home Assistant → **Run Script** action
     - If "Run Script" shows "no options available", quit and relaunch the HA Companion app — fixes the sync issue
     - **Naming convention**: avoid car names (Siri routes to Tesla app) and avoid "open"/"trunk" together (triggers media). Use color + action + thing: "open white car trunk", "fart blue car", "honk white car", etc.
+- **Rheem water heater (EcoNet)** — integrated in HA; entities/dashboard tile not yet built
+- **Bhyve sprinkler controller** — integrated in HA; schedule automations/dashboard tile not yet built
+- **Pool pump tile live** — Shelly EM Gen3 (`shellyemg3-dcb4d9ce63a4`), 50A CT on one leg of the 240V IntelliFlo2 pump circuit, powered/referenced off a spare 120V breaker in the subpanel; polls `sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power` every 30s, threshold 20W = running
+  - Note: single CT reads one leg only; a second CT on the Gen3's `IB` channel would give true two-leg wattage if added later
+  - Same Shelly also runs an on-device script driving `switch.shellyemg3_dcb4d9ce63a4` → R-40 ionizer relay (20W threshold, 60s on-delay for flow establishment) — replaces the originally planned IntelliFlo accessory-output wiring; see `docs/pool_heat_recovery.md`
+  - Energy readings logged to SQLite (`pool_pump` device row) via the same `maybeLogEnergy` path as other appliances
 
 ### Tile states
 | State | CSS class | Trigger |
@@ -215,6 +221,9 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 - ha-poolchem via HACS: FC/TA/CH/CYA entered manually; copper tracked as separate input_number (target 0.2–0.4 ppm); pH from DS18B20 probe; ORP not used.
 
 ## Deferred (committed, do later)
+- **HA container startup network dependency fix:** After the 2026-07-19 power outage, Bhyve/LG ThinQ/EcoNet/Tesla all failed setup with `DNS servers unreachable` — Docker started the HA container before the network/DNS was actually usable, and HA's config-entry retry backoff (hardcoded, exponential, gives up after a few minutes) ran out before DNS recovered. Fix: `docker-compose.yml` healthcheck-gated `depends_on` or startup wait so HA doesn't launch until network connectivity is confirmed. Prevents the failure at the source.
+- **Config-entry reload watchdog automation:** Safety net on top of the above — HA automation that reloads known-flaky cloud integrations (Bhyve, LG ThinQ, EcoNet, Tesla) every ~15 min for the first hour after HA startup, in case any entry still failed setup despite the network fix.
+- **Text (SMS) alert for pool pump / critical failures while away:** Push notifications via the Companion app aren't reliable enough for something safety-critical like the pool heat recovery pump going down during a power outage while on vacation. Need a real SMS path (e.g. Twilio API, or an email-to-SMS gateway) triggered by an HA automation watching pump/flow state and outage/connectivity loss — not just a dashboard tile or app push. API key in `.env`, never committed.
 - ESPHome pool pad node: flash ESP8266, wire opto inputs + DS18B20 probes + flow sensor, adopt into HA. Config ready at `esphome/pool-pad.yaml`. Blocked on flow switch arrival (~5 days) for full wiring test.
 - ESPHome pH node: separate ESP32 build (8266 ADC too weak for analog pH). After pad node proven.
 - Pool water level sensor hardware
@@ -229,10 +238,9 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 - Energy monitoring via smart plugs (per-device power on the dashboard)
 - AQI-triggered automation: PurpleAir threshold → air purifier smart plug + notification
 - **Rain + windows automation:** If rain is forecast or active and window shades are open → push notification to warn. Two triggers: (1) imminent rain (HA weather entity `forecast` condition changes to rain/storm), (2) bonus: 9pm and overnight rain forecast + windows still open → "Close your windows, rain tonight." Shade state from Tuya cover entities (need to verify they report current position reliably). Rain source: HA weather integration or Open-Meteo via template sensor. Both triggers = HA automations with template conditions. No new hardware needed.
-- **Rheem water heater:** "Smart" Rheem water heater — add to HA via EcoNet integration (HACS: `RhymeWithCream/ha-rheem-econet` or similar). Goals: mode control (heat pump / electric / vacation), temperature setpoint, energy monitoring tile. Research integration before starting — EcoNet cloud auth may require account credentials in `.env`.
 - **Picture frame automation:** Dumb frame on Wemo WSP080. Schedule: on in morning (e.g., 7am–10am) and evening (6pm–10pm), off during the day. Presence condition: also on whenever someone is home (via `person` entity or device tracker). Pure HA automation — no new hardware. Wemo is already in HA via HomeKit Controller.
 - **Migrate automations from native apps to HA:** TP-Link Kasa (driveway lights schedules, any outlet automations), Tuya (shade schedules, pool sweep timer), and any others currently managed in vendor apps. Centralizes all automations in HA; vendor apps become passthrough only. Inventory existing vendor-app automations before migrating.
-- **Bhyve sprinkler automation:** Orbit Bhyve smart sprinkler controller — add to HA via Bhyve integration (HACS: `sebr/hass-bhyve-mqtt` or check HA community for current best option; uses MQTT or cloud API depending on integration). Goals: schedule control from HA, rain-skip automation (skip watering if rain forecast — pairs naturally with rain+windows automation), dashboard tile showing zone status. Research integration before starting.
+- **Bhyve sprinkler automation:** Integration is live in HA (see Working section). Remaining: rain-skip automation (skip watering if rain forecast — pairs naturally with rain+windows automation), dashboard tile showing zone status.
 - Frigate local camera AI (person/package detection; wants a Coral USB accelerator)
 - Boss key: one keypress swaps kiosk to a fake spreadsheet
 - **Data history + forecasting:** Time-series storage for door events, energy usage, laundry loads, pool chemistry. Design: SQLite in a Docker volume (not HA's recorder — that's for HA internals). Jeeves server writes and queries it. Pool chemistry history enables dosing trend forecasting. Architecture should be designed with this in mind from the start — status tiles feed history, history feeds forecasting tiles.
