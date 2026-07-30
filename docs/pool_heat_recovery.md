@@ -1,6 +1,7 @@
 # Pool Heat Recovery — HotSpot FPH5 + IntelliFlo2 VST
 
 Last updated: 2026-07-10. Authority order: CLAUDE.md → this doc → coder briefs.
+**For as-built wiring, troubleshooting, and how this install differs from the FPH manual, see [pool_wiring_manual.md](pool_wiring_manual.md)** — that doc is the authority on what is physically in the boxes; this one covers design rationale and project status.
 Sources: HotSpot FPH installer manual (44p scan), Pentair IntelliComm II guide, TFP community.
 
 ## System facts (verified)
