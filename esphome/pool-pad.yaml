@@ -30,52 +30,46 @@ ota:
 # Avoid boot-sensitive: GPIO0(D3), GPIO2(D4), GPIO15(D8)
 # One-wire needs external 4.7k pull-up resistor to 3.3V.
 substitutions:
-  pin_opto_heat_active: GPIO5    # D1 — opto ch1: heater trio 24VAC (after flow switch)
-  pin_opto_pump_call:   GPIO4    # D2 — opto ch2: FPH pump-call output
-  pin_one_wire:         GPIO14   # D5 — DS18B20 one-wire bus (4.7k pull-up to 3.3V required)
-  pin_flow_pulse:       GPIO12   # D6 — hall-effect flow sensor pulse
-  # pin_boost_relay:    GPIO13   # D7 — phase 2: relay → IntelliComm input 2
+  pin_relay_heat_active: GPIO5    # D1 — relay ch1: heater trio 24VAC (after flow switch)
+  pin_one_wire:          GPIO14   # D5 — DS18B20 one-wire bus (4.7k pull-up to 3.3V required)
+  pin_flow_pulse:        GPIO12   # D6 — hall-effect flow sensor pulse
+  # pin_boost_relay:     GPIO13   # D7 — phase 2: relay → IntelliComm input 2
+  # GPIO4 (D2) freed — was FPH pump-call sensor, dropped 2026-07-28 (see docs/pool_heat_recovery.md)
 
-# ── Optocoupler inputs ────────────────────────────────────────────────────
-# Module type: 3–24V AC/DC optocoupler, active-low output (pulls low when AC present).
-# Opto ch1: across trio 24VAC AFTER the Tecmark flow switch — true pool heat active state.
-# Opto ch2: across FPH pump-call output — shows FPH is requesting the pump.
+# ── Relay dry-contact input ───────────────────────────────────────────────
+# Switched from an opto module to a White Rodgers Type 84 fan relay (24VAC
+# coil, SPNO contact, 90-290Q): coil taps the 24VAC pair in parallel
+# (non-invasive), contact closes 3.3V to the GPIO when the coil is energized.
+# Requires an external 10k pulldown resistor to GND — ESP8266 has no internal
+# pulldown option except on GPIO16, so this reads HIGH (active) when closed
+# and needs the resistor to read a clean LOW (idle) when open.
+# Relay: across trio 24VAC AFTER the Tecmark flow switch — true pool heat active state.
 binary_sensor:
   - platform: gpio
     pin:
-      number: ${pin_opto_heat_active}
-      mode: INPUT_PULLUP
-      inverted: true
+      number: ${pin_relay_heat_active}
+      mode: INPUT
     name: "Pool Heat Active"
     id: pool_heat_active
-    device_class: heat
-    filters:
-      - delayed_on: 2s
-      - delayed_off: 2s
-
-  - platform: gpio
-    pin:
-      number: ${pin_opto_pump_call}
-      mode: INPUT_PULLUP
-      inverted: true
-    name: "FPH Pump Call"
-    id: fph_pump_call
     device_class: running
     filters:
       - delayed_on: 2s
       - delayed_off: 2s
 
 # ── DS18B20 temperature probes ────────────────────────────────────────────
-# First boot: check ESPHome logs for "Found dallastemp device at address 0x..."
-# Fill in the three addresses below. All probes share one bus.
-# Probe placement: in_temp = HX inlet well, out_temp = HX outlet well, pool_temp = pool return.
+# Addresses confirmed via boot-scan log 2026-07-27. in/out assignment below
+# is a guess (first/second found) — verify by warming one probe and checking
+# which entity moves in HA; swap the two address values if backwards.
+# Probe placement: in_temp = HX inlet well, out_temp = HX outlet well.
+# Pool return probe deferred — add a third dallas_temp block here later if wired.
 one_wire:
   - platform: gpio
     pin: ${pin_one_wire}
+    id: ow_bus
 
 sensor:
   - platform: dallas_temp
-    address: 0x0000000000000000   # ← replace after first-boot address scan
+    address: 0xe40b244456303128
     name: "HX Water In Temp"
     id: hx_water_in_temp
     unit_of_measurement: "°F"
@@ -85,19 +79,9 @@ sensor:
       - filter_out: nan
 
   - platform: dallas_temp
-    address: 0x0000000000000001   # ← replace after first-boot address scan
+    address: 0x110b244453050b28
     name: "HX Water Out Temp"
     id: hx_water_out_temp
-    unit_of_measurement: "°F"
-    accuracy_decimals: 1
-    filters:
-      - lambda: return x * 9.0/5.0 + 32.0;
-      - filter_out: nan
-
-  - platform: dallas_temp
-    address: 0x0000000000000002   # ← replace after first-boot address scan
-    name: "Pool Temp"
-    id: pool_temp
     unit_of_measurement: "°F"
     accuracy_decimals: 1
     filters:
@@ -118,7 +102,11 @@ sensor:
     accuracy_decimals: 1
     update_interval: 10s
     filters:
-      - multiply: 0.1   # placeholder — calibrate against Blue-White at 2200 RPM
+      # Theoretical, from DN50 sensor datasheet: 12 pulses/liter, 1L=0.2642gal.
+      # GPM = pulses/min ÷ 12 × 0.2642 = pulses/min × 0.02201
+      # Confirm via sequential calibration (Blue-White gauge, then this sensor,
+      # both at locked 2200 RPM — can't install both in the run at once).
+      - multiply: 0.02201   # theoretical — verify against Blue-White at 2200 RPM
 
   # ── Heat recovery BTU/hr ─────────────────────────────────────────────────
   # Standard pool formula: GPM × ΔT(°F) × 500 = BTU/hr
