@@ -20,6 +20,28 @@ The protection is **hardware, not software.** No computer, no Wi-Fi, no Home Ass
 
 ---
 
+## How a cycle actually runs — the operating sequence
+
+No single page of the FPH manual states this plainly, and it is the thing to understand before touching anything.
+
+1. **A/C compressor starts.** Cooling only — heat recovery never runs on a heating call.
+2. **The FPH controller immediately calls the pool pump**, *before* it has decided whether to heat anything. The system is still in normal liquid-to-air mode: refrigerant to the outdoor coil, fan running, valves at rest. The controller closes its terminal-4 output; the IntelliComm II sees 24VAC on Program 4; the pump spins up to Ext. Program 4 at 2200 RPM.
+3. **~20-second purge delay.** The controller runs the pump to flush stagnant water out of the heat exchanger, so the PT-100 reads real circulating pool water and not a slug that has been sitting in the shell.
+4. **The controller samples the PT-100** against the pool setpoint:
+   - **Pool at or above setpoint** → no heating. Stays liquid-to-air and cools the house normally. Nothing diverts.
+   - **Pool below setpoint** → proceed.
+5. **Flow proves itself.** The pump has been running since step 2, so water is already moving. If flow is at or above the Tecmark's trip point, the flow switch closes.
+6. **Diversion engages.** 24VAC reaches the 90340 coil → condenser fan off, heat reclaim valve and bi-directional solenoid on. The system is now liquid-to-liquid: compressor heat goes into the pool instead of the outdoor air. `binary_sensor.pool_pad_pool_heat_active` goes true.
+7. **Temp Re-Check.** The controller periodically re-samples the PT-100 and drops the call once the pool reaches setpoint.
+8. **On release**, the pump keeps running through the Program-4 stop delay (≥60 s) to flush the exchanger before stopping.
+
+**Two consequences a troubleshooter must know:**
+
+- **The pump does not need to already be running.** The system cold-starts it. A/C on + pool below setpoint = free heat, regardless of the pump's own schedule. This is why the IntelliComm's call is wired *upstream* of the flow switch (see Part 2) — if it were downstream, the pump could never start, because the flow switch can't close until the pump is already moving water. That would be a deadlock.
+- **A running pump is not evidence that heat is being recovered.** Steps 2–4 spin the pump up on *every* A/C start, including the times the answer turns out to be "pool's warm enough." **Pump at 2200 RPM with the condenser fan still spinning is normal.** It is not a stuck relay. Judge diversion by the fan and the valves, never by the pump.
+
+---
+
 ## Cast of characters
 
 | Thing | What it is | Where it lives |
@@ -92,6 +114,15 @@ The FPH manual's p.22 diagram shows the flow switch inserted in the SWITCHED LEG
 
 The manual's p.9 diagram shows the IntelliComm II hanging off the controller, with its GPM/RPM Program inputs (9–24V AC/DC, unpolarized) driven by 24VAC. Ours is on **Program 4 / input 4**.
 
+**The merge point the two pages never show together: the switched leg splits into two branches at terminal 4.** Page 9 draws the pump-call branch. Page 22 draws the diversion branch. Neither page draws both, because neither page imagines the other's system. Ours has both, and *the order matters*:
+
+| Branch | Path | Gated by flow switch? | Why |
+|---|---|---|---|
+| **A — pump call** | Terminal 4 → IntelliComm II Program 4 | **No** | The pump must be able to cold-start. Gating it on flow would deadlock: no pump → no flow → no switch closure → no pump |
+| **B — diversion** | Terminal 4 → Tecmark flow switch → 90340 coil | **Yes** | Refrigerant may only divert into the exchanger once water movement is physically proven |
+
+Both branches return through the same COMMON LEG (the yellow at coil A). The White Rodgers sensing coil sits on branch B, after the flow switch, so it reports *actual diversion* rather than merely "the controller asked."
+
 ### Master diagram — as built
 
 ```
@@ -112,73 +143,81 @@ The manual's p.9 diagram shows the IntelliComm II hanging off the controller, wi
          │                           AND pool is below setpoint,
          │                           after a 20 s purge delay)
          │                                │
-         │                                ▼
-         │                        ┌──────────────────┐
-         │                        │  TECMARK 3010P   │  ◄── OUR ADDITION (manual p.22)
-         │                        │  flow switch     │      Mechanical. Closes only when
-         │                        │  (SPNO)          │      pool water is actually moving.
-         │                        └────────┬─────────┘
-         │                                 │  WHITE wire
-         │                                 │  ("proven heat call": controller says heat
-         │                                 │   AND water is proven flowing)
-         │                                 │
-         │                                 ├──────────────► tap ──┐
-         │                                 │                      │
-         │                                 ▼                      │
-         │                   ┌─────────────────────────┐          │
-         │                   │  MARS/SUPCO 90340 DPDT  │          │
-         │                   │                         │          │
-         │                   │  COIL B (right)  ◄──────┼── WHITE  │
-         ├───────────────────┼──►  COIL A (left)       │          │
-         │  (via RED, on the │      = YELLOW + RED     │          │
-         │   trio common bus)│              │          │          │
-         │                   │              └─ YELLOW ─┼──────────┼──► tap ──┐
-         │                   │                         │          │          │
-         │                   │  Pole 1:  T1 ●──NC──● T2├── to CONDENSER FAN  │
-         │                   │           (T3 unused)   │                     │
-         │                   │  Pole 2:  T4 ●──NO──● T6├── RED, to HEAT      │
-         │                   │           (T5 unused)   │    RECLAIM VALVE +  │
-         │                   └─────────────────────────┘    BI-DIR SOLENOID  │
-         │                     T1 = BLACK from transformer                   │
-         │                     T4 = WHITE from transformer  ⚠ different white │
-         │                                                                    │
-         └──► to the other side of the trio (heat reclaim valve,             │
-              bi-directional solenoid, NC fan relay) — the parallel          │
-              "trio bus", pigtailed in the FPH box under the LCD             │
-                                                                             │
-   ══════════════ NEW BOX AT THE POOL PAD (added by us) ═══════════════      │
-                                                                             │
-        WHITE tap ──────┬──────────────────────────────────────┐             │
-        (switched)      │                                      │             │
-                        ▼                                      ▼             │
-              ┌──────────────────┐                  ┌────────────────────┐   │
-              │ WHITE RODGERS 84 │                  │  PENTAIR           │   │
-              │ 24VAC coil       │                  │  INTELLICOMM II    │   │
-              │ (sensing only)   │                  │  GPM/RPM 4         │   │
-              │                  │                  │  (Program 4 input, │   │
-              │ SPNO contact:    │                  │   9–24V AC/DC,     │   │
-              │  3.3V ─●  ●─ GPIO5│                 │   unpolarized)     │   │
-              └──────────────────┘                  └─────────┬──────────┘   │
-                        ▲                                     │              │
-        YELLOW tap ─────┴─────────────────────────────────────┴──────────────┘
-        (common)                                              │
-                                                         RS-485 cable
-                                                              │
-                                                              ▼
-                                                   PENTAIR INTELLIFLO2 VST
-                                                   runs Ext. Program 4
-                                                   @ 2200 RPM (~55–60 GPM)
+         │                    ┌───────────┴────────────┐
+         │                    │                        │
+         │              (branch A: PUMP CALL)    (branch B: DIVERSION)
+         │              unconditional —                │
+         │              this is what lets the          ▼
+         │              pump COLD-START          ┌──────────────────┐
+         │                    │                  │  TECMARK 3010P   │ ◄── OUR ADDITION
+         │                    │                  │  flow switch     │     (manual p.22)
+         │                    │                  │  (SPNO)          │     Mechanical. Closes
+         │                    │                  └────────┬─────────┘     only when pool water
+         │                    │                           │  WHITE wire   is actually moving.
+         │                    │                           │  ("proven heat call")
+         │                    │                           │
+         │                    │                           ├──────► tap ──┐
+         │                    │                           │              │
+         │                    │                           ▼              │
+         │                    │     ┌─────────────────────────┐          │
+         │                    │     │  MARS/SUPCO 90340 DPDT  │          │
+         │                    │     │                         │          │
+         │                    │     │  COIL B (right) ◄───────┼── WHITE  │
+         ├──────────────────────────┼──► COIL A (left)        │          │
+         │  (via RED, on the  │     │     = YELLOW + RED      │          │
+         │   trio common bus) │     │            │            │          │
+         │                    │     │            └── YELLOW ──┼──► tap ──┼──┐
+         │                    │     │                         │          │  │
+         │                    │     │ Pole 1: T1 ●──NC──● T2  ├── to CONDENSER FAN
+         │                    │     │         (T3 unused)     │          │  │
+         │                    │     │ Pole 2: T4 ●──NO──● T6  ├── RED, to HEAT
+         │                    │     │         (T5 unused)     │   RECLAIM VALVE +
+         │                    │     └─────────────────────────┘   BI-DIR SOLENOID
+         │                    │       T1 = BLACK from transformer    │  │
+         │                    │       T4 = WHITE from transformer ⚠ different white!
+         │                    │                                      │  │
+         └──► to the other side of the trio (heat reclaim valve,     │  │
+              bi-directional solenoid, NC fan relay) — the parallel  │  │
+              "trio bus", pigtailed in the FPH box under the LCD     │  │
+                                                                     │  │
+   ═════════════ NEW BOX AT THE POOL PAD (added by us) ═════════════ │  │
+                                                                     │  │
+     branch A ───────────────────────────────┐        WHITE tap ─────┘  │
+     (terminal 4, NOT flow-gated)            │        (flow-gated)      │
+                                             │              │           │
+                                             ▼              ▼           │
+                              ┌────────────────────┐  ┌──────────────────┐
+                              │  PENTAIR           │  │ WHITE RODGERS 84 │
+                              │  INTELLICOMM II    │  │ 24VAC coil       │
+                              │  GPM/RPM 4         │  │ (SENSING ONLY —  │
+                              │  (Program 4 input, │  │  not safety)     │
+                              │   9–24V AC/DC,     │  │                  │
+                              │   unpolarized)     │  │ SPNO contact:    │
+                              │                    │  │ 3.3V ─●  ●─ GPIO5│
+                              └─────────┬──────────┘  └──────────────────┘
+                                        │                     ▲           │
+                    YELLOW tap (common) ┴─────────────────────┴───────────┘
+                                        │
+                                   RS-485 cable
+                                        │
+                                        ▼
+                             PENTAIR INTELLIFLO2 VST
+                             runs Ext. Program 4
+                             @ 2200 RPM (~55–60 GPM)
 ```
 
-### The single most important sentence in this document
+### The single most important paragraph in this document
 
-**One 24VAC signal — the wire coming out of the flow switch — does three things at once: it energizes the 90340 (fan off, valves open), it energizes the White Rodgers (dashboard indicator), and it tells the IntelliComm II to run the pump at heat-recovery speed.** All three are wired in parallel across the same pair (switched WHITE / common YELLOW). That is why they can never disagree, and that is the whole design.
+**There is one common leg and two switched points, not one signal.** FPH controller terminal 4 closes whenever the compressor runs, and it does two separate things: it calls the pump *immediately and unconditionally* (branch A → IntelliComm Program 4), and it offers 24VAC to the diversion circuit *only through the flow switch* (branch B → Tecmark → 90340 coil). The pump is therefore allowed to start with no flow — it must be, or nothing could ever start — while the valves are never allowed to move without proven flow. **The pump running tells you the compressor is on. Only the fan stopping tells you heat is actually being recovered.**
 
-### ⚠ UNVERIFIED — confirm with a meter
+### ⚠ INFERRED — trace to confirm (does not block use)
 
-The second conductor of the IntelliComm II Program-4 input pair is documented above as tapping the WHITE (switched) wire, in parallel with the 90340 coil. This is the only electrically consistent arrangement given the confirmed facts (the yellow from coil A goes to the IntelliComm; coil B carries only the white from the flow switch), but it was inferred rather than traced.
+That terminal-4 split is inferred, not traced wire-by-wire. It is the only arrangement consistent with all known facts: the yellow from coil A goes to the IntelliComm; coil B carries only the white from the flow switch; and the pump demonstrably cold-starts on A/C start before any heating decision is made — which is impossible if the IntelliComm's hot side sits downstream of the flow switch.
 
-**Two-minute test:** meter on VAC across the IntelliComm's Program-4 input terminals. With the A/C off, expect ~0V. With the A/C running, pool below setpoint, and the pump moving water, expect ~24VAC. If you get 24VAC at Program 4 while the flow switch is *open*, stop — that's a real problem, and it means the IntelliComm is tapped upstream of the flow switch.
+**The discriminating test, two minutes:** meter VAC across the IntelliComm's Program-4 input terminals during the purge phase — A/C just started, pump spinning up, flow switch not yet closed (fan still running, valves at rest).
+
+- **~24VAC → confirmed.** Branch A is upstream of the flow switch, as documented. Delete this warning box.
+- **~0V → the documentation is wrong.** The IntelliComm is fed from somewhere else entirely, and the actual pump-call source needs tracing before anyone trusts Part 2.
 
 ---
 
@@ -204,7 +243,16 @@ The second conductor of the IntelliComm II Program-4 input pair is documented ab
 
 **Failure modes:**
 - **Stuck open** (won't close despite real flow) → you get no free pool heat. Annoying, costs nothing, hurts nothing. Symptom: A/C running, pool cold, pump not spinning up, dashboard "Pool Heat Active" stays off.
-- **Stuck closed** (closes with no flow) → **this is the dangerous one.** The safety chain is defeated and diversion can happen into stagnant water. This is why Home Assistant cross-checks "heat active" against measured flow (see Part 4) — that alert exists specifically to catch this.
+- **Stuck closed** (closes with no flow) → **this is the dangerous one.** The safety chain is defeated and diversion can happen into stagnant water.
+
+**⚠ What actually backstops the dangerous case today — read this, it is narrower than you'd hope:**
+
+| Failure | Covered now? | By what |
+|---|---|---|
+| Flow switch closed, **pump not powered** | **Yes** | Shelly EM CT on the pump circuit. HA alerts if `pool_heat_active` is true while pump watts are near zero |
+| Flow switch closed, **pump powered but water not actually moving** — blocked impeller, closed valve, air lock, clogged filter, failed switch | **No. Uncovered.** | Nothing. The flow *meter* is not installed yet |
+
+The pump-watts check is a proxy for flow, not a measurement of it. **Until the flow meter in section 5.1 is installed, no instrument in this system measures actual water movement** — the only real flow proof is the Tecmark itself, and these are the failures where the Tecmark is the thing that failed. That is why the flow meter is a safety item, not a nice-to-have data toy, and why section 3.1's calibration discipline (replace a switch that won't hold a stable trip point, don't nurse it) matters more than it otherwise would.
 
 ### 3.2 Mars/Supco 90340 relay
 
@@ -270,7 +318,7 @@ Source: [Supco 90340 Installation Instructions](https://www.manualslib.com/manua
 | Property | Value |
 |---|---|
 | Input used | **GPM/RPM 4 (Program 4)**, 9–24V AC/DC, **voltage-driven, not dry-contact**, unpolarized |
-| Fed by | The switched WHITE / common YELLOW pair — same signal as the 90340 coil |
+| Fed by | **Branch A** — FPH controller terminal 4 directly, *upstream of the flow switch*, returning on the common YELLOW. Not the same point as the 90340 coil (see Part 2) |
 | Output | RS-485 to the pump |
 | Pump program | **Ext. Program 4, locked at 2200 RPM** (~55–60 GPM, measured against the Blue-White gauge — not estimated) |
 | Stop delay | Max available / ≥60 s — flushes the heat exchanger after the FPH releases the call |
@@ -336,9 +384,9 @@ Both are converted from °C to °F in the ESPHome config. A third probe for pool
 
 ### 4.5 The alerts that matter
 
-- `pool_heat_active` **&&** pump not running for >30 s → **critical.** The hardware interlock has failed or been bypassed. Investigate immediately.
-- `pool_heat_active` **&&** `pool_flow_gpm ≈ 0` sustained → **critical.** This is the flow-switch-stuck-closed case: diverting refrigerant into stagnant water. This alert is the entire reason the flow sensor is worth installing.
-- Pump off during scheduled hours → warning only.
+- **LIVE** — `pool_heat_active` **&&** pump not drawing power for >30 s → **critical.** The hardware interlock has failed or been bypassed. Investigate immediately.
+- **NOT YET LIVE** (needs the flow meter) — `pool_heat_active` **&&** `pool_flow_gpm ≈ 0` sustained → **critical.** The flow-switch-stuck-closed case: diverting refrigerant into stagnant water while the pump spins uselessly. This alert is the entire reason the flow sensor is worth installing, and until it exists that failure is undetected. See the coverage table in 3.1.
+- **LIVE** — pump off during scheduled hours → warning only.
 
 ---
 
@@ -398,33 +446,45 @@ Is the A/C compressor actually running?
    ├─ Yes → Nothing is wrong. The controller stops calling once the pool is warm enough.
    └─ No
       │
-      Wait 20+ seconds. (The controller force-runs a 20 s purge delay before
+      Wait 20+ seconds. (The controller force-runs a ~20 s purge delay before
       it samples the water temperature. Judging it sooner is judging it wrong.)
       │
-      Did the pool pump spin up to ~2200 RPM?
-      ├─ Yes → Is the condenser fan still spinning?
-      │        ├─ Yes → 90340 pole 1 is not transferring. Suspect the relay itself.
-      │        │        Meter T1→T2 (should open when energized) and T1→T3 (should close).
-      │        └─ No  → System is working. Confirm at the exchanger: outlet temp should
-      │                 climb above inlet within a few minutes. If ΔT is small, that's
-      │                 likely a stage-1 compressor run, not a fault (see 5.3).
-      └─ No
+      Did the pool pump spin up to ~2200 RPM on its own?
+      ├─ No → The PUMP CALL (branch A) is broken, so nothing downstream can
+      │       ever happen. Diagnose this first — see 6.2. Nothing else in
+      │       this tree matters until the pump responds.
+      └─ Yes  (note: this alone does NOT mean heat is being recovered)
          │
-         Meter 24VAC across the 90340 COIL (coil A yellow ↔ coil B white).
-         ├─ ~24VAC present → Coil is energized but nothing moved: the 90340 has failed.
-         │                   Replace it. It's a generic HVAC part, widely stocked.
-         │                   (Also verify the IntelliComm/pump side: see 6.2.)
-         └─ ~0V
+         Is the condenser fan STILL SPINNING after ~30 s of pump run?
+         ├─ No  → System is working correctly. The fan stopping is the real
+         │        "heat recovery is on" indicator. Confirm at the exchanger:
+         │        outlet temp should climb above inlet within a few minutes.
+         │        Small ΔT is likely a stage-1 compressor run, not a fault (5.3).
+         └─ Yes → Diversion (branch B) never engaged. Two innocent explanations
+                  first: (a) the pool is already at/above setpoint, so the
+                  controller correctly chose not to heat — check the setpoint
+                  and the PT-100 reading; (b) you're still inside the purge
+                  delay. If neither, continue:
             │
-            Meter 24VAC across the FLOW SWITCH terminals with the pump running.
-            ├─ Switch is OPEN (voltage across it) with real flow
-            │   → Flow switch is not closing. Either flow is genuinely below its
-            │     trip point (check the Blue-White gauge — need 45+ GPM), or the
-            │     switch needs readjusting, or it has failed. DO NOT JUMPER IT.
-            └─ Switch is CLOSED (no voltage across it)
-               → The signal isn't arriving from the FPH controller.
-                 Check controller terminal 4 and the blue butt connector.
-                 That's inside the FPH — installer/HotSpot territory.
+            Meter 24VAC across the 90340 COIL (coil A yellow ↔ coil B white).
+            ├─ ~24VAC present → Coil is energized but the contacts didn't move:
+            │                   the 90340 has failed. Replace it — generic HVAC
+            │                   part, widely stocked. Verify with T1→T2 (should
+            │                   open when energized) and T4→T6 (should close).
+            └─ ~0V
+               │
+               Meter 24VAC across the FLOW SWITCH terminals, pump running.
+               ├─ Switch OPEN (voltage across it) despite real flow
+               │   → Flow switch isn't closing. Either flow is genuinely below
+               │     its trip point (check the Blue-White gauge — need 45+ GPM;
+               │     also check filter, valves, and for air lock), or the switch
+               │     needs readjusting, or it has failed. DO NOT JUMPER IT.
+               └─ Switch CLOSED (no voltage across it)
+                   → Signal isn't arriving from the FPH controller at all.
+                     Check controller terminal 4 and the blue butt connector.
+                     Inside the FPH — installer/HotSpot territory.
+                     (If the pump started, terminal 4 is closing, so suspect the
+                      wiring between terminal 4 and the flow switch.)
 ```
 
 ### 6.2 "Pool heat is running but the pump isn't" — STOP
@@ -451,7 +511,7 @@ This is a **sensing** problem, not a heating problem. The pool system is fine; t
 | 90340 coil (A ↔ B) | ~0V | **~24VAC** |
 | 90340 T1→T2 (fan) | closed / continuity | **open** |
 | 90340 T4→T6 (valves) | open | **closed / continuity** |
-| IntelliComm Program-4 input | ~0V | **~24VAC** |
+| IntelliComm Program-4 input | ~0V | **~24VAC** — and also ~24VAC during the purge phase, *before* the flow switch closes. That's branch A working correctly, not a fault |
 | White Rodgers contact | open | **closed / continuity** |
 
 ### 6.5 Ground rules for anyone working on this
@@ -465,7 +525,46 @@ This is a **sensing** problem, not a heating problem. The pool system is fine; t
 
 ---
 
-## Part 7 — Photos
+## Part 7 — Equipotential bonding (NEC Article 680)
+
+**Status: OPEN ITEM. The FPH heat exchanger is not currently bonded.** The IntelliFlo2 VST and the booster/sweep pump are bonded. This section is what a licensed electrician should be handed.
+
+**Not legal advice, and I am not an electrician.** Article 680 is enforced by your AHJ and California amends the NEC as the CEC. Have this verified and signed off. What follows is the reasoning and the standard practice, so the conversation starts from the right place.
+
+### Bonding is not grounding
+
+The equipotential bond has one job: hold every conductive thing a wet person can touch at the *same* voltage, so there is no potential difference to drive current through a body. It is **not** a fault-clearing path, it does not go to the panel neutral, and it is not the equipment grounding conductor. A pad can be perfectly grounded and still lethally un-bonded.
+
+The physical form is a **8 AWG solid bare copper** loop tying the pool shell steel, perimeter, and equipment together. Yours already exists — it's the bare copper running between the pump motors' bonding lugs.
+
+### What needs bonding here, and why
+
+| Component | Bond required? | Reasoning |
+|---|---|---|
+| **FPH heat exchanger** (the blue cylinder — copper/titanium coil in contact with circulating pool water, metal shell) | **Yes — do this one.** | 680.26(B)(6): metal parts of equipment associated with the pool water circulating system. A heat exchanger is functionally a heater in the circulating path; heaters get bonded. It is also the largest conductive surface in contact with pool water on the pad, which makes it relevant to 680.26(C)'s pool-water bond (≥9 in² of conductive surface intentionally bonded). Also: it's the one component in this system carrying refrigerant from a 240V machine into water |
+| **New pad box** | **Only if it's metallic.** | A non-metallic enclosure containing only Class 2 low-voltage (24VAC control, 12V, 5V, 3.3V) has no metal to bond and no bonding requirement. If the enclosure is metal, bond it |
+| **Hall-effect flow meter** (5.1, not yet installed) | **Depends on body material.** Plastic body → nothing to bond. Brass/metal body → **yes**, bond it | 680.26(B)(6) again — a powered metal component in the circulating water path. Decide when the part is in hand. Note it is a powered device, which makes the metal-body case less optional than for a passive fitting |
+| **PT-100 probe** (factory, inside the FPH) | **No separate bond.** | It's a factory sensor inside the FPH assembly. If the FPH shell is bonded, address it as part of that assembly rather than as a separate item. Do not improvise a bond onto a manufacturer's sensor |
+| **DS18B20 probes and the Tecmark flow switch** (metal, threaded into the HX ports) | **No separate bond**, but see caveat | These are small metal parts mechanically continuous with the HX shell, so bonding the shell addresses them. **Caveat:** the threads have Teflon tape on them, so do not *rely* on those joints as a bonding path for anything else — bond the shell itself at a proper lug |
+| **24VAC control circuit, ESP8266, buck converter** | **No.** | Class 2 low-voltage circuits. Never connect the bonding conductor to the ESP's ground, the buck converter, or any signal common. Doing so injects pad currents straight into your electronics and accomplishes nothing for safety |
+
+### How to bond the heat exchanger
+
+1. **Kill power** at the breaker — both the A/C 240V and the pump circuits.
+2. **Look for a factory bonding lug** on the FPH assembly or its mounting bracket first. If there is one, use it; that's what it's for.
+3. **If there is no lug:** fit a **listed bonding/grounding lug** (brass or stainless, listed for the purpose, and **direct-burial rated** if any part of the run is buried) to clean bare metal on the HX shell or its metal mounting bracket. Scrape paint/coating to bright metal at the contact point. Stainless hardware.
+4. **Run 8 AWG solid bare copper** from that lug to the existing pad bonding loop — the same bare copper that already lands on the IntelliFlo2's and the sweep pump's bonding lugs. Solid, not stranded; 8 AWG minimum; **no smaller, no splices if avoidable**, and any connection must be listed for direct burial and for the metals involved.
+5. **Use anti-oxidant compound** at dissimilar-metal connections (copper to stainless/aluminum), and torque lugs to spec.
+6. **Do not** run the bonding conductor to the panel, to a ground rod as a substitute, or to any low-voltage common.
+7. **Verify:** with power off, measure resistance from the new lug back to the pump motor bonding lug — should be essentially zero (well under 1 Ω, ideally a fraction of that). A reading in the tens of ohms means you have a corroded or paint-insulated connection, not a bond.
+
+### What to ask the electrician
+
+*"The pool heat exchanger on the pad has copper/titanium in contact with circulating pool water and isn't tied into the equipotential bonding grid. The two pump motors are. Can you land an 8 AWG solid bare copper bond from the exchanger to the existing loop, and confirm it satisfies 680.26(B) and the (C) water-bond requirement for this install?"*
+
+---
+
+## Part 8 — Photos
 
 Drop box photos in `docs/images/` and link them here. The ones worth having, in priority order:
 
@@ -476,3 +575,38 @@ Drop box photos in `docs/images/` and link them here. The ones worth having, in 
 5. The white/yellow tap points feeding the White Rodgers coil and the IntelliComm input.
 
 Link them inline in the relevant section, e.g. `![90340 terminals](images/90340-terminals.jpg)`.
+
+---
+
+## Part 9 — Changelog
+
+This document claims authority over the FPH manual for this install. That claim is only worth something if changes are traceable. **Every edit that changes a fact — a wire, a terminal, a trip point, a status — gets a line here.** Cosmetic edits don't.
+
+Status vocabulary used throughout:
+
+| Tag | Meaning |
+|---|---|
+| **VERIFIED** | Physically traced or measured, in person, on this system |
+| **INFERRED** | The only arrangement consistent with known facts, but not directly traced. Flagged inline with ⚠ |
+| **PLANNED** | Not built yet. Nothing in the field matches it |
+
+Page citations are to the HotSpot FPH installer manual, 44-page scanned PDF, **printed page numbers** (which run ~1–2 behind the PDF page index). Edition/revision is unmarked in the scan — if a differently-paginated copy surfaces, re-cite everything.
+
+| Date | Change |
+|---|---|
+| 2026-07-30 | Document created. 90340 terminal assignments VERIFIED by tracing the box in person, resolving two earlier rounds of misreading the silkscreen (see 3.2). |
+| 2026-07-30 | Tecmark 3010P recorded as installed, wired in the switched leg, and calibrated — VERIFIED. |
+| 2026-07-30 | White Rodgers Type 84 recorded as installed and reading in HA — VERIFIED. |
+| 2026-07-30 | **Correction:** original draft claimed one 24VAC signal drove the 90340, the White Rodgers, and the IntelliComm in parallel, all downstream of the flow switch. That is wrong — it would deadlock the pump, which cannot start when the flow switch is open. Rewritten as one common leg with **two switched branches** off controller terminal 4: pump call (not flow-gated) and diversion (flow-gated). Branch A's tap point is INFERRED; discriminating meter test written up in Part 2. |
+| 2026-07-30 | Added the operating sequence section, and the consequence that a running pump does **not** indicate heat recovery — the condenser fan stopping does. Troubleshooting tree in 6.1 rebuilt around the fan rather than the pump. |
+| 2026-07-30 | **Correction:** 3.1 implied HA cross-checks heat-active against measured flow. It does not — the flow meter isn't installed. Replaced with an explicit coverage table: pump-not-powered is covered by the Shelly CT; pump-powered-but-no-actual-flow is **uncovered today**. Reclassifies the flow meter from data toy to safety item. |
+| 2026-07-30 | Added Part 7 — equipotential bonding. FPH heat exchanger is **not bonded**; logged as an open item for a licensed electrician. |
+
+### Open items carried forward
+
+- [ ] Run the branch-A meter test (Part 2) and either delete the ⚠ box or re-trace.
+- [ ] Bond the FPH heat exchanger to the pad loop (Part 7).
+- [ ] Install and calibrate the flow meter (5.1) — safety-relevant, see 3.1 coverage table.
+- [ ] Take the Part 8 photos, 90340 terminals first.
+- [ ] Copy the FPH manual PDF into the repo so this document stands alone without a `~/Desktop` path.
+- [ ] Label wires physically at the 90340 and the pad box — ferrules or numbered markers — given the documented white/white collision. Prose warnings don't survive a rewire.
