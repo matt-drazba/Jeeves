@@ -1,9 +1,9 @@
 # Pool Heat Recovery — As-Built Wiring Manual
 
-**What this is:** the field manual for the pool heat recovery system as it is *actually wired at this house*, which is not what the HotSpot FPH manual describes. Written so that an electrician, an HVAC tech, or a neighbor who has never seen this system can open the boxes, understand what they're looking at, and troubleshoot it without me present.
+**What this is:** the field manual for the pool heat recovery system as it is *actually wired at this house*, which has real differences and modifications compared to the HotSpot FPH manual. Written so that an electrician, an HVAC tech, a neighbor, a child of the house, or a prospective homebuyer who has never seen this system can open the boxes, understand what they're looking at, and troubleshoot it without me present.
 
 Last updated: 2026-07-30.
-Companion docs: [pool_heat_recovery.md](pool_heat_recovery.md) (design rationale, project status, HA/Jeeves layer) and the HotSpot FPH installer manual PDF (`~/Desktop/Hot Spot Energy FPH Free Pool Heater Manual.pdf`).
+Companion docs: [pool_heat_recovery.md](pool_heat_recovery.md) (design rationale, project status, Home Assistant / Jeeves custom dashboard layer) and the HotSpot FPH installer manual PDF (`~/Desktop/Hot Spot Energy FPH Free Pool Heater Manual.pdf`).
 Authority order when docs disagree: **this doc** (as-built) → FPH manual (generic) → anything else.
 
 ---
@@ -12,11 +12,13 @@ Authority order when docs disagree: **this doc** (as-built) → FPH manual (gene
 
 **Refrigerant must never be diverted into the heat exchanger unless pool water is actually flowing through it.**
 
-If the A/C compressor sends hot refrigerant into the FPH heat exchanger while the pool pump is off, the water in the exchanger boils/stagnates, and you can damage the heat exchanger and the compressor (FPH manual, printed p.25). Every piece of hardware described in this document exists to make that state physically impossible.
+If the A/C compressor sends hot refrigerant into the FPH heat exchanger while the pool pump is off, the water in the exchanger boils/stagnates, and you can damage the heat exchanger and the compressor (FPH manual, printed p.25). Almost every piece of hardware described in this document exists either to make that state physically impossible, or to raise an alert so it can be stopped.
 
-The protection is **hardware, not software.** No computer, no Wi-Fi, no Home Assistant, and no Raspberry Pi sits in the safety path. The Tecmark flow switch is a mechanical switch in the 24VAC control leg: no flow, no circuit, no diversion. If the network is down, the Pi is unplugged, and the house is on fire, the flow switch still works.
+**The protection emphasizes hardware, not software.** Hardware means no computer, no Wi-Fi, no Home Assistant, and no Raspberry Pi sits in the safety path. The Tecmark flow switch is a mechanical switch in the 24VAC control leg running from the FPH controller to the valve/fan relay (the Mars 90340). **No flow through the pool pipes → the Tecmark stays open → no circuit to the valve/fan relay → no diversion.** If the network is down, the Pi is unplugged, and the house is on fire, the flow switch still works.
 
-**Corollary for anyone troubleshooting:** do not jumper across the flow switch "just to test something." That is the exact dangerous state, with nothing left to catch it.
+Think of it as a light switch that nothing but pool water can turn on: below roughly 45–50 GPM it is off, and no amount of electronics can flip it.
+
+**Corollary for anyone troubleshooting: do not jumper across the flow switch "just to test something."** This warning is here because jumpering a suspect switch is a normal, sensible diagnostic habit in HVAC work — it is how you prove whether a control circuit or the switch is at fault. On this system that habit is the one move that creates the dangerous state with nothing left to catch it. If you need to prove the switch, meter across it (Part 6.4); do not bridge it.
 
 ---
 
@@ -26,19 +28,21 @@ No single page of the FPH manual states this plainly, and it is the thing to und
 
 1. **A/C compressor starts.** Cooling only — heat recovery never runs on a heating call.
 2. **The FPH controller immediately calls the pool pump**, *before* it has decided whether to heat anything. The system is still in normal liquid-to-air mode: refrigerant to the outdoor coil, fan running, valves at rest. The controller closes its **terminal 3** output; the IntelliComm II sees 24VAC on Program 4; the pump spins up to Ext. Program 4 at 2200 RPM.
-3. **~20-second purge delay.** The controller runs the pump to flush stagnant water out of the heat exchanger, so the PT-100 reads real circulating pool water and not a slug that has been sitting in the shell.
-4. **The controller samples the PT-100** against the pool setpoint:
+3. **~2-minute purge delay** (observed). The controller runs the pump to flush stagnant water out of the heat exchanger, so the PT-100 reads real circulating pool water and not a slug that has been sitting near the filter. *(The manual describes a ~20 s purge; 2 minutes is what this system actually does. Trust the observation.)*
+4. **The controller samples the PT-100** against the pool setpoint (**currently 92 °F**):
    - **Pool at or above setpoint** → no heating. Stays liquid-to-air and cools the house normally. Nothing diverts.
-   - **Pool below setpoint** → proceed.
-5. **Flow proves itself.** The pump has been running since step 2, so water is already moving. If flow is at or above the Tecmark's trip point, the flow switch closes.
+   - **Pool below setpoint** → proceed to diversion.
+5. **Flow proves itself.** The pump has been running since step 2, so water is already moving. If flow is at or above the Tecmark's trip point, the flow switch closes and 24VAC reaches the 90340 coil.
+   - 🟨 **If flow never proves** — clogged filter, a Pentair or suction valve closed, valves not set to "filter" — the flow switch stays open and **the A/C simply stays in normal liquid-to-air mode.** Nothing breaks; you just get no free heat. Check the filter and valve positions first.
 6. **Diversion engages.** 24VAC reaches the 90340 coil → condenser fan off, heat reclaim valve and bi-directional solenoid on. The system is now liquid-to-liquid: compressor heat goes into the pool instead of the outdoor air. `binary_sensor.pool_pad_pool_heat_active` goes true.
 7. **Temp Re-Check.** The controller periodically re-samples the PT-100 and drops the call once the pool reaches setpoint.
-8. **On release**, the pump keeps running through the Program-4 stop delay (≥60 s) to flush the exchanger before stopping.
+8. **On release**, the pump keeps running through the Program-4 stop delay (**≥10 min, configurable on the pump's own screen**) to flush the exchanger before stopping. It then returns to its normal schedule — including "off," if that is what the schedule says.
 
 **Two consequences a troubleshooter must know:**
 
 - **The pump does not need to already be running.** The system cold-starts it. A/C on + pool below setpoint = free heat, regardless of the pump's own schedule. This is why the pump call comes off **terminal 3**, which is not flow-gated (see Part 2) — if it came off the flow-switch side, the pump could never start, because the flow switch can't close until the pump is already moving water. That would be a deadlock.
-- **A running pump is not evidence that heat is being recovered.** Steps 2–4 spin the pump up on *every* A/C start, including the times the answer turns out to be "pool's warm enough." **Pump at 2200 RPM with the condenser fan still spinning is normal.** It is not a stuck relay. Judge diversion by the fan and the valves, never by the pump.
+- **It is also why the FPH calls Program 4 specifically:** on the IntelliFlo2, **the highest-numbered active external program wins.** Putting the heat-recovery call on 4 means nothing else can outrank it. **This matters if programs are ever added to slots 1–3** — they will always lose to the FPH, by design. Do not "promote" anything to a higher slot to make it work.
+- **A running pump is not evidence that heat is being recovered.** Steps 2–4 spin the pump up on *every* A/C start, including the times the answer turns out to be "pool's warm enough." **Pump at 2200 RPM with the condenser fan still spinning is normal.** It is not a stuck relay. Judge diversion by the fan and the valves, never by the pump. The pump returns to its schedule ~10 minutes after the last call from the FPH/IntelliComm.
 
 ---
 
@@ -47,15 +51,17 @@ No single page of the FPH manual states this plainly, and it is the thing to und
 | Thing | What it is | Where it lives |
 |---|---|---|
 | **A/C unit** | Bryant 226ANA048-B, 4-ton two-stage heat pump | Side yard, outdoor unit |
-| **FPH** | HotSpot FPH5 "free pool heat" unit — refrigerant-to-water heat exchanger + control box | Next to the A/C unit |
-| **24VAC transformer** | 240→24V, HotSpot-supplied, fed off the load side of the A/C contactor | Inside the A/C outdoor unit |
-| **The trio** | Heat reclaim valve + bi-directional solenoid + normally-closed fan relay. All three on one 24VAC pair. Energized together = "pool heat mode" | At/inside the A/C + FPH |
+| **FPH** | HotSpot FPH5 "free pool heat" unit — refrigerant-to-water heat exchanger + control box | **On the chimney, by the pool filter** — not at the A/C unit |
+| **24VAC transformer** | 240→24V, HotSpot-supplied, fed off the load side of the A/C contactor | **Inside the heat pump** |
+| **The trio** | Heat reclaim valve + bi-directional solenoid + normally-closed fan relay. All three on one 24VAC pair. Energized together = "pool heat mode" | **Inside the heat pump** |
 | **Tecmark 3010P** | Mechanical flow switch, SPNO. Closes when pool water flow is high enough | Screwed into the FPH heat exchanger's blue outlet-water port |
-| **Mars/Supco 90340** | DPDT relay, 24VAC coil. Kills the condenser fan *and* powers the valves, together | In the FPH-side box |
+| **Mars/Supco 90340** | DPDT relay, 24VAC coil. Kills the condenser fan *and* powers the valves, together | **Inside the heat pump** |
 | **Pentair IntelliFlo2 VST** | Variable-speed pool pump, 3.0 HP | Pool equipment pad |
 | **Pentair IntelliComm II** | Translates a 24VAC signal into an RS-485 "run program N" command to the pump | **New box I added** at the pad |
 | **White Rodgers Type 84** | 24VAC-coil relay used purely as an isolated *sensor*. Not part of the safety chain | Same new box as the IntelliComm |
 | **ESP8266 (pool-pad node)** | ESPHome monitoring node — temps, flow, heat-active state → Home Assistant | Same new box as the IntelliComm |
+
+**Note the geography:** the FPH and its flow switch are at the pool filter on the chimney; the transformer, the trio, and the 90340 are all inside the heat pump in the side yard; the IntelliComm, White Rodgers, and ESP are in the new box at the pad. The 24VAC control wiring runs between all three locations — so "the wire from the flow switch to the 90340" is a run across the property, not a jumper inside one box.
 
 **Nothing inside the heat pump and nothing inside the FPH was modified by us.** Both were wired by the installer per the HotSpot manual. Every change we made lives either (a) in the 24VAC control leg between the FPH controller and the trio, or (b) in the new box at the pool pad. If you are diagnosing a problem, that boundary is where to start.
 
@@ -63,7 +69,7 @@ No single page of the FPH manual states this plainly, and it is the thing to und
 
 ## Part 1 — How our system differs from the FPH manual
 
-The HotSpot manual is written for a simple case: a single-speed pool pump, one A/C unit. We have neither of those conditions cleanly, so three things in our install are **not in the manual, or contradict it.** These are the three things that confuse everyone who opens these boxes.
+The HotSpot manual is written for a simple case: a single-speed pool pump, one single-stage A/C unit. We have neither — a **two-stage heat pump** and a **variable-speed pool pump** — so three things in our install are **not in the manual, or contradict it.** These are the three things that confuse everyone who opens these boxes.
 
 ### Difference 1 — The Mars 90340 exists, even though the manual says it shouldn't
 
@@ -77,28 +83,30 @@ We have **one** A/C unit. By that sentence, we should have no 90340. We have one
 
 > "In the case of a variable speed pool pump, contact HotSpot technical support dept. with the complete model number of your pump."
 
-In other words: **for our pump, the manual has no diagram.** There is no printed page that shows what we built. What we needed was one flow-proven 24VAC signal that simultaneously:
+In other words: **for our pump, the manual has no diagram.** HotSpot did send one — a variable-speed diagram that is *literally taped onto the bottom of printed page 9* in the physical copy, with page 10 removed. **But even that diagram is wrong for us, because the Mars 90340 does not appear on it.** So there is no printed page anywhere, factory or supplied-after-the-fact, that shows what we actually built. That is what Part 2 of this document is for. What we needed was one flow-proven 24VAC signal that simultaneously:
 
 1. **cuts power to the condenser fan** (fan must stop — the refrigerant heat is going into the pool now, not into the air), and
 2. **applies power to the heat reclaim valve and the bi-directional solenoid** (divert refrigerant into the exchanger).
 
 That is one coil switching two poles in *opposite* directions at the same instant — one contact set opening, the other closing. The Mars 90340 is a DPDT relay: one coil, two independent poles, one NC set and one NO set. It does both jobs with one part. So the 90340 is here doing **double duty as the trio's switching hub**, not the multi-unit isolation job the manual describes.
 
-(The pump call is *not* one of these jobs — it comes off controller terminal 3 and never touches this relay. See Part 2.)
+**A note on a job the 90340 does *not* do:** an earlier draft of this document listed "provide the signal that tells the IntelliComm to spin the pump up" as a third job for this relay. That was wrong. The pump is already running by the time this relay ever energizes — the FPH calls the pump from terminal 3 the moment the compressor starts, well before the flow switch closes. The pump call never touches the 90340. See Part 2 for the wiring, and the operating sequence above for why the order has to be that way.
 
 **Say this out loud to any tech who asks:** *"Yes, there's a 90340. No, we don't have two A/C units. It's here because the pump is variable-speed and the manual has no diagram for that case. It switches the fan off and the valves on at the same instant."*
 
+For exactly how it is wired, see the terminal table in **section 3.2** and the master diagram in **Part 2**.
+
 ### Difference 2 — The flow switch is our addition, wired per p.22, into a p.9 system
 
-The manual shows the flow switch (printed p.22) and the variable-speed/IntelliComm pool side (printed p.9) on **two different pages, in two different diagrams, that are never drawn together.** Each page shows half of our system. Part 2 of this document is the merged diagram — that merge is the single most useful thing in this file.
+The manual gives a wiring diagram for the flow switch (printed p.22) and a separate wiring diagram for the variable-speed / IntelliComm pool side (printed p.9), on **two different pages, never drawn together** — even though both diagrams depend on the same 24VAC feed arriving at the blue butt connector in the FPH control box. Each page shows half of our system, and nobody drew the other half. **Part 2 of this document is that merge**, and it is one of the most useful things in this file.
 
 ### Difference 3 — The White Rodgers Type 84 appears nowhere in any HotSpot document
 
-It is not in the manual, not in the parts list, not in any diagram. **It is not part of the heat recovery system at all.**
+It is not in the manual, not in the parts list, not in any diagram. **It is not part of the heat recovery system at all.** It has no physical control over anything — it exists to drive software.
 
-It is a $8 relay we added for one reason: to give the ESP8266 monitoring board a completely **electrically isolated** way to see whether the 24VAC pool-heat signal is live, without the low-voltage electronics touching the 24VAC circuit. Its coil taps the 24VAC in parallel (draws a trivial amount, changes nothing); its dry contact closes a 3.3V logic signal to the microcontroller.
+It is an $8 relay we added for one reason: to give the ESP8266 monitoring board a completely **electrically isolated** way to see whether the 24VAC pool-heat signal is live, without the low-voltage electronics touching the 24VAC circuit. Its coil taps the 24VAC in parallel (draws a trivial amount, changes nothing); its dry contact closes a 3.3V logic signal to the microcontroller. From that one signal we derive the dashboard state, the alerts, and the heat-recovery metrics — because a closed White Rodgers means *both* that the FPH is calling for heat *and* that the Tecmark has proven flow. There is no simpler way to know the system is running as designed. An optocoupler would have worked electrically; we chose the relay because it is a mechanical part any HVAC tech recognizes on sight, and less to go wrong.
 
-**If you remove the White Rodgers entirely, the pool heat recovery system continues to work perfectly.** You would only lose the dashboard indicator. Nobody troubleshooting a heating or safety problem should be looking at it. It is listed here only so that the next person who opens the box doesn't waste an hour trying to find it in the manual.
+**If you remove the White Rodgers entirely, the pool heat recovery system continues to work perfectly.** You would only lose the dashboard indicator, the alerts, and the metrics. Nobody troubleshooting a heating or safety problem should be looking at it. It is listed here only so that the next person who opens the box doesn't waste an hour trying to find it in the manual.
 
 ---
 
@@ -331,7 +339,7 @@ Source: [Supco 90340 Installation Instructions](https://www.manualslib.com/manua
 | Fed by | **FPH controller terminal 3** (not 4 — see the naming-collision note in Part 2), returning on LEG 2 / the yellow. Not flow-gated, and not the same point as the 90340 coil |
 | Output | RS-485 to the pump |
 | Pump program | **Ext. Program 4, locked at 2200 RPM** (~55–60 GPM, measured against the Blue-White gauge — not estimated) |
-| Stop delay | Max available / ≥60 s — flushes the heat exchanger after the FPH releases the call |
+| Stop delay | **≥10 min**, set on the pump's own screen — flushes the heat exchanger after the FPH releases the call, then the pump returns to its normal schedule |
 | Power | 12VDC adapter (shared with the ESP8266 — see 4.2) |
 
 **Two things that look like faults but aren't:**
@@ -340,6 +348,8 @@ Source: [Supco 90340 Installation Instructions](https://www.manualslib.com/manua
 2. The pump's 8 speed slots are **two separate lists** — 4 keypad presets and 4 external programs. Changing a keypad preset does *not* change what the IntelliComm runs. If someone "fixed" the speed on the keypad and nothing changed, this is why.
 
 **Priority rule:** on the IntelliFlo2, the **highest-numbered active external program wins.** The FPH is deliberately on input 4, the highest. Any future Home Assistant control must go on a *lower* input so that it can never override or fight the heat recovery call. See Part 5.
+
+**If programs are ever added to slots 1–3, they will always lose to the FPH.** That is intentional. If something on a lower slot "doesn't work" while heat recovery is running, it is not broken — it is being outranked. Do not fix it by moving it to a higher slot.
 
 ---
 
@@ -613,6 +623,10 @@ Page citations are to the HotSpot FPH installer manual, 44-page scanned PDF, **p
 | 2026-07-30 | Added the operating sequence section, and the consequence that a running pump does **not** indicate heat recovery — the condenser fan stopping does. Troubleshooting tree in 6.1 rebuilt around the fan rather than the pump. |
 | 2026-07-30 | **Correction:** 3.1 implied HA cross-checks heat-active against measured flow. It does not — the flow meter isn't installed. Replaced with an explicit coverage table: pump-not-powered is covered by the Shelly CT; pump-powered-but-no-actual-flow is **uncovered today**. Reclassifies the flow meter from data toy to safety item. |
 | 2026-07-30 | Added Part 7 — equipotential bonding. FPH heat exchanger is **not bonded**; logged as an open item for a licensed electrician. |
+
+| 2026-08-05 | Field corrections from the owner, merged: purge delay is **~2 min** observed (manual says ~20 s); pool setpoint **92 °F**; Program-4 stop delay **≥10 min**, set on the pump screen, after which the pump resumes its normal schedule; equipment locations corrected — **FPH + flow switch are on the chimney by the pool filter; transformer, trio, and 90340 are all inside the heat pump**; added the "highest external program wins / slots 1–3 always lose" rule; added the flow-never-proves case (clogged filter, valve closed or off "filter") and its benign outcome. |
+| 2026-08-05 | Difference 1 corrected: HotSpot supplied a variable-speed diagram **taped onto printed p.9** (p.10 removed), but it omits the 90340 — so no diagram anywhere depicts this install. Also struck the claim that the 90340 supplies the IntelliComm signal; the pump is already running from terminal 3 before this relay ever energizes. |
+| 2026-08-05 | Explained *why* the do-not-jumper warning exists (jumpering a suspect switch is normal HVAC practice and is the one move that creates the dangerous state here), and corrected a draft sentence that stated the flow switch closes on *no* flow. |
 
 ### Open items carried forward
 
