@@ -95,6 +95,25 @@ function migrate() {
     db.pragma('user_version = 4');
     console.log('DB: migrated to v4');
   }
+  if (v < 5) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS pool_heat_samples (
+        id          INTEGER PRIMARY KEY,
+        recorded_at INTEGER NOT NULL,
+        hx_in_f     REAL,
+        hx_out_f    REAL,
+        delta_f     REAL,
+        flow_gpm    REAL,
+        btu_hr      REAL,
+        heat_active INTEGER,
+        pump_watts  REAL
+      );
+      CREATE INDEX IF NOT EXISTS idx_pool_heat_recorded
+        ON pool_heat_samples(recorded_at);
+    `);
+    db.pragma('user_version = 5');
+    console.log('DB: migrated to v5');
+  }
 }
 
 migrate();
@@ -140,6 +159,40 @@ export function maybeLogEnergy(device, watts) {
     _energyLast[device] = { watts, time: now };
     try { _logEnergy.run(Math.floor(now / 1000), Math.round(watts), device); }
     catch (err) { console.error('DB energy write failed:', err.message); }
+  }
+}
+
+// ── Pool heat recovery samples ─────────────────────────────────────
+
+const _logPoolHeat = db.prepare(
+  `INSERT INTO pool_heat_samples
+     (recorded_at, hx_in_f, hx_out_f, delta_f, flow_gpm, btu_hr, heat_active, pump_watts)
+   VALUES (?,?,?,?,?,?,?,?)`
+);
+
+const POOL_HEAT_IDLE_INTERVAL_MS = 10 * 60 * 1000; // heartbeat when heat recovery is off
+let _poolHeatLastWrite = 0;
+
+/**
+ * Called on the pool pad poll (~2 min). Full resolution while heat recovery is
+ * running; a 10-minute heartbeat when it is idle, so a season of data stays small.
+ */
+export function logPoolHeat({ hxInF, hxOutF, flowGpm, btuHr, heatActive, pumpWatts }) {
+  const now = Date.now();
+  if (!heatActive && now - _poolHeatLastWrite < POOL_HEAT_IDLE_INTERVAL_MS) return;
+
+  const n = (x) => (typeof x === 'number' && !isNaN(x) ? x : null);
+  const inF = n(hxInF), outF = n(hxOutF);
+  const delta = inF !== null && outF !== null ? +(outF - inF).toFixed(2) : null;
+
+  try {
+    _logPoolHeat.run(
+      Math.floor(now / 1000), inF, outF, delta,
+      n(flowGpm), n(btuHr), heatActive ? 1 : 0, n(pumpWatts)
+    );
+    _poolHeatLastWrite = now;
+  } catch (err) {
+    console.error('DB pool heat write failed:', err.message);
   }
 }
 

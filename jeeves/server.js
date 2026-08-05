@@ -528,6 +528,7 @@ setInterval(() => fetchHomeEnergy().catch(() => {}), 30 * 1000);
 
 // ── Pool Pump (Shelly EM Gen3) ─────────────────────────────────────
 const POOL_PUMP_WATTS_THRESHOLD = 20; // matches the Shelly on-device ionizer script's threshold
+let lastPumpWatts = NaN; // most recent pump reading, paired onto each pool heat sample
 
 async function fetchPoolPump() {
   if (!HA_TOKEN) return;
@@ -537,6 +538,7 @@ async function fetchPoolPump() {
     if (isNaN(watts)) throw new Error(`unexpected state: ${res.state}`);
 
     db.maybeLogEnergy('pool_pump', watts);
+    lastPumpWatts = watts;
 
     const running = watts > POOL_PUMP_WATTS_THRESHOLD;
     const value = running ? 'Running' : 'Idle';
@@ -551,6 +553,57 @@ async function fetchPoolPump() {
 
 fetchPoolPump().catch(() => {});
 setInterval(() => fetchPoolPump().catch(() => {}), 30 * 1000);
+
+// ── Pool Heat Recovery logging (ESPHome pool pad node) ─────────────
+// Capture only — no dashboard tile. Water temps move slowly, so 2 min is plenty.
+// Flow GPM and BTU/hr stay null until the flow meter is installed; the columns
+// exist now so they backfill themselves the day it goes in.
+const POOL_PAD_ENTITIES = {
+  hxIn:   'sensor.pool_pad_hx_water_in_temp',
+  hxOut:  'sensor.pool_pad_hx_water_out_temp',
+  flow:   'sensor.pool_pad_pool_flow_gpm',
+  btu:    'sensor.pool_pad_pool_heat_btu_hr',
+  active: 'binary_sensor.pool_pad_pool_heat_active',
+};
+
+async function fetchPoolHeat() {
+  if (!HA_TOKEN) return;
+  try {
+    const keys = Object.keys(POOL_PAD_ENTITIES);
+    const results = await Promise.allSettled(
+      keys.map((k) => fetchHAState(POOL_PAD_ENTITIES[k]))
+    );
+
+    /** @type {Record<string, string|undefined>} */
+    const state = {};
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') state[keys[i]] = r.value.state;
+    });
+
+    // The pad node sleeps or drops off WiFi; a fully unavailable node is not a sample.
+    if (state.hxIn === undefined && state.hxOut === undefined) {
+      db.logError('pool_pad', 'unavailable', 'no HX temperatures from pool pad node');
+      return;
+    }
+    db.resolveError('pool_pad', 'unavailable');
+
+    const num = (s) => (s === undefined || s === 'unknown' || s === 'unavailable' ? NaN : parseFloat(s));
+
+    db.logPoolHeat({
+      hxInF:      num(state.hxIn),
+      hxOutF:     num(state.hxOut),
+      flowGpm:    num(state.flow),
+      btuHr:      num(state.btu),
+      heatActive: state.active === 'on',
+      pumpWatts:  lastPumpWatts,
+    });
+  } catch (err) {
+    console.error('Pool heat fetch failed:', err.message);
+  }
+}
+
+fetchPoolHeat().catch(() => {});
+setInterval(() => fetchPoolHeat().catch(() => {}), 2 * 60 * 1000);
 
 // ── BiblioCommons (RCPL library holds) ───────────────────────────
 const BIBLIO_LIBRARY = 'rcpl';
