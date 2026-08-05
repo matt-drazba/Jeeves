@@ -36,6 +36,10 @@ substitutions:
   # pin_boost_relay:     GPIO13   # D7 — phase 2: relay → IntelliComm input 2
   # GPIO4 (D2) freed — was FPH pump-call sensor, dropped 2026-07-28 (see docs/pool_heat_recovery.md)
 
+  # Probe zero-offset, °F, added to the HX outlet reading. Measured with the
+  # pump running and no heat: outlet read 0.4°F below inlet, so add 0.4 back.
+  out_temp_offset_f: "0.4"
+
 # ── Relay dry-contact input ───────────────────────────────────────────────
 # Switched from an opto module to a White Rodgers Type 84 fan relay (24VAC
 # coil, SPNO contact, 90-290Q): coil taps the 24VAC pair in parallel
@@ -78,6 +82,11 @@ sensor:
       - lambda: return x * 9.0/5.0 + 32.0;
       - filter_out: nan
 
+  # Zero-offset calibration: with the pump RUNNING and heat OFF, both probes see
+  # the same water, so any steady difference is probe tolerance (DS18B20 is
+  # ±0.5°C / ±0.9°F absolute), not real heat loss. Inlet is the reference; the
+  # outlet is trimmed to match it. Offset is applied AFTER the °C→°F lambda,
+  # so it is in °F. Re-measure if a probe is ever replaced or re-seated.
   - platform: dallas_temp
     address: 0x110b244453050b28
     name: "HX Water Out Temp"
@@ -86,6 +95,7 @@ sensor:
     accuracy_decimals: 1
     filters:
       - lambda: return x * 9.0/5.0 + 32.0;
+      - offset: ${out_temp_offset_f}
       - filter_out: nan
 
   # ── Flow sensor ──────────────────────────────────────────────────────────
