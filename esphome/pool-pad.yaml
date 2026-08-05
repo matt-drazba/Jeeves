@@ -33,7 +33,7 @@ substitutions:
   pin_relay_heat_active: GPIO5    # D1 — relay ch1: heater trio 24VAC (after flow switch)
   pin_one_wire:          GPIO14   # D5 — DS18B20 one-wire bus (4.7k pull-up to 3.3V required)
   pin_flow_pulse:        GPIO12   # D6 — hall-effect flow sensor pulse
-  # pin_boost_relay:     GPIO13   # D7 — phase 2: relay → IntelliComm input 2
+  # pin_boost_relay:     GPIO13   # D7 — dropped 2026-08-05, see note at end of file
   # GPIO4 (D2) freed — was FPH pump-call sensor, dropped 2026-07-28 (see docs/pool_heat_recovery.md)
 
   # Probe zero-offset, °F, added to the HX outlet reading. With the pump running
@@ -141,13 +141,25 @@ sensor:
       }
       return 0.0f;
 
-# ── Phase 2: pump-boost relay ────────────────────────────────────────────
-# Uncomment when wired: ESP relay → IntelliComm input 2 → pump Ext. Program 2.
-# Lower priority than FPH (input 4 wins). For pre-swim and HA automations.
-# switch:
-#   - platform: gpio
-#     pin: ${pin_boost_relay}
-#     name: "Pool Pump Boost"
-#     id: pool_pump_boost
-#     icon: mdi:pump
-#     restore_mode: ALWAYS_OFF
+# ── Pump control relay — DROPPED 2026-08-05, not built ───────────────────
+# Briefly designed as ESP relay → IntelliComm II input 2 → Ext. Program 2, to
+# give HA remote start/stop of the main pump. Dropped: the motivating problem
+# (pump running unattended at the wrong time) turned out to be a booster-pump
+# dry-run risk, which is solved entirely in HA + the flow meter with no main
+# pump control at all. See docs/pool_booster_interlock.md.
+#
+# GPIO13 (D7) is free. Findings kept here in case this is ever revisited:
+#
+# - IntelliComm inputs are VOLTAGE-DRIVEN (9-24V AC/DC), not dry-contact. The
+#   relay must switch a real source — a series switch in a 12V+ leg from the
+#   pad adapter, not a bare contact across the input terminals.
+# - Use input 2, never 4. FPH heat recovery owns input 4 and higher input
+#   number wins, so nothing commanded here could interrupt a live diversion.
+# - An IntelliComm input can only START a program. Releasing it stops the pump
+#   only if the pump has no onboard schedule telling it to run. A true remote
+#   OFF therefore requires retiring the pump's onboard schedule entirely.
+# - Buy an ACTIVE-HIGH relay module. Most cheap opto-isolated boards are
+#   active-LOW, and GPIO13 idles LOW through boot and reset — an active-low
+#   board would start the pump on every ESP reboot.
+# - Any such switch needs a local watchdog auto-off, so a WiFi drop after an
+#   on-command can't leave the pump running indefinitely.

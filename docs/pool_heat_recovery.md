@@ -23,7 +23,7 @@ Sources: HotSpot FPH installer manual (44p scan), Pentair IntelliComm II guide, 
 | Ext. Program 4 RPM | **2200 RPM** | ~55–60 GPM. Measured, not estimated. |
 | Program 4 stop delay | Max / ≥60 s | UI shows seconds. HX flush cool-down after FPH releases pump-call. |
 | Input 4 | FPH pump-call (highest priority wins) | Voltage-driven 9–24V AC/DC, NOT dry-contact. Unpolarized. |
-| Input 2 | Reserved — future HA relay (`switch.pool_pump_boost`) | Lower priority than FPH by design. |
+| Input 2 | Unused. HA pump control was designed 2026-08-05 and dropped — see "Pump control (L4)" below. | Lower priority than FPH by design. |
 
 Pump display shows "DISPLAY NOT ACTIVE" while an external program runs — normal.
 
@@ -113,8 +113,23 @@ HA failure degrades to "no free heat," never to danger. See HA layer below.
 - `pool_heat_active && pool_flow_gpm ≈ 0` sustained → critical alert (diverting into stagnant water — the actual danger case)
 - Pump off during scheduled hours → warn
 
-**Phase 2 — HA control (after monitoring proven):**
-ESP32 relay → IntelliComm input 2 → `switch.pool_pump_boost` for pre-swim/automations.
+## Pump control (L4 — ESP → IntelliComm input 2) — DROPPED 2026-08-05, NOT BUILT
+
+**Do not build this unless explicitly asked.** Designed and reverted the same day. The motivating problem — the main pump running unattended at the wrong time — turned out to be a **booster-pump dry-run risk**, which is solved entirely by the flow meter plus an HA automation with no main-pump control at all ([pool_booster_interlock.md](pool_booster_interlock.md)). The main pump's own 9pm–4pm schedule is fixed and known, so HA can satisfy the booster's "off ≥30 min before the filter pump stops" rule from the schedule alone, without needing to command the pump.
+
+GPIO13 (D7) is free. Config was written and validated, then reverted to a comment block in [esphome/pool-pad.yaml](../esphome/pool-pad.yaml) preserving the findings below.
+
+### Findings retained (if this is ever revisited)
+
+- **Topology would be:** ESP GPIO13 → relay → contact switches 12VDC (shared pad adapter) → IntelliComm II **input 2** → pump runs Ext. Program 2.
+- **Input 2, never 4.** Higher input number wins; FPH owns 4, so nothing commanded could interrupt a live diversion.
+- **Inputs are voltage-driven, not dry-contact.** The relay must switch a real source — a series switch in a 12V+ leg, not a bare contact across the input terminals.
+- **An IntelliComm input can only START a program.** There is no "stop" input. Releasing one means "no external call," after which the pump reverts to its onboard schedule. A genuine remote OFF therefore requires retiring the pump's onboard schedule entirely — at which point the ESP becomes the daily filtration scheduler, and if it dies, filtration stops.
+- **Relay polarity trap:** an active-HIGH module is required. GPIO13 idles LOW through boot and reset, so an active-LOW board would start the pump on every ESP reboot.
+- **Any such switch needs a local watchdog auto-off**, so a WiFi drop after an on-command can't leave the pump running indefinitely.
+
+*Correction, 2026-08-05:* while this was being designed, a note here warned against adding a low-RPM circulation program on the grounds it could starve the booster pump. That was overstated — Polaris specs the PB4-60 to run on the low-speed setting of a variable-speed pump, and it draws ~24 GPM against a 45–50 GPM baseline. Low-speed programs are fine. The booster's flow-gated interlock is still worth building, but for genuine loss-of-flow (clogged basket, closed valve, lost prime), not for low RPM.
+
 Do NOT add a second RS-485 master (njsPC) while IntelliComm II owns the bus.
 
 ## Chemistry

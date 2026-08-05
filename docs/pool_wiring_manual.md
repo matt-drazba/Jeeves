@@ -391,7 +391,7 @@ Source: [Supco 90340 Installation Instructions](https://www.manualslib.com/manua
 | **GPIO5 (D1)** | White Rodgers SPNO contact → 3.3V | **10k pulldown to GND required.** Reads HIGH = pool heat active |
 | **GPIO14 (D5)** | DS18B20 one-wire bus | **4.7k pull-up to 3.3V required** — lives in the combined terminal-block/resistor unit |
 | **GPIO12 (D6)** | Flow sensor pulse input | Configured `INPUT_PULLUP`. Sensor not yet installed — see Part 5 |
-| **GPIO13 (D7)** | *Reserved* — future boost relay → IntelliComm input 2 | Phase 2 only, see Part 5 |
+| **GPIO13 (D7)** | *Free* | Was reserved for a pump-control relay → IntelliComm input 2; dropped 2026-08-05, not built |
 | **GPIO4 (D2)** | *Free* | |
 
 **Do not use GPIO0 (D3), GPIO2 (D4), or GPIO15 (D8)** — they are boot-sensitive on the ESP8266 and pulling them the wrong way at power-up prevents the board from starting.
