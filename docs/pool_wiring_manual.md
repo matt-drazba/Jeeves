@@ -98,7 +98,7 @@ For exactly how it is wired, see the terminal table in **section 3.2** and the m
 
 ### Difference 2 — The flow switch is our addition, wired per p.22, into a p.9 system
 
-The manual gives a wiring diagram for the flow switch (printed p.22) and a separate wiring diagram for the variable-speed / IntelliComm pool side (printed p.9), on **two different pages, never drawn together** — even though both diagrams depend on the same 24VAC feed arriving at the blue butt connector in the FPH control box. Each page shows half of our system, and nobody drew the other half. **Part 2 of this document is that merge**, and it is one of the most useful things in this file.
+The manual gives a wiring diagram for the flow switch (printed p.22) and a separate wiring diagram for the variable-speed / IntelliComm pool side (printed p.9), on **two different pages, never drawn together** — even though both diagrams hang off the same 24VAC pair — the one that arrives at the blue butt connector in the FPH control box and pigtails there. Each page shows half of our system, and nobody drew the other half. **Part 2 of this document is that merge**, and it is one of the most useful things in this file.
 
 ### Difference 3 — The White Rodgers Type 84 appears nowhere in any HotSpot document
 
@@ -116,8 +116,16 @@ It is an $8 relay we added for one reason: to give the ESP8266 monitoring board 
 
 The transformer puts out 24VAC on two wires (pins 7 and 12 per manual printed p.8). Everything downstream is just a question of *which devices sit across those two legs, and what interrupts one of them.* Throughout this document:
 
-- **LEG 1 — the source leg (goes into the FPH).** It leaves the transformer and lands in the FPH control box at the **blue butt connector**, where it **pigtails/splits in the top of the box, between the LCD and Modules A and B.** That pigtail is a junction point, not a component — several wires bonded together under the LCD is normal and correct. From there it feeds the controller's two switched outputs, **terminal 3** and **terminal 4**. It also supplies raw contact power to the 90340's two commons (T1 black, T4 white).
-- **LEG 2 — the return/common leg (never enters the FPH controller).** It runs from the transformer **directly to the IntelliComm II**. This is the **yellow** wire. It is the same electrical node as the 90340's **coil A** and the trio's common bus (the red), and it is the second side of the White Rodgers coil.
+### First, a thing you do NOT need to figure out
+
+**It does not matter which transformer leg is "hot" and which is "common."** This is 24VAC off an isolated transformer secondary — it is AC, there is no hot/neutral in the household sense, and every load in this system is unpolarized. Relay coils don't care about direction, and the IntelliComm's input is explicitly rated *"9–24V AC/DC, unpolarized."* Swapping the two conductors at the transformer would change nothing.
+
+**What matters is routing:** which conductor is interrupted, by what, and where. So this document names the two legs by where they go, not by polarity:
+
+- **CONTROLLER LEG — the one that goes into the FPH.** It leaves the transformer and lands in the FPH control box at the **blue butt connector**, where it **pigtails/splits in the top of the box, between the LCD and Modules A and B.** That pigtail is a junction point, not a component — several wires bonded together under the LCD is normal and correct. From there it feeds the controller's two switched outputs, **terminal 3** and **terminal 4**. It also supplies contact power to the 90340's two commons (T1 black, T4 white).
+- **SHARED-RETURN LEG — the one that never enters the FPH controller.** It runs from the transformer **directly to the IntelliComm II**. This is the **yellow** wire. It is the same electrical node as the 90340's **coil A**, the trio's bus (the red), and the second side of the White Rodgers coil. Nothing switches it; it is simply present whenever the transformer is powered.
+
+*(If you ever do want to know which one the manufacturer designated "C": with power on, meter from each secondary conductor to the cabinet chassis. The one reading near 0V is the bonded common. It's a curiosity, not a troubleshooting step — nothing in this document depends on the answer.)*
 
 ### The two switched outputs — this is the merge the manual never draws
 
@@ -130,7 +138,7 @@ Page 9 draws the IntelliComm. Page 22 draws the flow switch. Neither page imagin
 | Why | The pump must be able to cold-start. Gating this on flow would deadlock: no pump → no flow → switch never closes → pump never starts | Refrigerant may divert into the exchanger only once water movement is physically proven |
 | Manual quote | — | "Pin 4 controls all of the HVAC side of the valves" (printed p.21 step 5) |
 
-Both return on **LEG 2** (the yellow). The White Rodgers coil sits across the terminal-4 branch *after* the flow switch, so it reports **actual diversion**, not merely "the controller asked."
+Both return on the **SHARED-RETURN LEG** (the yellow). The White Rodgers coil sits across the terminal-4 branch *after* the flow switch, so it reports **actual diversion**, not merely "the controller asked."
 
 ### ⚠ Naming collision — the two different "3" and "4"
 
@@ -151,9 +159,9 @@ This trips everyone, so say it out loud before metering anything:
      │ transformer     │   (240V on pins 1&6; jumpers 2-5 and 8-11; 24VAC out on 7&12)
      └───┬─────────┬───┘
          │         │
-      LEG 2      LEG 1
-   (common,    (source, into the FPH)
-    YELLOW)      │
+  SHARED-RETURN  CONTROLLER LEG
+   (YELLOW)      (into the FPH)
+         │       │
          │       └──────────► FPH CONTROL BOX
          │                    [BLUE BUTT CONNECTOR]
          │                     pigtail/split in the top of the box,
@@ -192,7 +200,7 @@ This trips everyone, so say it out loud before metering anything:
          │              │     │ Pole 2: T4 ●──NO──● T6  ├── RED, to HEAT
          │              │     │         (T5 unused)     │   RECLAIM VALVE +
          │              │     └─────────────────────────┘   BI-DIR SOLENOID
-         │              │       ⚠ T4's WHITE (contact power, from LEG 1)
+         │              │       ⚠ T4's WHITE (contact power, CONTROLLER LEG)
          │              │         is NOT coil B's WHITE (from the flow switch)
          │              │                                      │  │
          └──► also to the other side of the trio (heat reclaim │  │
@@ -215,9 +223,9 @@ This trips everyone, so say it out loud before metering anything:
                               │                    │  │ 3.3V ─●  ●─ GPIO5│
                               └─────────┬──────────┘  └──────────────────┘
                                         │                     ▲      │
-             LEG 2 / YELLOW ────────────┴─────────────────────┴──────┘
-             (straight from the transformer — never enters
-              the FPH controller; also = 90340 coil A)
+      SHARED-RETURN / YELLOW ───────────┴─────────────────────┴──────┘
+      (straight from the transformer — never enters
+       the FPH controller; also = 90340 coil A)
                                         │
                                    RS-485 cable
                                         │
@@ -229,11 +237,11 @@ This trips everyone, so say it out loud before metering anything:
 
 ### The single most important paragraph in this document
 
-**Two switched outputs, one shared return — not one signal.** The FPH controller's **terminal 3** calls the pump immediately and unconditionally when the compressor starts (→ IntelliComm Program 4). Its **terminal 4** offers 24VAC to the diversion circuit *only through the flow switch* (→ Tecmark → 90340 coil). Both return on **LEG 2**, the yellow that runs straight from the transformer to the IntelliComm without ever entering the controller. The pump is therefore allowed to start with no flow — it must be, or nothing could ever start — while the valves can never move without proven flow. **The pump running tells you the compressor is on. Only the condenser fan stopping tells you heat is actually being recovered.**
+**Two switched outputs, one shared return — not one signal.** The FPH controller's **terminal 3** calls the pump immediately and unconditionally when the compressor starts (→ IntelliComm Program 4). Its **terminal 4** offers 24VAC to the diversion circuit *only through the flow switch* (→ Tecmark → 90340 coil). Both return on the **SHARED-RETURN LEG** — the yellow that runs straight from the transformer to the IntelliComm without ever entering the controller. The pump is therefore allowed to start with no flow — it must be, or nothing could ever start — while the valves can never move without proven flow. **The pump running tells you the compressor is on. Only the condenser fan stopping tells you heat is actually being recovered.**
 
 ### Still INFERRED (small, does not block use)
 
-The wire-by-wire routing of the **90340's contact power** — T1 (black) and T4 (white) — is documented above as coming off LEG 1, and the trio's return as riding the LEG 2 / coil-A bus. That's the only arrangement consistent with the verified terminal assignments, but it wasn't traced end to end.
+The wire-by-wire routing of the **90340's contact power** — T1 (black) and T4 (white) — is documented above as coming off the CONTROLLER LEG, and the trio's return as riding the shared-return / coil-A bus. That's the only arrangement consistent with the verified terminal assignments, but it wasn't traced end to end.
 
 It changes nothing operationally: contact power only matters once the coil has already been energized through the flow switch, so no error here could defeat the interlock. Confirm opportunistically the next time the box is open.
 
@@ -336,7 +344,7 @@ Source: [Supco 90340 Installation Instructions](https://www.manualslib.com/manua
 | Property | Value |
 |---|---|
 | Input used | **GPM/RPM 4 (Program 4)**, 9–24V AC/DC, **voltage-driven, not dry-contact**, unpolarized |
-| Fed by | **FPH controller terminal 3** (not 4 — see the naming-collision note in Part 2), returning on LEG 2 / the yellow. Not flow-gated, and not the same point as the 90340 coil |
+| Fed by | **FPH controller terminal 3** (not 4 — see the naming-collision note in Part 2), returning on the shared-return leg (the yellow). Not flow-gated, and not the same point as the 90340 coil |
 | Output | RS-485 to the pump |
 | Pump program | **Ext. Program 4, locked at 2200 RPM** (~55–60 GPM, measured against the Blue-White gauge — not estimated) |
 | Stop delay | **≥10 min**, set on the pump's own screen — flushes the heat exchanger after the FPH releases the call, then the pump returns to its normal schedule |
@@ -627,6 +635,9 @@ Page citations are to the HotSpot FPH installer manual, 44-page scanned PDF, **p
 | 2026-08-05 | Field corrections from the owner, merged: purge delay is **~2 min** observed (manual says ~20 s); pool setpoint **92 °F**; Program-4 stop delay **≥10 min**, set on the pump screen, after which the pump resumes its normal schedule; equipment locations corrected — **FPH + flow switch are on the chimney by the pool filter; transformer, trio, and 90340 are all inside the heat pump**; added the "highest external program wins / slots 1–3 always lose" rule; added the flow-never-proves case (clogged filter, valve closed or off "filter") and its benign outcome. |
 | 2026-08-05 | Difference 1 corrected: HotSpot supplied a variable-speed diagram **taped onto printed p.9** (p.10 removed), but it omits the 90340 — so no diagram anywhere depicts this install. Also struck the claim that the 90340 supplies the IntelliComm signal; the pump is already running from terminal 3 before this relay ever energizes. |
 | 2026-08-05 | Explained *why* the do-not-jumper warning exists (jumpering a suspect switch is normal HVAC practice and is the one move that creates the dangerous state here), and corrected a draft sentence that stated the flow switch closes on *no* flow. |
+
+| 2026-08-05 | 90340 location confirmed: **inside the heat pump cabinet.** |
+| 2026-08-05 | Renamed the two 24VAC legs from "LEG 1 / LEG 2" (and, before that, "COMMON / SWITCHED") to **CONTROLLER LEG** and **SHARED-RETURN LEG**, and added a note that identifying which leg is "hot" is unnecessary — 24VAC off an isolated secondary, all loads unpolarized. Naming now describes routing, which is what troubleshooting actually depends on, and is correct regardless of how the transformer is oriented. |
 
 ### Open items carried forward
 
