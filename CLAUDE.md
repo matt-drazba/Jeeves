@@ -232,6 +232,8 @@ cd "/Users/mattdrazba/Code Repos/Jeeves/esphome" && uvx esphome run pool-pad.yam
 - Sanitizer: Clearwater MineralPURE R-40 copper/silver ionizer. ORP probe removed — meaningless with copper ions + low FC.
 - ESPHome pad node: ESP8266 HiLetgo in hand. Config at `esphome/pool-pad.yaml`. Run ESPHome container first, then flash via USB on Pi.
 - ha-poolchem via HACS: FC/TA/CH/CYA entered manually; copper tracked as separate input_number (target 0.2–0.4 ppm); pH from DS18B20 probe; ORP not used.
+  - **Under review** — `docs/pool_chemistry_logging.md` proposes dropping ha-poolchem and making Jeeves' SQLite the system of record for chemistry, since HA's recorder retention can't support forecasting. Not yet ratified.
+- **Manual maintenance logging + chemistry forecasting:** parked design brief at `docs/pool_chemistry_logging.md` — phone-at-poolside entry, voice for doses / screen for numbers, two-table schema (tests vs. doses). Open questions: test kit type, log-only vs. dose calculator.
 
 ## Deferred (committed, do later)
 - **HA container startup network dependency fix:** After the 2026-07-19 power outage, Bhyve/LG ThinQ/EcoNet/Tesla all failed setup with `DNS servers unreachable` — Docker started the HA container before the network/DNS was actually usable, and HA's config-entry retry backoff (hardcoded, exponential, gives up after a few minutes) ran out before DNS recovered. Fix: `docker-compose.yml` healthcheck-gated `depends_on` or startup wait so HA doesn't launch until network connectivity is confirmed. Prevents the failure at the source.
