@@ -85,7 +85,7 @@ homelab/
 | `jeeves/package.json` | Dependencies: express, node-ical |
 | `jeeves/Dockerfile` | node:22-alpine, no build step |
 | `docker-compose.yml` | Orchestrates HA + Jeeves + ESPHome (repo root) |
-| `esphome/pool-pad.yaml` | ESP8266 pool pad node — opto sensing, DS18B20, flow, BTU/hr |
+| `esphome/pool-pad.yaml` | ESP8266 pool pad node — relay sensing, DS18B20, flow, BTU/hr |
 
 ## Current state (as of 2026-07-10)
 
@@ -171,13 +171,26 @@ HA_TOKEN=...              # HA long-lived token (Profile → Security → Long-l
 PURPLEAIR_API_KEY=...     # PurpleAir read API key
 ```
 
-### Deployment workflow (Pi)
+### Deployment workflow (Pi) — Jeeves + HA only
 ```bash
 cd ~/homelab && git pull && docker compose up -d --build jeeves
 # Add --build homeassistant only if docker-compose.yml changed for HA
-# ESPHome container starts automatically; access web UI at http://192.168.0.189:6052
-# Initial ESP8266 flash: connect via USB on Pi, use ESPHome UI or CLI to flash
 ```
+
+### Deployment workflow (ESPHome) — Mac → ESP directly, NOT via the Pi
+**The Pi is not in the ESPHome deploy path.** ESPHome is installed on the Mac mini
+and flashes the ESP nodes over the air across the LAN. Do **not** `git pull` on the
+Pi or use the ESPHome container to deploy device changes — the Pi's copy of
+`esphome/*.yaml` is irrelevant to what the device is running.
+
+```bash
+cd "/Users/mattdrazba/Code Repos/Jeeves/esphome" && uvx esphome run pool-pad.yaml
+```
+
+- Run from the `esphome/` directory — `secrets.yaml` and `.esphome/` (build cache) are resolved relative to CWD and are gitignored, Mac-local only.
+- OTA target resolves via mDNS (`pool-pad.local`); the ESP must be on the LAN and awake.
+- Pushing to GitHub is for version history only — it does **not** deploy anything to the device.
+- USB flashing (Mac, cable to the ESP) is only needed for a first flash or if OTA is bricked.
 
 ### Deferred polish
 - Weather panel has empty grey space below forecast — needs layout fix (low priority)
@@ -187,7 +200,7 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 - ~~Chromium kiosk autostart~~ — dropped; Fire HD 8 + Fully Kiosk Browser is the display path
 - Apple TV 4K (Family Room) — discovered in HA but not yet paired; PIN appears on TV screen during setup
 - AirPort Express units (NuTone, Clips, Block Party) — AirPlay pairing blocked by device restriction; fix is to enable IPv6 on router (Marshall paired successfully, others pending IPv6 fix); controlled indirectly via Mac mini Music bridge in the meantime
-- Resideo cloud integration (developer.resideo.com OAuth) — demoted to optional; pool heating mode is sensed locally via the FPH trio 24VAC circuit, not from the thermostat. T10 stays on HomeKit only.
+- Resideo cloud integration (developer.resideo.com OAuth) — optional backup/enhancement, not a dependency: pool heating mode is sensed locally via the FPH trio 24VAC circuit, not from the thermostat, so this stays additive. Revisited 2026-07-28 as a possible source of HVAC compressor **stage** (1 vs 2) data — need to check whether the Resideo API actually exposes stage before committing; T10 stays on HomeKit for all core control either way. See "HVAC stage visibility" under Parked for the full branch plan (cloud API vs CT clamp).
 
 ## Hard rules
 - Never commit secrets: API keys, HA long-lived tokens, secrets.yaml
@@ -224,14 +237,19 @@ cd ~/homelab && git pull && docker compose up -d --build jeeves
 - **HA container startup network dependency fix:** After the 2026-07-19 power outage, Bhyve/LG ThinQ/EcoNet/Tesla all failed setup with `DNS servers unreachable` — Docker started the HA container before the network/DNS was actually usable, and HA's config-entry retry backoff (hardcoded, exponential, gives up after a few minutes) ran out before DNS recovered. Fix: `docker-compose.yml` healthcheck-gated `depends_on` or startup wait so HA doesn't launch until network connectivity is confirmed. Prevents the failure at the source.
 - **Config-entry reload watchdog automation:** Safety net on top of the above — HA automation that reloads known-flaky cloud integrations (Bhyve, LG ThinQ, EcoNet, Tesla) every ~15 min for the first hour after HA startup, in case any entry still failed setup despite the network fix.
 - **Text (SMS) alert for pool pump / critical failures while away:** Push notifications via the Companion app aren't reliable enough for something safety-critical like the pool heat recovery pump going down during a power outage while on vacation. Need a real SMS path (e.g. Twilio API, or an email-to-SMS gateway) triggered by an HA automation watching pump/flow state and outage/connectivity loss — not just a dashboard tile or app push. API key in `.env`, never committed.
-- ESPHome pool pad node: flash ESP8266, wire opto inputs + DS18B20 probes + flow sensor, adopt into HA. Config ready at `esphome/pool-pad.yaml`. Blocked on flow switch arrival (~5 days) for full wiring test.
+- ESPHome pool pad node: ESP8266 flashed and on WiFi, OTA-capable from the Mac. DS18B20 HX in/out probes wired and confirmed live in HA (2026-07-28). Tecmark 3010P flow switch installed, wiring remaining. Remaining: relay/opto inputs, flow meter (not yet received — 5V DC, powers off existing buck converter, not the shared 12V adapter; still needs true-union fittings), pool-return probe. Config at `esphome/pool-pad.yaml`.
 - ESPHome pH node: separate ESP32 build (8266 ADC too weak for analog pH). After pad node proven.
 - Pool water level sensor hardware
 - NVMe SSD for the Pi 5 (SD card fine to start; trim HA recorder retention to a few days)
 - Freeze-warning automation (winter concern)
 - Fire HD 8: buy (eBay), install Fully Kiosk Browser, point at `http://192.168.0.189:3000`, wall-mount
+- **Pool heat recovery data logging:** HX in/out temp and BTU/hr (`sensor.pool_pad_hx_water_in_temp`, `hx_water_out_temp`, `pool_heat_btu_hr`) are live-only in HA today — not persisted. Extend the existing SQLite `maybeLogEnergy` path (currently used for `pool_pump` wattage) to also log these on the same poll, so heat-recovery performance can be trended over a season instead of just HA's short-retention recorder. Natural small addition to existing plumbing, not a new subsystem.
 
 ## Parked — decide later (do NOT build unless explicitly asked)
+- **HVAC compressor stage visibility (branch plan, not yet decided):** Want to know whether the Bryant 226ANA048-B two-stage heat pump is running stage 1 or stage 2 — relevant to interpreting pool heat recovery ΔT (low-stage runs likely explain small HX gains, see `docs/pool_heat_recovery.md`). Two candidate paths, not mutually exclusive:
+  - **A — Resideo cloud API** (`developer.resideo.com` OAuth): lowest new-hardware cost, but unconfirmed whether the API actually exposes compressor stage at all — check docs before committing. Treated as an optional backup/enhancement layered on top of the existing local HomeKit pairing, not a replacement for it.
+  - **B — CT clamp on the compressor circuit:** same pattern as the pool pump's Shelly EM. Stage 1 vs stage 2 draws distinguishably different current, so this gives a real hardware-truth signal independent of any cloud API, at the cost of new hardware + wiring.
+  - Decide once Resideo's API capabilities are confirmed; B is the fallback if A can't expose stage.
 - **Local voice control:** HA Assist + Whisper (STT) + Piper (TTS). Fire HD 8 has built-in mic + speaker — no external hardware needed. Whisper inference runs on Pi 5; dropping Chromium kiosk freed meaningful RAM. Use small Whisper model (tiny or base). Fully Kiosk supports mic access + audio playback. Voice dismiss for appliance tiles: "Jeeves, washer done" → `POST /api/dismiss/washer`. Tap-to-dismiss is the current fallback.
 - Library holds tile: BiblioCommons (local library system). Fetch holds/ready items on a schedule — likely via RSS feed or authenticated scrape. Credentials go in env vars, never committed. Research the specific library's BiblioCommons URL first.
 - Zigbee USB dongle + cheap motion/door/temp sensors

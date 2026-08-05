@@ -36,9 +36,13 @@ substitutions:
   # pin_boost_relay:     GPIO13   # D7 — phase 2: relay → IntelliComm input 2
   # GPIO4 (D2) freed — was FPH pump-call sensor, dropped 2026-07-28 (see docs/pool_heat_recovery.md)
 
-  # Probe zero-offset, °F, added to the HX outlet reading. Measured with the
-  # pump running and no heat: outlet read 0.4°F below inlet, so add 0.4 back.
-  out_temp_offset_f: "0.4"
+  # Probe zero-offset, °F, added to the HX outlet reading. With the pump running
+  # and no heat, the outlet read 0.3–0.5°F below the inlet (the ±0.1 wobble is
+  # one 12-bit LSB, 0.0625°C ≈ 0.11°F — the resolution floor, not instability).
+  # Provisional value 2026-08-05, to be retuned against several days of data
+  # across a wider water-temp range. If the gap turns out to track water temp
+  # rather than staying flat, replace this with a calibrate_linear two-point fit.
+  out_temp_offset_f: "0.3"
 
 # ── Relay dry-contact input ───────────────────────────────────────────────
 # Switched from an opto module to a White Rodgers Type 84 fan relay (24VAC
