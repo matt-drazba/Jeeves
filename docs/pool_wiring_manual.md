@@ -61,7 +61,13 @@ No single page of the FPH manual states this plainly, and it is the thing to und
 | **White Rodgers Type 84** | 24VAC-coil relay used purely as an isolated *sensor*. Not part of the safety chain | Same new box as the IntelliComm |
 | **ESP8266 (pool-pad node)** | ESPHome monitoring node — temps, flow, heat-active state → Home Assistant | Same new box as the IntelliComm |
 
-**Note the geography:** the FPH and its flow switch are at the pool filter on the chimney; the transformer, the trio, and the 90340 are all inside the heat pump in the side yard; the IntelliComm, White Rodgers, and ESP are in the new box at the pad. The 24VAC control wiring runs between all three locations — so "the wire from the flow switch to the 90340" is a run across the property, not a jumper inside one box.
+**Note the geography — there are three enclosures, and they are all right next to each other.** The heat pump, the pool pad, and the chimney are adjacent, so the 24VAC control wiring between them is a short run, not a trek across the property. But they are still three *separate* boxes, and knowing which one a component lives in is most of the battle when tracing a wire:
+
+| Box | What's inside |
+|---|---|
+| **Heat pump cabinet** | 24VAC transformer, the trio (heat reclaim valve, bi-directional solenoid, NC fan relay), **Mars 90340** |
+| **FPH control box** (on the chimney, by the pool filter) | FPH controller — LCD, Modules A & B, terminal strip 1–6, blue butt connector. **Tecmark flow switch** is threaded into the heat exchanger just outside it |
+| **New pad box** (added by us) | IntelliComm II, White Rodgers Type 84, ESP8266, buck converter, terminal-block/resistor unit |
 
 **Nothing inside the heat pump and nothing inside the FPH was modified by us.** Both were wired by the installer per the HotSpot manual. Every change we made lives either (a) in the 24VAC control leg between the FPH controller and the trio, or (b) in the new box at the pool pad. If you are diagnosing a problem, that boundary is where to start.
 
@@ -594,13 +600,16 @@ The physical form is a **8 AWG solid bare copper** loop tying the pool shell ste
 
 ## Part 8 — Photos
 
-Drop box photos in `docs/images/` and link them here. The ones worth having, in priority order:
+**Planned: a photo + annotated diagram for each of the three enclosures** — the new pad box, the FPH control box, and the heat pump cabinet. One overview shot and one close-up of the terminals per box, each paired with a labeled drawing keying the wires to the tables in Part 3. That set, plus the master diagram in Part 2, is what makes this document usable by someone who has never opened these boxes.
 
-1. **Mars 90340 terminal block, wires attached, labels legible** — this is the single most valuable photo in the set. It settles the common-terminal question instantly for whoever opens the box next.
-2. The new pool-pad box, lid off — IntelliComm II, White Rodgers, ESP8266, buck converter, terminal block/resistor unit, all in one frame.
-3. The Tecmark flow switch threaded into the FPH blue cylinder outlet port.
-4. Inside the top of the FPH control box — the common-leg pigtail between the LCD and Modules A/B.
+Drop them in `docs/images/` and link them inline. Priority order:
+
+1. **Mars 90340 terminal block, wires attached, labels legible** (heat pump cabinet) — the single most valuable photo in the set. It settles the common-terminal question instantly for whoever opens the box next.
+2. **New pad box, lid off** — IntelliComm II, White Rodgers, ESP8266, buck converter, terminal-block/resistor unit, all in one frame.
+3. **FPH control box, lid off** — LCD, Modules A & B, terminal strip 1–6, and the blue butt connector / pigtail in the top of the box.
+4. The Tecmark flow switch threaded into the heat exchanger's blue outlet port.
 5. The white/yellow tap points feeding the White Rodgers coil and the IntelliComm input.
+6. A wide shot showing the three enclosures and their proximity to each other — orientation for anyone who has never stood there.
 
 Link them inline in the relevant section, e.g. `![90340 terminals](images/90340-terminals.jpg)`.
 
@@ -639,11 +648,13 @@ Page citations are to the HotSpot FPH installer manual, 44-page scanned PDF, **p
 | 2026-08-05 | 90340 location confirmed: **inside the heat pump cabinet.** |
 | 2026-08-05 | Renamed the two 24VAC legs from "LEG 1 / LEG 2" (and, before that, "COMMON / SWITCHED") to **CONTROLLER LEG** and **SHARED-RETURN LEG**, and added a note that identifying which leg is "hot" is unnecessary — 24VAC off an isolated secondary, all loads unpolarized. Naming now describes routing, which is what troubleshooting actually depends on, and is correct regardless of how the transformer is oriented. |
 
+| 2026-08-05 | Corrected a geography error introduced in the previous edit: the heat pump, pool pad, and chimney are **adjacent**, not spread across the property. Replaced with a three-enclosure table (heat pump cabinet / FPH control box / new pad box) listing what lives in each. Added per-box photo + annotated-diagram plan to Part 8. |
+
 ### Open items carried forward
 
 - [ ] Opportunistically confirm the 90340 contact-power routing (Part 2, "Still INFERRED") next time the box is open.
 - [ ] Bond the FPH heat exchanger to the pad loop (Part 7).
 - [ ] Install and calibrate the flow meter (5.1) — safety-relevant, see 3.1 coverage table.
-- [ ] Take the Part 8 photos, 90340 terminals first.
+- [ ] Take the Part 8 photos and draw the three per-box annotated diagrams (pad box, FPH box, heat pump cabinet). 90340 terminals first.
 - [ ] Copy the FPH manual PDF into the repo so this document stands alone without a `~/Desktop` path.
 - [ ] Label wires physically at the 90340 and the pad box — ferrules or numbered markers — given the documented white/white collision. Prose warnings don't survive a rewire.
