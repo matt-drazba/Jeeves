@@ -600,6 +600,8 @@ The physical form is a **8 AWG solid bare copper** loop tying the pool shell ste
 
 ## Part 8 — Photos
 
+**These supplement the master diagram in Part 2 — they do not replace it.** The Part 2 logic diagram is what explains *why* the system behaves as it does: which leg is interrupted by what, and in what order. Photos show which screw a wire lands on. A reader needs both, and the logic diagram stays.
+
 **Planned: a photo + annotated diagram for each of the three enclosures** — the new pad box, the FPH control box, and the heat pump cabinet. One overview shot and one close-up of the terminals per box, each paired with a labeled drawing keying the wires to the tables in Part 3. That set, plus the master diagram in Part 2, is what makes this document usable by someone who has never opened these boxes.
 
 Drop them in `docs/images/` and link them inline. Priority order:
