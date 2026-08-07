@@ -252,9 +252,59 @@ Adding the transducer is a terminal-count problem, not a capacity problem:
 | **Pressure transducer** | **~10 mA** |
 | **ADS1115** | **~0.2 mA** |
 
-~10 mA is being added to a rail already absorbing 300 mA peaks. A WAGO 221 or a
-small screw terminal block off the existing 5V output pair is the whole fix.
-Buck output is confirmed 5V, so all three loads share one rail.
+~10 mA is being added to a rail already absorbing 300 mA peaks. Buck output is
+confirmed 5V, so every load shares one rail.
+
+#### Why lever nuts — the buck has two output taps and four loads
+
+The buck converter exposes **two** output terminals. Both are already used: one
+feeds the ESP8266, one feeds the hall flow sensor. The transducer and the ADS1115
+make **four** loads on two taps, so the rail has to branch somewhere.
+
+That is the entire job. Lever nuts are just solderless, re-openable, rated splices
+to do it:
+
+```
+buck 5V  ──► [WAGO 221, 5-conductor] ──┬──► ESP8266
+                                       ├──► flow sensor
+                                       ├──► transducer
+                                       └──► ADS1115
+
+buck GND ──► [WAGO 221, 5-conductor] ──┴──► (same four returns)
+```
+
+**Buy 5-conductor, not 3-conductor** — one in plus four out per rail, two nuts
+total. Chaining 3-conductor nuts works but stacks more connections in the box for
+no benefit. WAGO 221 accepts 24–12 AWG, so the 22 AWG sensor leads are in range.
+
+Alternatives, if preferred: a small **DIN or screw terminal strip** is tidier for
+a permanent enclosure and makes future additions land somewhere obvious; soldered
+and heat-shrunk splices are the most durable but not re-openable. Avoid twist-on
+wire nuts at this gauge — they do not grip fine stranded wire reliably.
+
+#### Connector durability in an outdoor box
+
+Worth deciding deliberately, since the chimney box sees thermal cycling and
+humidity. A **pre-soldered ADS1115** means male header pins, connected with
+female Dupont jumpers — convenient, and the least reliable option in this
+environment. Dupont crimps back out and corrode, and the failure is intermittent
+rather than clean.
+
+In order of durability:
+
+1. **Solder leads directly to the board pads** — most reliable, and defeats the
+   point of buying pre-soldered
+2. **Pre-soldered header + a screw-terminal shield** — good compromise
+3. **Pre-soldered header + Dupont jumpers, mechanically secured** — seat them
+   fully and lock them with hot glue or silicone so nothing can back out
+
+Option 3 is acceptable here: this is a monitoring sensor, not a safety path, and
+its failure mode is "the pressure reading goes stale" — the same posture already
+accepted for the White Rodgers relay. Just do not leave the jumpers loose.
+
+**Note on STEMMA QT:** Adafruit's ADS1115 has QT/Qwiic connectors for solderless
+I2C, but **A0 and A1 are not on the QT connector.** Both analog inputs are needed
+here, so QT solves the half of the problem this project does not have.
 
 ### Power fix 1 — bulk capacitance (do this)
 
@@ -636,11 +686,11 @@ should be replaced yearly. Ongoing reagent cost settles around **$60–70/year**
 | Pressure transducer | **0–60 PSI**, **1/4" NPT** male (*not* G1/4), 0.5–4.5V, 5V supply, stainless | 25 |
 | Brass 1/4" NPT **street tee** | male run × female × female | 8 |
 | PTFE tape | standard white | 2 |
-| ADS1115 breakout | 16-bit, I2C, 4-channel. Adafruit ~$15 but **ships with headers unsoldered**; generic modules ~$6 and usually pre-soldered. Either is identical to ESPHome, default address 0x48 | 6–15 |
+| ADS1115 breakout | 16-bit, I2C, 4-channel. **ShillehTek sells it explicitly pre-soldered** — Adafruit's ships with the header loose, and generic multipacks vary. Identical to ESPHome either way; default address 0x48. See note below on connector durability | 10–15 |
 | Resistors | 4.7k ×1, 10k ×3 — **1% metal film** | 3 |
 | Capacitors | 100 µF electrolytic + 0.1 µF ceramic | 2 |
 | Cable | 3-conductor 22 AWG shielded, length to the chimney box | 10 |
-| WAGO 221 lever nuts | 3-way, to split the 5V rail | 5 |
+| WAGO 221 lever nuts | **5-conductor**, ×2 — one for the 5V rail, one for GND. See "Why lever nuts" below | 5 |
 
 **Group C — booster monitoring, ~$15.**
 
