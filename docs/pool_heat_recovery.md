@@ -82,8 +82,8 @@ HA failure degrades to "no free heat," never to danger. See HA layer below.
 
 ## Wiring remaining (human)
 
-- [ ] FPH pump-call pair (reads ~24VAC when AC on + pool below setpoint) → 18AWG t-stat wire → IntelliComm input 4
-- [ ] Live test: setpoint > water temp, AC on → pump self-starts at 2200 RPM within ~30 s
+- [x] ~~FPH pump-call pair (reads ~24VAC when AC on + pool below setpoint) → 18AWG t-stat wire → IntelliComm input 4~~ — **DONE**, owner-confirmed 2026-08-07
+- [x] ~~Live test: setpoint > water temp, AC on → pump self-starts at 2200 RPM within ~30 s~~ — **DONE**, owner-confirmed 2026-08-07
 - [x] Flow switch (Tecmark 3010P) installed — wiring into trio 24VAC leg + calibration still remaining
 - [ ] **Breaker-kill acceptance test ONLY after flow switch wired + calibrated.** Until then it creates the dangerous state with nothing to catch it.
 - [x] R-40 ionizer control — **DONE, plan changed:** not wired to IntelliFlo accessory output. Instead, Shelly EM Gen3 (`shellyemg3-dcb4d9ce63a4`) on-device script watches `EM1.GetStatus` channel 0 (pump circuit CT) and drives `switch.shellyemg3_dcb4d9ce63a4` (relay → R-40) directly. Threshold 20W, 60s on-delay after pump starts (flow establishment), watts<=0 turns ionizer off immediately. Runs locally on the Shelly — no HA/network dependency, same resilience as the original hardware-interlock plan.
@@ -158,7 +158,7 @@ Copper tracked separately (Taylor K-1730) as its own HA input_number, target 0.2
 ## Open items
 
 - [ ] Confirm IntelliComm II cable P/N 350122 in hand; measure run to pump
-- [ ] Measure pool return pipe diameter before ordering flow sensor
+- [x] ~~Measure pool return pipe diameter before ordering flow sensor~~ — **2" pipe**, owner-confirmed 2026-08-07. The DN50 meter already on order is the correct size. Matches the TA100D's 2" multiport valve.
 - [ ] Tune Program 4 stop delay to max available on pump UI
 - [ ] After flow sensor install: calibrate pulse multiplier against Blue-White at 2200 RPM
 - [ ] Open note: confirm whether IntelliFlo accessory output is line-voltage or low-voltage relay signal (check when drive cover is open)

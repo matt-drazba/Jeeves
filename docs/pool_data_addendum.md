@@ -68,11 +68,36 @@ not. Both signals stay honest.
 **Staging is fine.** Nothing in the pressure plan depends on ordering. Install
 and calibrate the flow meter first if preferred; add pressure after.
 
+### The filter — identified 2026-08-07
+
+**Pentair Tagelus TA100D**, 30" top-mount **sand** filter. Owner-confirmed; specs
+from Pentair/distributor listings.
+
+| Spec | Value | Consequence |
+|---|---|---|
+| Type | **Sand**, top-mount | Alert wording is **"backwash"**, not "clean the cartridge" |
+| Filter area | 4.9 sq ft | — |
+| Sand charge | 600 lb | Media itself is a 5–7 year wear item |
+| Valve | 2" multiport, 6-position Hi-Flow, with sight glass | Gauge threads into the **valve body**; the handle rotates above it |
+| Design flow | 100 GPM | Pump runs 45–60 GPM — the filter is generously oversized, so pressure will climb slowly and backwash intervals will be long |
+| Max operating pressure | **50 psi** | Sets the transducer overpressure requirement, below |
+| Gauge port | 1/4" NPT, standard Pentair multiport thread | Owner-confirmed |
+
+**Expected clean baseline for a sand filter of this size: roughly 10–15 psi**, with
+backwash indicated at **+8–10 psi over the measured clean baseline**. Measure the
+real number after the next backwash rather than trusting the range.
+
+**Clearance check when fitting the tee:** on a Tagelus top mount the gauge is in
+the multiport valve body while the handle rotates above it, so the handle sweep
+is usually clear — but the tee adds bulk. Dry-fit and check against both the
+handle's full travel and the adjacent plumbing before sealing threads.
+
 ### The part
 
 | Spec | Value | Why |
 |---|---|---|
-| Range | **0–30 PSI** | Pool filters run 10–25 PSI. A 0–100 PSI unit spends 75% of its resolution on pressures that will never occur |
+| Range | **0–30 PSI** | Operating band is 10–25 psi. Transducer accuracy is quoted as % of *full scale*, so a smaller range is more accurate where it matters. Over-range is not a failure mode — it pins at 30 psi, and a sand filter at 30 psi means "backwash now" anyway |
+| **Overpressure rating** | **must be ≥ 50 psi** | **Check this before ordering.** The TA100D's max operating pressure is 50 psi. A 0–30 unit rated only 150% (45 psi) is under-specced; 200% (60 psi) is common and fine |
 | Thread | **1/4" NPT male** | Confirmed — matches the existing gauge port |
 | Output | **0.5–4.5V ratiometric** | Commodity part, easy to scale. Avoid 4–20mA: needs a loop supply and sense resistor for no benefit here |
 | Supply | **5V DC** | Confirmed available — the chimney-box buck outputs 5V |
@@ -308,10 +333,31 @@ wrong for the standard unit.**
 | **CLE-02** | **Copper only** | **Ships standard** — components list p.5, reorder note p.16 ("residential copper electrode") |
 | CLE-51 | 90% copper / 10% silver | **Optional upgrade** — spec sheet p.21 |
 
-Unless CLE-51 was specifically ordered, there is no silver in this pool at all.
-**Open item: inspect the electrode capsule and confirm which part is installed.**
-Either way the answer is the same — test copper, since there is no consumer-grade
-silver test at these levels and no independent control over it if there were.
+**Confirmed 2026-08-07: this pool has CLE-02 — copper only, no silver.**
+
+### Is the CLE-51 silver upgrade worth it? — No, not now
+
+Recommendation: **stay on CLE-02.** Three reasons, in order of weight:
+
+1. **It changes nothing you can measure or tune.** The ion test reads copper. The
+   target stays 0.15–0.20 ppm copper. Silver output is fixed by the alloy ratio
+   and rides the same dial — so you would be paying more for a parameter you
+   cannot read, cannot verify, and cannot adjust independently.
+2. **It does not relax the chlorine requirement.** The EPA label statement
+   (manual p.4) mandates ≥0.4 ppm free chlorine regardless of electrode. Silver
+   buys no reduction in the oxidiser routine, which is where the actual ongoing
+   effort is.
+3. **Electrodes are consumable — 1–5 year life (p.16).** This is a recurring
+   premium, not a one-time upgrade, and silver is the expensive half.
+
+Silver is bactericidal where copper is algaecidal, so the theoretical case is
+broader-spectrum sanitation. **Revisit only if a real problem appears** that
+copper at 0.15–0.20 ppm plus 0.4–1.0 ppm FC is failing to handle. There is no
+such problem on record.
+
+Stated honestly: the incremental benefit of silver in consumer pool ionizers is
+not well quantified in any documentation found. This recommendation rests on what
+is controllable and measurable, not on evidence that silver is ineffective.
 
 ### The target is 0.15–0.20 ppm — CLAUDE.md was wrong
 
@@ -334,13 +380,28 @@ sulfate, alum. A dose of the wrong sequestrant tanks the copper level and must b
 recorded in `pool_doses` or the dilution model will read it as an unexplained
 crash.
 
-Copper does not decay like chlorine — it leaves via backwash, splash-out, rain
-overflow, and filter media. That is why the chemistry brief models it against the
-`pool_actions` table rather than as time-based decay.
+### Backwash is the primary copper-loss mechanism — and that is filter-specific
 
-Copper does not decay like chlorine — it leaves via backwash, splash-out, rain
-overflow, and filter media. That is why the chemistry brief models it against the
-`pool_actions` table rather than as time-based decay.
+Copper does not decay like chlorine. It leaves by **dilution**: water out, fresh
+water in. That is why the chemistry brief models it against the `pool_actions`
+table rather than as time-based decay.
+
+Identifying the filter as a **sand** filter sharpens this considerably. A
+cartridge filter is never backwashed — it is pulled and hosed, and the pool loses
+essentially no water. A 30" sand filter backwashing at 45–60 GPM for 2–3 minutes,
+plus the rinse cycle, dumps on the order of **100–200 gallons per backwash**.
+That is not a footnote to the copper model; on this pool it is the dominant term.
+
+Practical consequence for the schema: **record backwash duration, not just the
+fact of a backwash.** Volume scales with time, so duration plus the known flow
+rate gives dumped gallons, which gives a predicted copper drop:
+
+```
+predicted_drop_ppm ≈ current_ppm × (gallons_dumped / pool_volume)
+```
+
+Fit that against the next copper test and it self-corrects. Without duration
+logged, every backwash is an unexplained step change in the series.
 
 ### Why the HI701 beats a drop kit here specifically
 
@@ -463,33 +524,49 @@ cadence can relax.
 
 ## Part 3 — Buy list
 
+Three independent groups. Nothing in one blocks another; buy in any order.
+
+**Group A — chemistry, ~$239.** Usable the day it arrives. No wiring, no code.
+
+| Item | Spec | Qty | ~$ |
+|---|---|---|---|
+| **Hanna HI747** | copper **Low Range** Checker HC — **not** the HI702, see Part 2 | 1 | 50 |
+| HI747-25 reagent | 25 tests; meter ships with 6 | 2 | 20 |
+| Hanna HI701 | free chlorine Checker HC | 1 | 55 |
+| HI701-25 reagent | DPD packets, 25 tests; meter ships with 6 | 3 | 27 |
+| Taylor K-2006 | FAS-DPD kit — pH, TA, CH, CYA, plus CC and backup FC | 1 | 80 |
+| **HM Digital TDS-3** pen | 0–9990 ppm, ATC — R-40 needs 500–3000 ppm to function at all | 1 | 15 |
+| Distilled water | rinsing; 1:1 dilution if copper ever over-ranges | 1 gal | 2 |
+
+Reagent quantities cover roughly the first 4–5 months at the manual's cadence
+(copper weekly, FC 2–3× weekly). **Do not stock deeper** — reagents degrade and
+should be replaced yearly. Ongoing reagent cost settles around **$60–70/year**.
+
+**Group B — filter pressure sensing, ~$61.**
+
 | Item | Spec | ~$ |
 |---|---|---|
-| Pressure transducer | 0–30 PSI, 1/4" NPT male, 0.5–4.5V, 5V supply, stainless | 25 |
+| Pressure transducer | 0–30 PSI, 1/4" NPT male, 0.5–4.5V, 5V supply, stainless, **overpressure ≥ 50 psi** | 25 |
 | Brass 1/4" NPT **street tee** | male run × female × female | 8 |
 | PTFE tape | standard white | 2 |
 | ADS1115 breakout | 16-bit, I2C, 4-channel | 6 |
-| Resistors | 4.7k, 10k ×3 — **1% metal film** | 3 |
+| Resistors | 4.7k ×1, 10k ×3 — **1% metal film** | 3 |
 | Capacitors | 100 µF electrolytic + 0.1 µF ceramic | 2 |
 | Cable | 3-conductor 22 AWG shielded, length to the chimney box | 10 |
 | WAGO 221 lever nuts | 3-way, to split the 5V rail | 5 |
-| Hanna HI701 | free chlorine Checker HC | 55 |
-| HI701-25 reagent | DPD packets, 25 tests — 2 packs | 18 |
-| Taylor K-2006 | FAS-DPD kit — covers CC, pH, TA, CH, CYA | 80 |
-| **Hanna HI747** | copper **Low Range** Checker HC — **not** the HI702, see Part 2 | ~50 |
-| HI747-25 reagent | copper reagent, 25 tests — meter ships with 6 | ~10 |
-| **HM Digital TDS-3** pen | 0–9990 ppm, ATC — R-40 needs 500–3000 ppm to function at all | ~15 |
+
+**Group C — booster monitoring, ~$15.**
+
+| Item | Spec | ~$ |
+|---|---|---|
 | CT clamp for Shelly EM Gen3 `IB` | Shelly-branded, matching the Gen3 input | 15 |
 
-**~$305**, of which ~$228 is chemistry instrumentation and ~$76 is the pressure
-sensing hardware. For comparison, the reviewed third-party spec estimated
+**Total ~$315.** For comparison, the reviewed third-party spec estimated
 $1,100–2,700 for equivalent-or-worse coverage of this specific pool.
 
-Staging, if the spend is split: the **HI747 + HI701 + K-2006 + TDS pen** group
-(~$228) can be bought and used today with no wiring at all, and it is the
-prerequisite for the chemistry forecasting in
-[pool_chemistry_logging.md](pool_chemistry_logging.md). The pressure group (~$76)
-waits on the flow meter anyway.
+Group A is the one to buy first — it is the prerequisite for the chemistry
+forecasting in [pool_chemistry_logging.md](pool_chemistry_logging.md) and needs
+no hardware work. Group B waits on the flow meter regardless.
 
 If the street tee is hard to source, a 1/4" FPT tee plus a 1/4" close nipple
 gives the same result with one more joint to seal.
@@ -507,19 +584,21 @@ mode no breaker or overload will.
 
 ## Open items
 
-- [ ] **Identify the filter — sand, DE, or cartridge, and model.** Does not
-      change the transducer, tee, or wiring. Does change the clean baseline PSI,
-      whether the alert says "backwash" or "pull and hose the cartridge," and
-      whether the gauge port sits on a rotatable multiport valve
-- [ ] Confirm the existing gauge is 1/4" NPT — reported yes, verify on removal
+- [x] ~~**Identify the filter**~~ — **Pentair Tagelus TA100D**, 30" top-mount
+      sand, 4.9 sq ft, 600 lb sand, 2" multiport, 50 psi max. Owner-confirmed
+      2026-08-07. Alert wording is "backwash"
+- [x] ~~Confirm the existing gauge is 1/4" NPT~~ — yes, standard Pentair
+      multiport thread. Owner-confirmed 2026-08-07
+- [x] ~~**Inspect the R-40 electrode capsule**~~ — **CLE-02, copper only.** No
+      silver in this pool. CLE-51 upgrade assessed and declined; see Part 2
+- [ ] **Confirm the transducer's overpressure rating is ≥ 50 psi** before
+      ordering — the TA100D's max operating pressure is 50 psi and a 0–30 unit
+      rated only 150% (45 psi) is under-specced
 - [x] ~~Confirm the Hanna copper Checker model number~~ — **HI747 (Low Range)**,
       0–999 ppb, ±10 ppb ±5%. Not the HI702, whose error window is wider than
       twice the R-40's entire 0.15–0.20 ppm target band
 - [x] ~~Verify HI701 published accuracy~~ — 0.00–2.50 ppm, ±0.03 ppm ±3%, DPD
       per EPA 330.5. Confirmed at hannainst.com 2026-08-07
-- [ ] **Inspect the R-40 electrode capsule — CLE-02 (copper only, standard) or
-      CLE-51 (90/10 copper/silver, optional upgrade)?** Determines whether this
-      pool has any silver sanitation at all. Visual check, no tools
 - [ ] **Measure TDS.** Must be 500–3000 ppm or the R-40 cannot produce ions
       regardless of dial setting. Never verified; not currently recorded anywhere
 - [ ] Confirm which sequestering agent (if any) is in use — several common ones

@@ -144,7 +144,7 @@ Stated plainly so they're decisions, not surprises:
 - [ ] Measure Polaris 280 wheel RPM and confirm it lands in 28–32 before tuning anything else
 - [x] ~~Determine minimum main-pump GPM to feed the PB4-60~~ — non-issue. Booster draws ~24 GPM against 140 ft head and Polaris specs it to run on a VS pump's low-speed setting; the 45–50 GPM baseline has ample margin. Gate on "flow present," not on a specific GPM target.
 - [ ] Recreate the sweep schedule in HA, then delete it from the Tuya app
-- [ ] Confirm PB4-60 nameplate voltage as actually wired (230V vs 115V) — affects nothing in this plan, but belongs in the wiring manual
+- [x] ~~Confirm PB4-60 nameplate~~ — read 2026-08-07: **3/4 HP, 3450 RPM, 60 Hz, 230/115V, SF amps 6.4/12.8.** Matches the manual exactly. Note this is a **dual-voltage** nameplate — it states capability, not configuration. Wired voltage is **inferred to be 230V** from the 240V Tuya switch on the circuit, giving ~1.5 kW, which is the figure the TOU math above uses. Confirm at the breaker/switch to close this properly.
 - [ ] Optional: CT on the booster circuit for runtime logging and a watts-too-low dry-run alarm (monitoring only, not required for the interlock)
 - [ ] Fall back to LocalTuya (HACS) if cloud latency on the off-command proves unacceptable
 

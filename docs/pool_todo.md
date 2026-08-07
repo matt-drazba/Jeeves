@@ -12,39 +12,43 @@ Source docs: [pool_heat_recovery.md](pool_heat_recovery.md) ·
 
 ---
 
-## 0. Go look at things — free, no dependencies, unblocks the rest
+## 0. Go look at things — mostly closed 2026-08-07
 
-One trip to the pad with a phone, plus one website login. **Do this first** —
-four other tiers are waiting on answers from here.
-
-- [ ] **What filter is it** — sand, DE, or cartridge, and the model off the label.
-      Blocks: clean-baseline PSI, backwash-vs-clean alert wording, whether the
-      gauge port is on a rotatable multiport valve. → data_addendum
-- [ ] **Confirm the filter gauge is 1/4" NPT** — same trip, 10-second look at the
-      threads. → data_addendum
-- [ ] **Inspect the R-40 electrode capsule: CLE-02 or CLE-51?** Determines whether
-      this pool has any silver sanitation or is copper-only. → data_addendum
+- [x] ~~**What filter is it**~~ — **Pentair Tagelus TA100D**, 30" top-mount
+      **sand**, 4.9 sq ft, 600 lb sand, 2" multiport, 100 GPM design flow, 50 psi
+      max. Alert wording is "backwash." Expect a clean baseline around 10–15 psi
+- [x] ~~**Confirm the filter gauge is 1/4" NPT**~~ — yes, standard Pentair
+      multiport thread
+- [x] ~~**Inspect the R-40 electrode capsule**~~ — **CLE-02, copper only.** The
+      CLE-51 silver upgrade was assessed and **declined** — it changes nothing
+      measurable or tunable, does not relax the 0.4 ppm chlorine floor, and is a
+      recurring cost since electrodes are consumable. → data_addendum Part 2
+- [x] ~~**Confirm PB4-60 nameplate**~~ — 3/4 HP, 3450 RPM, 230/115V, SF amps
+      6.4/12.8. Dual-voltage nameplate, so this states capability not
+      configuration; 230V/~1.5 kW inferred from the 240V Tuya switch
 - [ ] **Confirm the PG&E rate plan — EV2-A or E-TOU-C.** Login to pge.com. If
       EV2-A, shifting the booster window past midnight is worth ~$10–15/month for
-      a free schedule change. → booster_interlock
+      a free schedule change. **Only remaining free win in this tier.**
+      → booster_interlock
 - [ ] **Measure Polaris 280 wheel RPM** — pump running, cleaner held below water,
       count revolutions for one minute. Target 28–32. Do this *before* touching
       restrictor discs or the relief valve. → booster_interlock
-- [ ] **Confirm PB4-60 nameplate voltage as actually wired** (230V vs 115V).
-      Changes nothing operationally; belongs in the wiring manual. → booster_interlock
+- [ ] Optional, to fully close the nameplate item: confirm the booster's actual
+      wired voltage at the breaker or switch.
 
 ## 1. Order parts — nothing depends on anything, buy in one go
 
 Full spec and reasoning per line item in
 [pool_data_addendum.md](pool_data_addendum.md) Part 3.
 
-- [ ] **Chemistry group (~$228)** — Hanna HI701 + 2× HI701-25 reagent, Hanna
-      **HI747** (low range copper — *not* the HI702) + HI747-25 reagent, Taylor
-      K-2006, TDS pen. **Usable the day it arrives, no wiring.**
-- [ ] **Pressure group (~$76)** — 0–30 PSI transducer (1/4" NPT male, 0.5–4.5V,
-      5V supply, stainless), 1/4" brass street tee, PTFE tape, ADS1115, 1%
-      resistors (4.7k, 3× 10k), 100 µF electrolytic + 0.1 µF ceramic, 3-conductor
-      22 AWG shielded cable, WAGO 221s.
+- [ ] **Group A — chemistry (~$239)** — Hanna **HI747** (low range copper, *not*
+      the HI702) + 2× HI747-25, Hanna HI701 + 3× HI701-25, Taylor K-2006,
+      **HM Digital TDS-3** pen, 1 gal distilled water. **Usable the day it
+      arrives, no wiring. Buy this one first.**
+- [ ] **Group B — pressure sensing (~$61)** — 0–30 PSI transducer (1/4" NPT male,
+      0.5–4.5V, 5V supply, stainless, **overpressure ≥ 50 psi**), 1/4" brass
+      street tee, PTFE tape, ADS1115, 1% resistors (4.7k ×1, 10k ×3), 100 µF
+      electrolytic + 0.1 µF ceramic, 3-conductor 22 AWG shielded cable, WAGO 221s.
 - [ ] **CT clamp (~$15)** for the Shelly EM Gen3 `IB` channel — destined for the
       **booster** circuit, not the pump's second leg. → booster_interlock
 
@@ -71,10 +75,10 @@ No wiring, no code. This is the data the forecasting model will be fitted to.
 **Three separate workstreams are blocked on this.** Highest-leverage hardware
 task on the list.
 
-- [ ] **Verify the DN50 (2") meter matches the actual return pipe.** The
-      heat_recovery doc still carries "measure pipe diameter *before* ordering" —
-      that item is **stale**, the meter is already on order as DN50. Confirm fit
-      rather than re-deciding.
+- [x] ~~Verify the DN50 (2") meter matches the actual return pipe~~ —
+      **2" confirmed** 2026-08-07. DN50 is correct, and it matches the TA100D's
+      2" multiport valve. Stale "measure before ordering" item removed from
+      heat_recovery.
 - [ ] Source true-union fittings.
 - [ ] Install. Powers from the existing 5V buck rail alongside the ESP.
 - [ ] **Calibrate against the Blue-White gauge at locked 2200 RPM**, sequentially
@@ -142,11 +146,10 @@ two decisions still open.
       calibrated.** Before that it creates the dangerous state with nothing to
       catch it.
 - [ ] Tune Program 4 stop delay to max available on the pump UI.
-- [ ] **Verify status of three possibly-stale items:** "FPH pump-call pair →
-      IntelliComm input 4" and "live test: pump self-starts at 2200 RPM" are
-      listed open but the system is working; CLAUDE.md still lists "relay/opto
-      inputs" as remaining though the White Rodgers appears installed per the
-      wiring manual. Confirm and close.
+- [x] ~~Verify status of three possibly-stale items~~ — **all three closed
+      2026-08-07.** FPH pump-call pair → IntelliComm input 4: done. Live test,
+      pump self-starts at 2200 RPM: done. White Rodgers relay installed, **no
+      optocouplers** — CLAUDE.md corrected.
 - [ ] Open question: is the IntelliFlo accessory output line-voltage or
       low-voltage? Check next time the drive cover is off.
 
