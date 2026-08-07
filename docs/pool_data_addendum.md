@@ -160,6 +160,38 @@ The electrical argument for commodity parts still holds completely (differential
 measurement, errors cancel); what fails is *verifiability*, and a wrong thread
 cracks the filter head. That is a sourcing risk, not a performance one.
 
+#### Candidates evaluated 2026-08-07
+
+| | Automotive-sender type (e.g. jcarpart 150 psi) | Amphenol SSI **P51** series |
+|---|---|---|
+| Thread | **1/8"-27 NPT**, stated with pitch — a good sign | **1/4" NPT direct**, no bushing |
+| Range offered | 150 psi (too wide; check for 60/100 variants) | 100 psi |
+| Accuracy | 1.5% FS | **0.5% FS** |
+| Supply | **5V** — matches the buck rail | **8–30V** — needs the existing 12V tap |
+| Output | 0.5–4.5V **ratiometric** | 1–5V **regulated** |
+| Burst | min 300 psi | per datasheet |
+| Termination | **sealed quick-disconnect + pigtail included** | 3' cable |
+| Price | ~$25 | ~$80–150 |
+
+**A regulated output changes the circuit for the better.** If a P51-style part is
+used, the ratiometric compensation described earlier becomes unnecessary: drop
+the A1 rail-monitoring channel and its two resistors, keep only the divider into
+A0. The 100 µF bulk cap stays as good practice but is no longer load-bearing for
+accuracy. Power it from the box's existing **12V** adapter, not the 5V buck.
+
+**On over-wide ranges.** A 150 psi sensor across a 10–25 psi working band looks
+bad on paper — 1.5% FS is ±2.25 psi against an 8–10 psi decision threshold. In
+practice most of that cancels: "% of full scale" is a total error band dominated
+by offset and span error, both common to the baseline and the current reading and
+therefore removed by the subtraction. What survives is repeatability and
+hysteresis, typically 0.1–0.25% FS. A 150 psi unit is workable; a 60–100 psi unit
+of the same family is strictly better for the same money.
+
+**Decision: prefer a 5V ratiometric automotive-sender part at 60–100 psi.** The
+P51 is the better instrument and this application does not need a better
+instrument. If buying it anyway, check DigiKey's actual in-stock quantity — the
+"10 week lead time" attribute is the factory figure, not the distributor's.
+
 #### Why commodity beats industrial here
 
 An Omega PX109 or Gems 3100 (~$130–170) is the correct part in every respect and
