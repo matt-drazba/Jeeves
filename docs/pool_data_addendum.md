@@ -268,17 +268,31 @@ it is genuinely the lowest-risk mechanical option, and the analog gauge can be
 kept in a drawer for periodic calibration checks. It just costs the three points
 above.
 
+**As-decided assembly** (2026-08-07), reading outward from the filter:
+
 ```
-        filter head 1/4" FPT port
-                 │
-        ┌────────┴────────┐
-        │ 1/4" brass tee  │   street tee: male run × female × female
-        └──┬───────────┬──┘
-           │           │
-    stock analog    0–30 PSI
-       gauge        transducer
-                        │ 3 wires → chimney box
+filter multiport port ....... 1/4" FNPT
+  └─ street tee (1/4" MNPT run) ──┬── 1/4" FNPT branch
+  │                               │     └─ analog gauge (1/4" MNPT)  ← keep
+  │                               │
+  │                               └── 1/4" FNPT branch
+  │                                     └─ reducing bushing (1/4" MNPT × 1/8" FNPT)
+  │                                          └─ transducer (1/8" MNPT)
+  │                                               │ 3 wires → chimney box
 ```
+
+**Four sealed joints:** tee→filter, gauge→tee, bushing→tee, sensor→bushing.
+PTFE tape on every male thread.
+
+⚠ **Four joints is a longer, heavier stack cantilevered off a plastic boss.**
+Two free mitigations: **dry-fit the entire assembly before taping anything** and
+confirm it clears the multiport handle through full rotation; and **orient the
+sensor down or sideways, never straight out**, with the cable strain-relieved so
+it cannot tug the fitting. If the assembled stack looks long, switch to the
+braided-pigtail option (C below) and move the sensor's weight onto a bracket.
+
+*Tidier build if one can be sourced:* a **1/4"M × 1/4"F × 1/8"F reducing street
+tee** eliminates the bushing and one joint. Less common than a plain tee.
 
 **Procedure:**
 
@@ -751,9 +765,10 @@ should be replaced yearly. Ongoing reagent cost settles around **$60–70/year**
 
 | Item | Spec | ~$ |
 |---|---|---|
-| Pressure transducer | **0–80 PSI**, **1/4" NPT** male — ***not* G1/4**, see thread warning above, 0.5–4.5V out, 5V supply, stainless | 25 |
+| Pressure transducer | **DECIDED:** automotive-sender type, **1/8"-27 NPT male**, 0.5–4.5V out, 5V supply, 316 SS, sealed QD + pigtail. **Request 60 or 100 psi**; 150 acceptable if that is all that is stocked. ***Never* G1/4** | 25 |
+| **Reducing bushing** | **1/4" MNPT × 1/8" FNPT brass hex bushing.** An NPT *reducing bushing* is male on the large end, female on the small — one piece. **Not** a reducing *coupling*, which is female × female and will not thread into the tee | 4 |
 | Brass 1/4" NPT **street tee** | male run × female × female | 8 |
-| PTFE tape | standard white | 2 |
+| PTFE tape | standard white — **every male thread**, four joints total | 2 |
 | ADS1115 breakout | 16-bit, I2C, 4-channel. **ShillehTek sells it explicitly pre-soldered** — Adafruit's ships with the header loose, and generic multipacks vary. Identical to ESPHome either way; default address 0x48. See note below on connector durability | 10–15 |
 | Resistors | 4.7k ×1, 10k ×3 — **1% metal film** | 3 |
 | Capacitors | 100 µF electrolytic + 0.1 µF ceramic | 2 |

@@ -39,13 +39,14 @@ Full spec and reasoning per line item in
       the HI702) + 2× HI747-25, Hanna HI701 + 3× HI701-25, Taylor K-2006,
       **HM Digital TDS-3** pen, 1 gal distilled water. **Usable the day it
       arrives, no wiring. Buy this one first.**
-- [ ] **Group B — pressure sensing (~$65–75)** — **60–80 PSI** transducer,
-      0.5–4.5V out, 5V supply, stainless, **1/8" NPT** male plus a **1/4"MNPT ×
-      1/8"FNPT brass reducing bushing** (the 1/8 automotive-sender market is
-      unambiguously labelled; **never buy G1/4/BSPP**); 1/4" brass street tee;
-      PTFE tape; **ADS1115 pre-soldered** (ShillehTek sells it that way);
-      1% resistors (4.7k ×1, 10k ×3); 100 µF electrolytic + 0.1 µF ceramic;
-      3-conductor 22 AWG shielded cable; **2× 5-conductor WAGO 221**.
+- [ ] **Group B — pressure sensing (~$65–75). DECIDED 2026-08-07:**
+      automotive-sender transducer, **1/8"-27 NPT male**, 0.5–4.5V out, 5V
+      supply, 316 SS, sealed QD + pigtail — **request 60 or 100 psi**, 150
+      acceptable, **never G1/4/BSPP**; **1/4"MNPT × 1/8"FNPT brass reducing
+      bushing** (*bushing*, not coupling); 1/4" brass street tee; PTFE tape;
+      **ADS1115 pre-soldered** (ShillehTek); 1% resistors (4.7k ×1, 10k ×3);
+      100 µF electrolytic + 0.1 µF ceramic; 3-conductor 22 AWG shielded cable;
+      **2× 5-conductor WAGO 221**.
 - [ ] **CT clamp (~$15)** for the Shelly EM Gen3 `IB` channel — destined for the
       **booster** circuit, not the pump's second leg. → booster_interlock
 
