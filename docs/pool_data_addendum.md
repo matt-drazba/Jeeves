@@ -395,8 +395,14 @@ cadence can relax.
 | HI747-25 reagent | copper reagent, 25 tests — meter ships with 6 | ~10 |
 | CT clamp for Shelly EM Gen3 `IB` | Shelly-branded, matching the Gen3 input | 15 |
 
-**~$255.** For comparison, the reviewed third-party spec estimated $1,100–2,700
-for equivalent-or-worse coverage of this specific pool.
+**~$290**, of which ~$213 is chemistry instrumentation and ~$76 is the pressure
+sensing hardware. For comparison, the reviewed third-party spec estimated
+$1,100–2,700 for equivalent-or-worse coverage of this specific pool.
+
+Staging, if the spend is split: the **HI747 + HI701 + K-2006** group (~$213) can
+be bought and used today with no wiring at all, and it is the prerequisite for
+the chemistry forecasting in [pool_chemistry_logging.md](pool_chemistry_logging.md).
+The pressure group (~$76) waits on the flow meter anyway.
 
 If the street tee is hard to source, a 1/4" FPT tee plus a 1/4" close nipple
 gives the same result with one more joint to seal.
