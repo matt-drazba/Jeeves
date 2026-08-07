@@ -348,10 +348,29 @@ test with the black-dot view tube. CYA still matters on an ionizer pool: it
 protects the low FC residual from UV, and it sets the minimum FC target. It only
 moves when stabilizer is added or water is diluted, so monthly is ample.
 
-**Copper is the gap.** The K-2006 does not test it. Options are a standalone
-Taylor copper kit, a Hanna copper Checker HC in the same product line as the
-HI701, or LaMotte. **Confirm the current model number before ordering** — the
-copper Checker SKU is not recorded here and should not be guessed.
+**Copper is the gap.** The K-2006 does not test it. Verified 2026-08-07: Hanna
+makes **two** copper Checkers, and the obvious one is the wrong one.
+
+| | HI702 (High Range) | **HI747 (Low Range)** |
+|---|---|---|
+| Range | 0.00–5.00 ppm | **0–999 ppb (0–0.999 ppm)** |
+| Resolution | 0.01 ppm | **1 ppb (0.001 ppm)** |
+| Accuracy @ 25 °C | ±0.05 ppm ±5% of reading | **±10 ppb ±5% of reading** |
+| Error at the 0.3 ppm target | ±0.065 ppm → **±22%** | ±0.025 ppm → **±8%** |
+| Method | Bicinchoninate | Bicinchoninate (EPA adaptation) |
+| Reagent | HI702-25 (25 tests) | **HI747-25 (25 tests)**; meter ships with 6 |
+
+**Buy the HI747.** The HI702 is aimed at reef aquariums, where copper treatment
+runs 1–3 ppm. The 0.2–0.4 ppm target here sits in the bottom 8% of the HI702's
+scale, which is where a colorimeter performs worst — roughly 3× the error of the
+low-range unit.
+
+The HI747's ceiling is a useful accident: 0.999 ppm is essentially the industry
+limit above which copper begins staining plaster. An in-range reading means
+safe; an over-range reading means "dial the ionizer output back." The one value
+worth flagging is flagged structurally rather than by a threshold rule. If a
+number above 1 ppm is ever needed, dilute 1:1 with distilled water and double
+the result.
 
 Test more often at first than the cadence above. The point of the first month is
 to learn this pool's actual decay and drift rates; once the model has them, the
@@ -372,7 +391,8 @@ cadence can relax.
 | Hanna HI701 | free chlorine Checker HC | 55 |
 | HI701-25 reagent | DPD packets, 25 tests — 2 packs | 18 |
 | Taylor K-2006 | FAS-DPD kit — covers CC, pH, TA, CH, CYA | 80 |
-| Copper test | model TBC — see Part 2 | ~25 |
+| **Hanna HI747** | copper **Low Range** Checker HC — **not** the HI702, see Part 2 | ~50 |
+| HI747-25 reagent | copper reagent, 25 tests — meter ships with 6 | ~10 |
 | CT clamp for Shelly EM Gen3 `IB` | Shelly-branded, matching the Gen3 input | 15 |
 
 **~$255.** For comparison, the reviewed third-party spec estimated $1,100–2,700
@@ -399,7 +419,9 @@ mode no breaker or overload will.
       whether the alert says "backwash" or "pull and hose the cartridge," and
       whether the gauge port sits on a rotatable multiport valve
 - [ ] Confirm the existing gauge is 1/4" NPT — reported yes, verify on removal
-- [ ] Confirm the Hanna copper Checker model number before ordering
+- [x] ~~Confirm the Hanna copper Checker model number~~ — **HI747 (Low Range)**,
+      0–999 ppb, ±10 ppb ±5%. Not the HI702, which is high-range reef-aquarium
+      gear and ~3× less accurate at this pool's 0.2–0.4 ppm target
 - [ ] Verify HI701 published accuracy against current Hanna documentation
 - [ ] Establish the clean-filter baseline PSI at 2200 RPM immediately after the
       next backwash/clean — everything downstream compares against it
@@ -409,7 +431,9 @@ mode no breaker or overload will.
 
 ## Sources
 
-- Hanna Instruments HI701 Checker HC — free chlorine, 0.00–2.50 mg/L
+- [Hanna HI701 Free Chlorine Checker HC](https://hannainst.com/hi701-free-chlorine.html) — 0.00–2.50 mg/L
+- [Hanna HI747 Copper Low Range Checker HC](https://hannainst.com/hi747-copper-lr.html) — 0–999 ppb, ±10 ppb ±5%
+- [Hanna HI702 Copper High Range Checker HC](https://hannainst.com/hi702-copper-hr.html) — 0.00–5.00 ppm; **rejected**, wrong range for this pool
 - Taylor K-2006 FAS-DPD test kit — FC, CC, pH, TA, CH, CYA
 - Clearwater MineralPURE R-40 — copper/silver ionizer
 - Third-party "Smart Pool Laboratory Hardware Specification", reviewed 2026-08-07
