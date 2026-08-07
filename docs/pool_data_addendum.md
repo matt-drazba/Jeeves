@@ -128,6 +128,38 @@ of scale for no benefit.
 Note these listings routinely contradict themselves: marketing bullets claim
 "0.5% FS" while the spec table says "1% FS". **Budget for 1%.**
 
+#### Sourcing trap — these listings cannot be trusted on thread or range
+
+Two failure modes, both observed on real listings 2026-08-07:
+
+1. **Title says `1/4" NPT`, spec table says `Thread: G1/4"`.** When they conflict,
+   **believe the spec table** — titles are written for the search algorithm,
+   spec tables are usually pasted from the supplier datasheet. The same listings
+   also claim 0.5% FS in the bullets and 1% FS in the specs.
+2. **Title lists `10/30/80/100/150/200/300PSI` but the page has no variation
+   dropdown.** That range list is keyword stuffing to catch every search. Without
+   a Size/Style selector there is only one part, and it is whatever the spec
+   table says.
+
+**Correction to an earlier note in this doc:** it previously said "no adapters."
+That is wrong as stated. **NPT-to-NPT reducing bushings are standard and correct**
+— same thread form, same taper, seals properly. The prohibition is specifically on
+mating *BSPP (G1/4) to NPT*, which are different thread standards.
+
+That makes the cleanest sourcing route:
+
+**Preferred: a 1/8" NPT sensor + a 1/4"MNPT × 1/8"FNPT brass reducing bushing
+(~$3).** The automotive oil-pressure sender market is almost entirely 1/8" NPT,
+so it is large, well-documented, and unambiguously labelled. Costs one extra
+threaded joint and removes the thread gamble entirely. Look for 60 or 80 psi
+variants.
+
+**Alternative: buy configurable.** Transducers Direct configure to order against a
+published datasheet — thread, range, and output are chosen explicitly, $49–116.
+The electrical argument for commodity parts still holds completely (differential
+measurement, errors cancel); what fails is *verifiability*, and a wrong thread
+cracks the filter head. That is a sourcing risk, not a performance one.
+
 #### Why commodity beats industrial here
 
 An Omega PX109 or Gems 3100 (~$130–170) is the correct part in every respect and
