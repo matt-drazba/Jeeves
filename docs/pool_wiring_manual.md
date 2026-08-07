@@ -73,6 +73,8 @@ No single page of the FPH manual states this plainly, and it is the thing to und
 
 ⚠ **Naming trap:** the ESPHome node is named **`pool-pad`** and its Home Assistant entities all begin `sensor.pool_pad_…`. That name is historical — **the board is not at the pool pad, it is in the new box on the chimney.** Don't go looking at the pad for it.
 
+**The chimney is non-functional** (owner-confirmed 2026-08-07). It is an exterior chimney that is no longer used as a flue — purely a mounting surface for the FPH box and the new box. **There is no heat, no combustion, and no flue gas to design around**, which is why mounting electronics, a buck converter, and temperature-sensitive parts flat against it is fine. Anyone new to this system will assume otherwise on sight; they should not.
+
 **Nothing inside the heat pump and nothing inside the FPH was modified by us.** Both were wired by the installer per the HotSpot manual. Every change we made lives either (a) in the 24VAC control leg between the FPH controller and the trio, or (b) in the new box on the chimney. If you are diagnosing a problem, that boundary is where to start.
 
 ---

@@ -96,7 +96,7 @@ handle's full travel and the adjacent plumbing before sealing threads.
 
 | Spec | Value | Why |
 |---|---|---|
-| Range | **0–60 PSI** (revised — see below) | Covers the TA100D's full 50 psi rating with margin. 0–30 is acceptable **only** if the listing confirms proof pressure ≥ 50 psi |
+| Range | **0–80 PSI** (revised twice — see below) | The commodity family only offers 10/30/80/100/150/200/300 — **there is no 60**. 80 is the first option that clears the TA100D's 50 psi rating |
 | **Thread** | **1/4" NPT — verify explicitly** | **The most likely way to buy the wrong part.** Listings for "G1/4" units look identical and are BSPP: a *parallel* British thread, where NPT is tapered. They start threading, then leak or crack the plastic multiport boss |
 | Thread | **1/4" NPT male** | Confirmed — matches the existing gauge port |
 | Output | **0.5–4.5V ratiometric** | Commodity part, easy to scale. Avoid 4–20mA: needs a loop supply and sense resistor for no benefit here |
@@ -107,22 +107,26 @@ Do not run a 5V ratiometric transducer from 3.3V to dodge level shifting.
 Ratiometric means the output scales with supply; accuracy below the spec'd
 supply voltage is undefined.
 
-#### Range revised 0–30 → 0–60 PSI, 2026-08-07
+#### Range: settled at 0–80 PSI (revised twice, 2026-08-07)
 
-The original 0–30 choice was made before the filter was identified, on the
-reasoning that accuracy is quoted as % of full scale so a tighter range reads
-better across a 10–25 psi operating band. **Identifying the TA100D and its 50 psi
-maximum changed the calculus.**
+**0–30 → 0–60:** the original 0–30 predated identifying the filter, chosen because
+accuracy is quoted as % of full scale so a tighter range reads better across a
+10–25 psi operating band. The TA100D's **50 psi maximum** changed that. The
+deciding case is not a fouled filter but a **closed return valve with the pump
+running** — an IntelliFlo2 dead-heading can drive well past 30 psi, leaving a
+0–30 sensor rated 150% proof (45 psi) at its limit.
 
-The deciding case is not a fouled filter — it is a **closed return valve with the
-pump running.** An IntelliFlo2 dead-heading can drive pressure well past 30 psi,
-and a 0–30 sensor rated only 150% proof (45 psi) is then at its limit. 0–60
-covers the tank's full rating with headroom and makes that event *measurable*
-rather than pegged at full scale.
+**0–60 → 0–80:** these commodity transducers are sold in a fixed range family —
+**10 / 30 / 80 / 100 / 150 / 200 / 300 PSI. There is no 60.** So the real choice
+is 30 or 80, and 80 is the first that clears 50 psi with margin.
 
-Cost of the change: ±0.6 psi instead of ±0.3 psi at 1% FS. Against an 8–10 psi
-backwash threshold that is 6–7%, and most of it cancels in the differential
-(below). Cheap insurance.
+Error budget at 0–80 and 1% FS: **±0.8 psi**. Against an 8–10 psi backwash
+threshold that is 8–10%, and most of it cancels in the differential (below).
+Acceptable. Do not go to 100+ — the operating band shrinks to the bottom 10–25%
+of scale for no benefit.
+
+Note these listings routinely contradict themselves: marketing bullets claim
+"0.5% FS" while the spec table says "1% FS". **Budget for 1%.**
 
 #### Why commodity beats industrial here
 
@@ -683,7 +687,7 @@ should be replaced yearly. Ongoing reagent cost settles around **$60–70/year**
 
 | Item | Spec | ~$ |
 |---|---|---|
-| Pressure transducer | **0–60 PSI**, **1/4" NPT** male (*not* G1/4), 0.5–4.5V, 5V supply, stainless | 25 |
+| Pressure transducer | **0–80 PSI**, **1/4" NPT** male — ***not* G1/4**, see thread warning above, 0.5–4.5V out, 5V supply, stainless | 25 |
 | Brass 1/4" NPT **street tee** | male run × female × female | 8 |
 | PTFE tape | standard white | 2 |
 | ADS1115 breakout | 16-bit, I2C, 4-channel. **ShillehTek sells it explicitly pre-soldered** — Adafruit's ships with the header loose, and generic multipacks vary. Identical to ESPHome either way; default address 0x48. See note below on connector durability | 10–15 |

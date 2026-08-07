@@ -39,12 +39,12 @@ Full spec and reasoning per line item in
       the HI702) + 2× HI747-25, Hanna HI701 + 3× HI701-25, Taylor K-2006,
       **HM Digital TDS-3** pen, 1 gal distilled water. **Usable the day it
       arrives, no wiring. Buy this one first.**
-- [ ] **Group B — pressure sensing (~$61–70)** — **0–60 PSI** transducer,
-      **1/4" NPT** male (**not G1/4** — that is BSPP and will not seal), 0.5–4.5V
-      out, 5V supply, stainless; 1/4" brass street tee; PTFE tape; ADS1115
-      (Adafruit ~$15, headers need soldering — or generic ~$6, usually
-      pre-soldered); 1% resistors (4.7k ×1, 10k ×3); 100 µF electrolytic +
-      0.1 µF ceramic; 3-conductor 22 AWG shielded cable; WAGO 221s.
+- [ ] **Group B — pressure sensing (~$61–70)** — **0–80 PSI** transducer,
+      **1/4" NPT** male (**not G1/4** — that is BSPP, will not seal, and is what
+      most listings show), 0.5–4.5V out, 5V supply, stainless; 1/4" brass street
+      tee; PTFE tape; **ADS1115 pre-soldered** (ShillehTek sells it that way);
+      1% resistors (4.7k ×1, 10k ×3); 100 µF electrolytic + 0.1 µF ceramic;
+      3-conductor 22 AWG shielded cable; **2× 5-conductor WAGO 221**.
 - [ ] **CT clamp (~$15)** for the Shelly EM Gen3 `IB` channel — destined for the
       **booster** circuit, not the pump's second leg. → booster_interlock
 
@@ -196,7 +196,8 @@ linked doc; this is the index.
 | Salt / EC / conductivity probe | **Declined** | 2026-08-07 | Not a salt pool. TDS is a once-a-year pen check, not a live sensor |
 | MQTT → InfluxDB → Grafana | **Declined** | 2026-08-07 | Banned by CLAUDE.md hard rules. SQLite is system of record, Jeeves is the UI, and Grafana could not host the poolside entry form anyway |
 | ESP32 rebuild of the pad node | **Declined** | 2026-08-07 | ESP8266 is flashed and working. ESP32 is justified only for the separate pH node |
-| Transducer range: 0–30 vs 0–60 PSI | **0–60** *(revised same day from 0–30)* | 2026-08-07 | Original 0–30 predated identifying the filter. The TA100D's 50 psi rating plus the dead-head case (closed return valve, pump running) means 0–30 sits at its proof-pressure limit. 0–60 covers the full rating and makes that event measurable. Costs ±0.6 vs ±0.3 psi, most of which cancels in the differential |
+| Transducer range | **0–80 PSI** *(revised twice from 0–30, then 0–60)* | 2026-08-07 | The TA100D's 50 psi rating plus the dead-head case (closed return valve, pump running) rules out 0–30. The commodity family is 10/30/80/100/150/200/300 — **no 60 exists** — so 80 is the first that clears 50 psi. ±0.8 psi at 1% FS, most of which cancels in the differential. Do not go to 100+ |
+| Transducer thread | **1/4" NPT only** | 2026-08-07 | G1/4 is BSPP, a *parallel* thread; NPT is tapered. G1/4 listings look identical, are often the only ones showing a given range, and will leak or crack the plastic multiport boss. No adapters — buy the NPT version |
 | Transducer grade: commodity vs industrial | **Commodity (~$25)** | 2026-08-07 | The measurement is a difference against a self-established baseline, so offset and gain errors cancel. Baseline is re-established after every backwash, so only weeks of stability are needed. Omega PX109 / Gems 3100 are correct but ~6× the price for no gain here |
 | Keep the analog filter gauge | **Yes — tee it** | 2026-08-07 | It is the calibration reference for the transducer, it reads when the ESP/power is down, and it is the only thing a pool tech will look at. $8 |
 | Spare CT: pump's 2nd leg vs **booster** | **Booster** | 2026-08-07 | The pump's second leg only refines a known number; the booster CT enables the watts-too-low dry-run alarm |
