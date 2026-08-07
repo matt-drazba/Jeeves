@@ -96,7 +96,7 @@ handle's full travel and the adjacent plumbing before sealing threads.
 
 | Spec | Value | Why |
 |---|---|---|
-| Range | **0–80 PSI** (revised twice — see below) | The commodity family only offers 10/30/80/100/150/200/300 — **there is no 60**. 80 is the first option that clears the TA100D's 50 psi rating |
+| Range | **150 PSI — as purchased 2026-08-07** | Wider than ideal; 60–100 was preferred but 150 was the only stock. Workable — see "Range history" below. **Scale constant 187.5** |
 | **Thread** | **1/4" NPT — verify explicitly** | **The most likely way to buy the wrong part.** Listings for "G1/4" units look identical and are BSPP: a *parallel* British thread, where NPT is tapered. They start threading, then leak or crack the plastic multiport boss |
 | Thread | **1/4" NPT male** | Confirmed — matches the existing gauge port |
 | Output | **0.5–4.5V ratiometric** | Commodity part, easy to scale. Avoid 4–20mA: needs a loop supply and sense resistor for no benefit here |
@@ -107,23 +107,36 @@ Do not run a 5V ratiometric transducer from 3.3V to dodge level shifting.
 Ratiometric means the output scales with supply; accuracy below the spec'd
 supply voltage is undefined.
 
-#### Range: settled at 0–80 PSI (revised twice, 2026-08-07)
+#### Range history — CLOSED, 150 psi purchased 2026-08-07
 
-**0–30 → 0–60:** the original 0–30 predated identifying the filter, chosen because
-accuracy is quoted as % of full scale so a tighter range reads better across a
-10–25 psi operating band. The TA100D's **50 psi maximum** changed that. The
-deciding case is not a fouled filter but a **closed return valve with the pump
-running** — an IntelliFlo2 dead-heading can drive well past 30 psi, leaving a
-0–30 sensor rated 150% proof (45 psi) at its limit.
+Recorded once so it is not re-derived. The specified range moved 0–30 → 0–60 →
+0–80, then availability settled it at 150.
 
-**0–60 → 0–80:** these commodity transducers are sold in a fixed range family —
-**10 / 30 / 80 / 100 / 150 / 200 / 300 PSI. There is no 60.** So the real choice
-is 30 or 80, and 80 is the first that clears 50 psi with margin.
+- **0–30 → 0–60.** The original 0–30 predated identifying the filter, chosen
+  because accuracy is % of full scale so a tighter range reads better across a
+  10–25 psi band. The TA100D's **50 psi maximum** changed that. The deciding case
+  is not a fouled filter but a **closed return valve with the pump running** — an
+  IntelliFlo2 dead-heading drives well past 30 psi, leaving a 0–30 sensor rated
+  150% proof (45 psi) at its limit.
+- **0–60 → 0–80.** These sensors ship in a fixed family — 10 / 30 / 80 / 100 /
+  150 / 200 / 300 psi. **There is no 60.**
+- **0–80 → 150, as purchased.** Only stock available.
 
-Error budget at 0–80 and 1% FS: **±0.8 psi**. Against an 8–10 psi backwash
-threshold that is 8–10%, and most of it cancels in the differential (below).
-Acceptable. Do not go to 100+ — the operating band shrinks to the bottom 10–25%
-of scale for no benefit.
+**Is 150 acceptable? Yes.** Full-scale error looks bad (1.5% FS = ±2.25 psi
+against an 8–10 psi threshold) but that figure is dominated by **offset and span
+error, which are common to the baseline reading and the current reading and
+therefore cancel in the subtraction.** What survives a differential is
+repeatability and hysteresis, typically 0.1–0.25% FS — call it ±0.2–0.4 psi in
+practice. Burst rating is 300 psi minimum, six times the filter's limit.
+
+**If this sensor is ever replaced, prefer 60–100 psi** and change one constant.
+There are two lambda forms and they scale differently — use the one matching the
+circuit actually built:
+
+| Form | Constant | 150 psi | 100 psi | 60 psi |
+|---|---|---|---|---|
+| **A1 rail-compensated** (fraction-based) | `FS_psi / 0.80` | **187.5** | 125 | 75 |
+| **Simple** (single channel, volts) | `FS_psi / 4.0` | **37.5** | 25 | 15 |
 
 Note these listings routinely contradict themselves: marketing bullets claim
 "0.5% FS" while the spec table says "1% FS". **Budget for 1%.**
@@ -480,10 +493,11 @@ Sanity check at both endpoints:
 | Condition | A0 | A1 | fraction | PSI |
 |---|---|---|---|---|
 | 0 PSI (out = 0.5V) | 0.34V | 2.50V | 0.100 | 0.0 |
-| 30 PSI (out = 4.5V) | 3.06V | 2.50V | 0.900 | 30.0 |
+| **150 PSI** (out = 4.5V) | 3.06V | 2.50V | 0.900 | 150.0 |
+| *typical working point*, 15 psi (out = 0.90V) | 0.61V | 2.50V | 0.180 | 15.0 |
 
 where `fraction = (A0 / A1) × (0.500 / 0.680)` and
-`PSI = (fraction − 0.10) × 37.5`.
+**`PSI = (fraction − 0.10) × 187.5`** for the 150 psi sensor purchased.
 
 Use 1% metal film resistors — the divider ratios are inside the accuracy
 budget, and 5% carbon film would add roughly ±1 PSI of pure error for a
@@ -863,12 +877,11 @@ mode no breaker or overload will.
       multiport thread. Owner-confirmed 2026-08-07
 - [x] ~~**Inspect the R-40 electrode capsule**~~ — **CLE-02, copper only.** No
       silver in this pool. CLE-51 upgrade assessed and declined; see Part 2
-- [ ] **Confirm the transducer's overpressure rating is ≥ 50 psi** before
-      ordering — the TA100D's max operating pressure is 50 psi and a 0–30 unit
-      rated only 150% (45 psi) is under-specced
-- [ ] **Check the tank / multiport for a spare plugged 1/4" NPT port.** If one
-      exists, use it and skip the tee entirely — two independent ports, no shared
-      moment arm on a plastic boss
+- [x] ~~Confirm the transducer's overpressure rating is ≥ 50 psi~~ — **300 psi
+      burst minimum** on the unit purchased. Six times the filter's rating
+- [x] ~~Check for a spare plugged 1/4" NPT port~~ — **moot, street tee
+      purchased.** Still worth a glance during install: if a spare port exists,
+      the transducer can go there instead and the tee stays in the parts bin
 - [x] ~~Confirm the Hanna copper Checker model number~~ — **HI747 (Low Range)**,
       0–999 ppb, ±10 ppb ±5%. Not the HI702, whose error window is wider than
       twice the R-40's entire 0.15–0.20 ppm target band

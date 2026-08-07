@@ -39,14 +39,19 @@ Full spec and reasoning per line item in
       the HI702) + 2× HI747-25, Hanna HI701 + 3× HI701-25, Taylor K-2006,
       **HM Digital TDS-3** pen, 1 gal distilled water. **Usable the day it
       arrives, no wiring. Buy this one first.**
-- [ ] **Group B — pressure sensing (~$65–75). DECIDED 2026-08-07:**
-      automotive-sender transducer, **1/8"-27 NPT male**, 0.5–4.5V out, 5V
-      supply, 316 SS, sealed QD + pigtail — **request 60 or 100 psi**, 150
-      acceptable, **never G1/4/BSPP**; **1/4"MNPT × 1/8"FNPT brass reducing
-      bushing** (*bushing*, not coupling); 1/4" brass street tee; PTFE tape;
-      **ADS1115 pre-soldered** (ShillehTek); 1% resistors (4.7k ×1, 10k ×3);
-      100 µF electrolytic + 0.1 µF ceramic; 3-conductor 22 AWG shielded cable;
-      **2× 5-conductor WAGO 221**.
+- [x] ~~**Group B — pressure sensing, main parts**~~ — **BOUGHT 2026-08-07:**
+      automotive-sender transducer **150 psi**, 1/8"-27 NPT male, 0.5–4.5V on 5V,
+      316 SS, 300 psi burst, sealed QD + pigtail · **1/4"MNPT × 1/8"FNPT brass
+      reducing bushing** · 1/4" brass street tee · **ShillehTek pre-soldered
+      ADS1115**.
+- [ ] **Group B remainder — passives and wiring, ~$20.** Both the resistors and
+      the capacitors are **required**, not optional — reasoning in
+      data_addendum "Are the passives actually necessary?".
+      - 1% metal film: **4.7k ×1, 10k ×1** (signal divider). Add **10k ×2** if
+        doing the optional A1 rail compensation.
+      - **100 µF electrolytic + 0.1 µF ceramic** — mounted at the *transducer's*
+        supply pins, not the ADC.
+      - 3-conductor 22 AWG shielded cable, **2× 5-conductor WAGO 221**, PTFE tape.
 - [ ] **CT clamp (~$15)** for the Shelly EM Gen3 `IB` channel — destined for the
       **booster** circuit, not the pump's second leg. → booster_interlock
 
@@ -104,12 +109,22 @@ Gated entirely on tier 3. This is the one where failure destroys hardware.
 
 → [pool_data_addendum.md](pool_data_addendum.md) Part 1
 
-- [ ] Plumb the street tee + transducer into the existing gauge port. **Bleed the
-      filter to zero PSI first.** Keep the analog gauge on the other branch.
-- [ ] Wire: ADS1115 on GPIO4/GPIO13, 4.7k/10k divider into A0, 10k/10k rail
-      divider into A1, 100 µF + 0.1 µF at the transducer supply.
+- [ ] **Dry-fit the whole stack before taping anything** — tee → bushing →
+      transducer is four sealed joints on a plastic multiport boss. Check
+      clearance through the multiport handle's full rotation.
+- [ ] Plumb it. **Bleed the filter to zero PSI first** (pump off at the breaker,
+      air relief open, confirm the analog gauge reads 0). Keep the analog gauge
+      on the other tee branch. PTFE on every male thread. Hand tight + 1–2 turns
+      — the boss is plastic. Orient the transducer **down or sideways**, never
+      straight out, and strain-relieve the cable.
+- [ ] Wire: **ADS1115 powered at 3.3V** (ESP 3V3 pin — this is what makes the
+      divider mandatory and the I2C levels correct), SDA GPIO4 / SCL GPIO13,
+      4.7k/10k divider into A0, optional 10k/10k rail divider into A1,
+      100 µF + 0.1 µF at the **transducer's** supply pins. 5V for the transducer
+      comes off the buck via the new WAGO splices.
 - [ ] Decide bonding for the brass tee + transducer body (680.26(B)(6)).
 - [ ] Uncomment the ADS1115 block in `esphome/pool-pad.yaml`, flash from the Mac.
+      **Scale constant 187.5** for the 150 psi sensor.
 - [ ] Two-point calibrate against the analog gauge (0 PSI bled, then 2200 RPM).
 - [ ] **Establish the clean-filter baseline PSI at 2200 RPM immediately after the
       next backwash/clean.** Everything downstream compares to this number.
@@ -198,7 +213,7 @@ linked doc; this is the index.
 | Salt / EC / conductivity probe | **Declined** | 2026-08-07 | Not a salt pool. TDS is a once-a-year pen check, not a live sensor |
 | MQTT → InfluxDB → Grafana | **Declined** | 2026-08-07 | Banned by CLAUDE.md hard rules. SQLite is system of record, Jeeves is the UI, and Grafana could not host the poolside entry form anyway |
 | ESP32 rebuild of the pad node | **Declined** | 2026-08-07 | ESP8266 is flashed and working. ESP32 is justified only for the separate pH node |
-| Transducer range | **0–80 PSI** *(revised twice from 0–30, then 0–60)* | 2026-08-07 | The TA100D's 50 psi rating plus the dead-head case (closed return valve, pump running) rules out 0–30. The commodity family is 10/30/80/100/150/200/300 — **no 60 exists** — so 80 is the first that clears 50 psi. ±0.8 psi at 1% FS, most of which cancels in the differential. Do not go to 100+ |
+| Transducer range | **150 PSI — purchased.** Spec had moved 0–30 → 0–60 → 0–80; availability settled it | 2026-08-07 | Wider than ideal but acceptable: "% of full scale" is dominated by offset and span error, which cancel in a differential against a self-established baseline. Residual is repeatability/hysteresis, ~±0.2–0.4 psi. Burst 300 psi. **ESPHome scale constant 187.5** (`FS_psi / 0.80`). If ever replaced, prefer 60–100 psi and change that one number |
 | Transducer thread | **NPT only — never BSPP/G1/4** | 2026-08-07 | G1/4 is BSPP, a *parallel* thread; NPT is tapered. Forcing one into the other leaks or cracks the plastic multiport boss. **NPT-to-NPT reducing bushings are fine** — an earlier "no adapters" note was too absolute |
 | Transducer sourcing | **1/8" NPT sensor + 1/4"M × 1/8"F brass bushing**, or buy configurable from Transducers Direct | 2026-08-07 | Amazon listings contradict themselves — title "1/4 NPT" vs spec "G1/4", and title range lists that are keyword stuffing with no variation dropdown. The 1/8" NPT automotive sender market is large and unambiguously labelled. Commodity electrical performance was never the issue; **verifiability** is |
 | Transducer grade: commodity vs industrial | **Commodity (~$25)** | 2026-08-07 | The measurement is a difference against a self-established baseline, so offset and gain errors cancel. Baseline is re-established after every backwash, so only weeks of stability are needed. Omega PX109 / Gems 3100 are correct but ~6× the price for no gain here |
