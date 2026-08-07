@@ -122,9 +122,29 @@ pool_actions  (id, ts, member_id, action)   -- backwash, brush, filter clean,
    reality.
 3. ~~Ratify or reject the ha-poolchem reversal above.~~ **RATIFIED** — see above.
 
-**No open questions remain in this brief.** Prerequisites for building: pool
-volume (required for both dose math *and* the copper-dilution model, so it is
-needed regardless), and the Group A test kit in hand.
+**No open questions remain in this brief.**
+
+## Pool volume — 28,800 gallons
+
+Owner estimate, 2026-08-07. Roughly 30k. Use **28,800** in dose and dilution math;
+treat it as ±10% until refined, since an estimate this size carries real error and
+every dose calculation scales linearly with it.
+
+Three things fall out of it immediately:
+
+- **R-40 is correctly sized.** Rated to 40,000 gallons; the manual warns never to
+  undersize an ionizer, especially in warm water. 28,800 leaves real margin.
+- **Initial ionization from zero: ~69 hours of pump runtime** (manual's rule is
+  ~24 h per 10,000 gal), which is **~3.6 days** on the current 19 h/day schedule.
+  Relevant if the electrodes are ever replaced or the pool is drained.
+- **Turnover ≈ 2× per day** at ~50 GPM over a 19-hour run. Comfortably above the
+  one-turnover minimum, and the TA100D's 100 GPM design flow is not a constraint.
+
+It also **reverses an earlier claim about backwash** — see "How copper actually
+leaves" in [pool_data_addendum.md](pool_data_addendum.md). At this volume a single
+backwash dilutes copper by under 1 ppb, an order of magnitude below the HI747's
+resolution. Backwash is a slow cumulative term (~10% of volume per year), not a
+step change. **pH is the more important regressor for copper loss.**
 
 ## Forecast targets (what this is all for)
 

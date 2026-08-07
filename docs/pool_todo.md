@@ -139,8 +139,10 @@ two decisions still open.
 SQLite is the system of record — **ha-poolchem is not being installed** — and
 **log-only ships first, dose calculator is phase 2.**
 
-- [ ] **Record pool volume** — required for the copper-dilution model *and* for
-      phase-2 dose math, so it is needed regardless. Only hard prerequisite left.
+- [x] ~~**Record pool volume**~~ — **28,800 gallons** (owner estimate
+      2026-08-07, ±10%). R-40 is correctly sized (rated 40k). Turnover ≈2×/day.
+      **No prerequisites left — this tier is unblocked once the Group A kit
+      arrives.**
 - [ ] Build `pool_tests` / `pool_doses` / `pool_actions` tables + poolside phone UI.
 - [ ] Enforce: **reject or flag a copper reading within ~24h of a recorded shock**
       — high chlorine bleaches the test to near zero.

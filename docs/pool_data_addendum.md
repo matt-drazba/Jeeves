@@ -665,28 +665,50 @@ sulfate, alum. A dose of the wrong sequestrant tanks the copper level and must b
 recorded in `pool_doses` or the dilution model will read it as an unexplained
 crash.
 
-### Backwash is the primary copper-loss mechanism — and that is filter-specific
+### How copper actually leaves — corrected once pool volume was known
 
-Copper does not decay like chlorine. It leaves by **dilution**: water out, fresh
-water in. That is why the chemistry brief models it against the `pool_actions`
-table rather than as time-based decay.
+Copper does not decay like chlorine. It leaves by **dilution** (water out, fresh
+water in) and by **falling out of solution**. That is why the chemistry brief
+models it against `pool_actions` rather than as time-based decay.
 
-Identifying the filter as a **sand** filter sharpens this considerably. A
-cartridge filter is never backwashed — it is pulled and hosed, and the pool loses
-essentially no water. A 30" sand filter backwashing at 45–60 GPM for 2–3 minutes,
-plus the rinse cycle, dumps on the order of **100–200 gallons per backwash**.
-That is not a footnote to the copper model; on this pool it is the dominant term.
+**Correction, 2026-08-07.** An earlier draft of this section called backwash "the
+dominant term." **That was wrong**, and it was wrong because it was written before
+pool volume was known. With **28,800 gallons**, run the numbers:
 
-Practical consequence for the schema: **record backwash duration, not just the
-fact of a backwash.** Volume scales with time, so duration plus the known flow
-rate gives dumped gallons, which gives a predicted copper drop:
+| | Value |
+|---|---|
+| Backwash + rinse, 45–60 GPM for 2–3 min | 100–200 gal |
+| As a fraction of 28,800 gal | **0.35–0.7%** |
+| Copper drop per backwash, from 175 ppb | **~0.6–1.2 ppb** |
+| HI747 accuracy | **±10 ppb** |
+
+**A single backwash is roughly ten times below the instrument's resolution.** It
+is not a step change; it is invisible.
+
+**What it actually is: a slow cumulative term.** At ~20 backwashes a year that is
+~3,000 gallons, or **~10% of pool volume annually** — real over a season, invisible
+per event. Log backwash duration anyway (volume scales with time, and the
+cumulative term needs it), but do not expect to see it in the next test:
 
 ```
-predicted_drop_ppm ≈ current_ppm × (gallons_dumped / pool_volume)
+predicted_drop_ppm ≈ current_ppm × (gallons_dumped / 28800)
 ```
 
-Fit that against the next copper test and it self-corrects. Without duration
-logged, every backwash is an unexplained step change in the series.
+**pH is the likelier primary driver of copper loss.** The R-40 manual is explicit:
+above pH 7.6 the ions "fall out of solution," and improper pH is listed as
+*"usually the main reason for a low copper-ion level"* (p.18 #6). That is a
+mechanism that can move copper materially between two weekly tests, which
+backwash cannot.
+
+**Model consequence: pH belongs in the copper model as a regressor, not just as a
+logged value.** Rank the loss terms as: pH excursions (fast, large) → splash-out
+and rain overflow (episodic, unmeasured) → backwash (slow, cumulative, computable)
+→ plating and filter media (slow, lumped into the residual).
+
+Note also that **evaporation plus top-up is net-neutral for copper.** Evaporation
+removes water but no copper, concentrating it; the refill restores volume and
+dilutes it back. Do not model top-ups as dilution events — only water that
+physically leaves *carrying copper with it* counts.
 
 ### Why the HI701 beats a drop kit here specifically
 
