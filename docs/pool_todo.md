@@ -135,12 +135,12 @@ Gated entirely on tier 3. This is the one where failure destroys hardware.
 → [pool_chemistry_logging.md](pool_chemistry_logging.md). Needs tier 2 data and
 two decisions still open.
 
-- [ ] **Decide: log-only, or dose calculator?** Calculator needs pool volume,
-      target bands, and chemical config up front — more setup, but it is the part
-      that would get weekly use.
-- [ ] **Ratify or reject dropping ha-poolchem** in favour of Jeeves' SQLite as
-      system of record.
-- [ ] Record pool volume — required for any dose math.
+**Both former open questions are now decided** (owner-confirmed 2026-08-07):
+SQLite is the system of record — **ha-poolchem is not being installed** — and
+**log-only ships first, dose calculator is phase 2.**
+
+- [ ] **Record pool volume** — required for the copper-dilution model *and* for
+      phase-2 dose math, so it is needed regardless. Only hard prerequisite left.
 - [ ] Build `pool_tests` / `pool_doses` / `pool_actions` tables + poolside phone UI.
 - [ ] Enforce: **reject or flag a copper reading within ~24h of a recorded shock**
       — high chlorine bleaches the test to near zero.
@@ -218,12 +218,12 @@ linked doc; this is the index.
 | Transducer sourcing | **1/8" NPT sensor + 1/4"M × 1/8"F brass bushing**, or buy configurable from Transducers Direct | 2026-08-07 | Amazon listings contradict themselves — title "1/4 NPT" vs spec "G1/4", and title range lists that are keyword stuffing with no variation dropdown. The 1/8" NPT automotive sender market is large and unambiguously labelled. Commodity electrical performance was never the issue; **verifiability** is |
 | Transducer grade: commodity vs industrial | **Commodity (~$25)** | 2026-08-07 | The measurement is a difference against a self-established baseline, so offset and gain errors cancel. Baseline is re-established after every backwash, so only weeks of stability are needed. Omega PX109 / Gems 3100 are correct but ~6× the price for no gain here |
 | Keep the analog filter gauge | **Yes — tee it** | 2026-08-07 | It is the calibration reference for the transducer, it reads when the ESP/power is down, and it is the only thing a pool tech will look at. $8 |
+| **ha-poolchem vs SQLite** | **Drop ha-poolchem. Jeeves' SQLite is the system of record** | 2026-08-07 | HA's recorder retention is short and already trimmed for SD-card wear, so chemistry entered there is purged in days. Forecasting needs seasons of history. ha-poolchem would save writing a form — the easy part — and cost the retention, which is the whole point. Mirror current values *outward* to HA input_numbers one-way if automations want them |
+| **Log-only vs dose calculator** | **Both — log-only ships first, calculator is phase 2** | 2026-08-07 | Not either/or, an ordering. Label dose math is unreliable on real pools; the version worth having is self-correcting against what past doses actually achieved, which requires logged history to exist first. Log → few weeks of data → calibrate the calculator against reality |
 | Spare CT: pump's 2nd leg vs **booster** | **Booster** | 2026-08-07 | The pump's second leg only refines a known number; the booster CT enables the watts-too-low dry-run alarm |
 | Main pump control via IntelliComm | **Dropped** | 2026-08-05 | The motivating problem was booster dry-run, solved by flow meter + HA with no pump control. Findings kept in `esphome/pool-pad.yaml` |
 
-**Still genuinely undecided** (do not treat as settled): whether to drop
-ha-poolchem in favour of SQLite as system of record, and log-only vs. dose
-calculator. Both in tier 6.
+All rows above are **owner-confirmed.** Nothing in this table is open.
 
 ## Parked — do not build unless asked
 

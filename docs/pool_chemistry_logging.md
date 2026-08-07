@@ -75,7 +75,9 @@ CLAUDE.md currently commits to **ha-poolchem via HACS**, with values as HA
 **Jeeves' SQLite should be the system of record.** If current values are wanted
 inside HA for automations, mirror them *outward* to input_numbers, one-way.
 
-Not yet ratified — flagged here so it's a deliberate fork, not an accident.
+**RATIFIED 2026-08-07, owner-confirmed.** Jeeves' SQLite is the system of record
+for pool chemistry. ha-poolchem is not being installed. CLAUDE.md updated to
+match.
 
 ## Schema sketch
 
@@ -111,11 +113,18 @@ pool_actions  (id, ts, member_id, action)   -- backwash, brush, filter clean,
    sanitiser-efficacy parameter, not comfort — above 7.6 the copper ions fall out
    of solution and the ionizer stops working, so pH belongs in the forecast as a
    driver of copper loss, not just as a logged value.
-2. **Log only, or dose calculator?** Recording "I added a gallon" is
-   straightforward. "Tell me how much to add" needs pool volume, target bands,
-   and current readings configured up front — more setup, but it's the part
-   that'd get weekly use.
-3. Ratify or reject the ha-poolchem reversal above.
+2. ~~**Log only, or dose calculator?**~~ **ANSWERED 2026-08-07, owner-confirmed:
+   both, in that order.** Log-only ships first; the dose calculator is phase 2.
+   Not an either/or — label dose math is unreliable on real pools, and the
+   version worth building is the self-correcting one that learns from what past
+   doses actually achieved. That requires logged history to exist first.
+   Sequence: log → a few weeks of data → calibrate the calculator against
+   reality.
+3. ~~Ratify or reject the ha-poolchem reversal above.~~ **RATIFIED** — see above.
+
+**No open questions remain in this brief.** Prerequisites for building: pool
+volume (required for both dose math *and* the copper-dilution model, so it is
+needed regardless), and the Group A test kit in hand.
 
 ## Forecast targets (what this is all for)
 
