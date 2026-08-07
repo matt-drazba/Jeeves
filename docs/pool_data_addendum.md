@@ -110,8 +110,53 @@ supply voltage is undefined.
 ### Plumbing
 
 The filter already has an analog gauge threaded into a **1/4" FPT port** on the
-filter head. That port is the entire install. **No pipe cutting, no gluing, no
-draining beyond the filter itself.**
+multiport valve body. That port is the entire install. **No pipe cutting, no
+gluing, no draining beyond the filter itself.**
+
+#### Why a tee at all — and why "street"
+
+**The tee exists for exactly one reason: to keep the analog gauge.** The Tagelus
+multiport has one gauge port, and two things want it. If the analog gauge is
+expendable, the tee is not needed — thread the transducer straight in and skip
+it.
+
+**"Street" is just parts economy.** The filter port is female (FPT) and the
+existing gauge is male (MPT). So the fitting needs a *male* run to go into the
+valve plus *two female* branches. That is a street tee (M×F×F) — one part. The
+alternative is an all-female tee plus a 1/4" close nipple: same geometry, two
+parts, one extra threaded joint to seal on a 50 psi tank.
+
+**First, check for a second port.** Some filter tanks and valve bodies carry a
+spare plugged 1/4" NPT boss. If this one does, use it and the whole question
+disappears — two independent ports, no tee, no shared moment arm.
+
+Failing that, three options:
+
+| Option | Mechanical risk | Keeps analog gauge | Cost |
+|---|---|---|---|
+| **A. Street tee, both instruments on the port** | Moderate — doubles the moment arm on a plastic boss | Yes | $8 |
+| B. Transducer only, no tee | Lowest — same load as the gauge it replaces | **No** | $0 |
+| **C. Street tee + short braided 1/4" pigtail hose**, transducer mounted to a nearby surface | **Lowest of the three** — no cantilever at all | Yes | ~$20 |
+
+**Recommendation: A, or C if the tee looks marginal once it is dry-fitted.**
+
+Keeping the analog gauge is worth the $8 for three reasons that are easy to
+underrate:
+
+- **It is the calibration reference.** The two-point calibration below has no
+  meaning without a trusted gauge to calibrate *against*. Remove it and the only
+  way to check the transducer is to reinstall it — the same sequential-swap
+  awkwardness already accepted for the flow meter vs. the Blue-White gauge.
+- **It works when nothing else does.** ESP down, WiFi down, Pi down, power
+  outage — the analog gauge still reads. Filter pressure is a thing you want
+  during exactly those events.
+- **It is what a pool tech looks at.** Nobody servicing this pad is going to open
+  Home Assistant.
+
+Option B is a legitimate choice if adding brass to a plastic boss feels wrong —
+it is genuinely the lowest-risk mechanical option, and the analog gauge can be
+kept in a drawer for periodic calibration checks. It just costs the three points
+above.
 
 ```
         filter head 1/4" FPT port
@@ -594,6 +639,9 @@ mode no breaker or overload will.
 - [ ] **Confirm the transducer's overpressure rating is ≥ 50 psi** before
       ordering — the TA100D's max operating pressure is 50 psi and a 0–30 unit
       rated only 150% (45 psi) is under-specced
+- [ ] **Check the tank / multiport for a spare plugged 1/4" NPT port.** If one
+      exists, use it and skip the tee entirely — two independent ports, no shared
+      moment arm on a plastic boss
 - [x] ~~Confirm the Hanna copper Checker model number~~ — **HI747 (Low Range)**,
       0–999 ppb, ±10 ppb ±5%. Not the HI702, whose error window is wider than
       twice the R-40's entire 0.15–0.20 ppm target band

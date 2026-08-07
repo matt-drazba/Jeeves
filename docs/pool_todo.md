@@ -26,15 +26,9 @@ Source docs: [pool_heat_recovery.md](pool_heat_recovery.md) ·
 - [x] ~~**Confirm PB4-60 nameplate**~~ — 3/4 HP, 3450 RPM, 230/115V, SF amps
       6.4/12.8. Dual-voltage nameplate, so this states capability not
       configuration; 230V/~1.5 kW inferred from the 240V Tuya switch
-- [ ] **Confirm the PG&E rate plan — EV2-A or E-TOU-C.** Login to pge.com. If
-      EV2-A, shifting the booster window past midnight is worth ~$10–15/month for
-      a free schedule change. **Only remaining free win in this tier.**
-      → booster_interlock
-- [ ] **Measure Polaris 280 wheel RPM** — pump running, cleaner held below water,
-      count revolutions for one minute. Target 28–32. Do this *before* touching
-      restrictor discs or the relief valve. → booster_interlock
-- [ ] Optional, to fully close the nameplate item: confirm the booster's actual
-      wired voltage at the breaker or switch.
+Tier 0 is **closed.** Three residual owner's-call items moved to "Whenever you
+feel like it" at the bottom — they are not blocking anything and should not be
+raised again unasked.
 
 ## 1. Order parts — nothing depends on anything, buy in one go
 
@@ -167,6 +161,46 @@ two decisions still open.
       `~/Desktop` path.
 - [ ] Opportunistically confirm the 90340 contact-power routing next time the box
       is open.
+
+## Whenever you feel like it — owner's call, nothing blocked, do not re-raise
+
+These are real but optional. Nothing downstream waits on them. **Do not surface
+these unprompted.**
+
+- **PG&E rate plan — EV2-A or E-TOU-C?** One login at pge.com. If EV2-A, shifting
+  the booster window past midnight moves ~68 kWh/month from part-peak to
+  off-peak, worth roughly $10–15/month for a free schedule change. If E-TOU-C,
+  there is nothing to do. → booster_interlock
+- **Polaris 280 wheel RPM.** Pump running, cleaner held below water, count wheel
+  revolutions for one minute. Target 28–32. Only matters if the cleaner is
+  underperforming — and if it is, measure this *before* touching restrictor discs
+  or the relief valve. → booster_interlock
+- **Booster's actual wired voltage** at the breaker or switch. The nameplate is
+  dual-voltage so 230V/~1.5 kW is currently inferred from the 240V Tuya switch.
+  Affects only the precision of the TOU math.
+
+## Settled — decided, do not re-litigate
+
+Recorded so these do not get reopened years later. Each has full reasoning in the
+linked doc; this is the index.
+
+| Decision | Verdict | Date | Why, in one line |
+|---|---|---|---|
+| **CLE-51 silver electrode upgrade** | **Declined** | 2026-08-07 | The ion test reads copper, the target is copper, and silver rides the same dial — you cannot read, verify, or tune it. Does not relax the 0.4 ppm chlorine floor. Electrodes are consumable, so it is a recurring premium. Revisit only on a real sanitation failure. → data_addendum Part 2 |
+| Copper meter: HI702 vs **HI747** | **HI747** (low range) | 2026-08-07 | HI702's error window is wider than twice the entire 0.15–0.20 ppm target band. It cannot tell in-spec from out-of-spec. → data_addendum Part 2 |
+| Photometer (LaMotte Spin Touch) | **Declined** | 2026-08-07 | ~$900 to avoid a 10-minute test that HI701 + HI747 + K-2006 cover for ~$239 |
+| Combination pH/TDS/salinity pen | **Declined** | 2026-08-07 | pH is covered by the K-2006 with a reagent test that cannot drift. A silently drifting pH pen is the worst failure available here — it presents as a copper problem |
+| ORP probe | **Declined** | pre-existing | Meaningless with copper ions and deliberately low free chlorine |
+| Salt / EC / conductivity probe | **Declined** | 2026-08-07 | Not a salt pool. TDS is a once-a-year pen check, not a live sensor |
+| MQTT → InfluxDB → Grafana | **Declined** | 2026-08-07 | Banned by CLAUDE.md hard rules. SQLite is system of record, Jeeves is the UI, and Grafana could not host the poolside entry form anyway |
+| ESP32 rebuild of the pad node | **Declined** | 2026-08-07 | ESP8266 is flashed and working. ESP32 is justified only for the separate pH node |
+| Transducer range: 0–30 vs 0–60 PSI | **0–30** | 2026-08-07 | Accuracy is % of full scale and the operating band is 10–25 psi. Over-range is not a failure — it pins at 30, which itself means "backwash now" |
+| Spare CT: pump's 2nd leg vs **booster** | **Booster** | 2026-08-07 | The pump's second leg only refines a known number; the booster CT enables the watts-too-low dry-run alarm |
+| Main pump control via IntelliComm | **Dropped** | 2026-08-05 | The motivating problem was booster dry-run, solved by flow meter + HA with no pump control. Findings kept in `esphome/pool-pad.yaml` |
+
+**Still genuinely undecided** (do not treat as settled): whether to drop
+ha-poolchem in favour of SQLite as system of record, and log-only vs. dose
+calculator. Both in tier 6.
 
 ## Parked — do not build unless asked
 
