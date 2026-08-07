@@ -393,6 +393,25 @@ Three of these are not obvious and are easy to get wrong:
   does not apply. The manual says CYA is *not required*, and only matters as an
   upper bound (drain above 150 ppm). Free with the K-2006 regardless.
 
+**On TDS pens.** They do not measure dissolved solids — they measure conductivity
+and multiply by a conversion factor, and the common scales (0.5, 0.7, 442) can
+report ppm values ~40% apart from identical water. Treat the pen as a
+"am I above 500?" instrument and a trend tracker, not a lab number. The manual
+notes a TDS reading "can be obtained at any pool store" — **cross-check the pen
+against a pool-store reading once** to establish the offset.
+
+Buy the **HM Digital TDS-3**, not a rebadge. Avoid any combination
+pH/TDS/salinity pen: pH is already covered by the K-2006 with a reagent test that
+cannot drift, cheap combo pH electrodes need calibration powder and KCl storage
+solution or the bulb dies, and a silently drifting pH reading is the worst
+possible failure here — it would send someone chasing a copper problem that is
+actually a pH problem.
+
+Expect TDS to be fine. It climbs steadily as chemicals are added and only drops
+on a drain-and-refill, so an established pool is almost certainly well above 500
+ppm. The R-40's floor mostly bites on fresh fill water. Worth $15 to confirm
+because it is the one parameter that would invalidate every other reading.
+
 **Testing trap — do not test copper after shocking.** Manual troubleshooting #7:
 high free chlorine bleaches the ion test and it reads near zero. Any copper
 reading taken shortly after an oxidiser dose is garbage. The logging UI should
@@ -459,7 +478,7 @@ cadence can relax.
 | Taylor K-2006 | FAS-DPD kit — covers CC, pH, TA, CH, CYA | 80 |
 | **Hanna HI747** | copper **Low Range** Checker HC — **not** the HI702, see Part 2 | ~50 |
 | HI747-25 reagent | copper reagent, 25 tests — meter ships with 6 | ~10 |
-| TDS pen | 0–3000+ ppm — R-40 needs 500–3000 ppm to function at all | ~15 |
+| **HM Digital TDS-3** pen | 0–9990 ppm, ATC — R-40 needs 500–3000 ppm to function at all | ~15 |
 | CT clamp for Shelly EM Gen3 `IB` | Shelly-branded, matching the Gen3 input | 15 |
 
 **~$305**, of which ~$228 is chemistry instrumentation and ~$76 is the pressure
