@@ -388,6 +388,34 @@ accepted for the White Rodgers relay. Just do not leave the jumpers loose.
 I2C, but **A0 and A1 are not on the QT connector.** Both analog inputs are needed
 here, so QT solves the half of the problem this project does not have.
 
+### Are the passives actually necessary? — yes, both
+
+Asked and answered 2026-08-07, after the sensor was purchased.
+
+**Resistors: required.** The ADS1115 runs at **3.3V** (off the ESP8266's 3V3 pin)
+so its I2C levels match the ESP cleanly. At a 3.3V supply its analog input
+absolute maximum is **VDD + 0.3 = 3.6V**, and the transducer can output **4.5V**.
+
+In normal operation that never happens — at 150 psi full scale, the 10–25 psi
+working band produces only **0.77–1.17V**, and even a dead-head at the filter's
+50 psi limit is 1.83V. The divider exists for the fault cases: a miswire putting
+5V on the signal line, or the sensor genuinely seeing full scale. 30¢ against a
+dead board.
+
+*(Powering the ADS1115 at 5V instead would make the 4.5V input safe and remove
+the need for a divider — but then its digital VIH is 0.7 × VDD = 3.5V, and the
+ESP8266's 3.3V logic high falls below that. Out of spec. Use 3.3V and divide.)*
+
+**Capacitors: yes, and they matter more than first estimated.** The sensor is
+ratiometric, so its output tracks the 5V rail. A 0.2V sag from an ESP WiFi burst
+is 4%, and 4% of a **1V** operating signal is 40 mV — roughly **1.5 psi** against
+an 8–10 psi decision threshold. Not ignorable.
+
+Three layers, cheapest first: the **median filter** already in the config (free,
+rejects most burst-corrupted samples), the **100 µF + 0.1 µF** below ($2), and
+the optional **A1 rail compensation** (2× 10k) which cancels sag mathematically.
+Do the first two; decide the third at wiring time.
+
 ### Power fix 1 — bulk capacitance (do this)
 
 **The problem:** the transducer is *ratiometric* — its output is a fixed
@@ -501,8 +529,32 @@ sensor:
       float a1 = id(rail_adc).state;
       if (isnan(a0) || isnan(a1) || a1 < 1.0f) return NAN;
       float frac = (a0 / a1) * (0.500f / 0.680f);
-      return (frac - 0.10f) * 37.5f;
+      return (frac - 0.10f) * 187.5f;   // 150 psi FS
 ```
+
+**Scale constant depends on the sensor's full-scale range.** Purchased 2026-08-07
+was a **150 psi** unit (only stock available), so the constant is **187.5**. For a
+different sensor: `constant = FS_psi / 0.80`. A 100 psi part would be 125; a
+60 psi part, 75.
+
+**Simpler variant if the A1 rail-compensation channel is skipped** — one ADS1115
+channel, two fewer resistors:
+
+```yaml
+  - platform: template
+    name: "Filter Pressure"
+    unit_of_measurement: "PSI"
+    accuracy_decimals: 1
+    update_interval: 30s
+    lambda: |-
+      float a0 = id(press_adc).state;
+      if (isnan(a0)) return NAN;
+      float v = a0 / 0.680f;            // undo the input divider
+      return (v - 0.5f) * 37.5f;        // 150 psi FS: FS / 4.0V
+```
+
+Keep `gain: 4.096` either way — it spans the sensor's full 0.5–4.5V output without
+clipping, and at 16 bits resolution is nowhere near the limiting factor.
 
 **Calibrate against the stock analog gauge, not the datasheet** — same
 discipline as the flow meter's sequential calibration. Two points: pump off with
