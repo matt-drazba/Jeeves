@@ -96,8 +96,8 @@ handle's full travel and the adjacent plumbing before sealing threads.
 
 | Spec | Value | Why |
 |---|---|---|
-| Range | **0–30 PSI** | Operating band is 10–25 psi. Transducer accuracy is quoted as % of *full scale*, so a smaller range is more accurate where it matters. Over-range is not a failure mode — it pins at 30 psi, and a sand filter at 30 psi means "backwash now" anyway |
-| **Overpressure rating** | **must be ≥ 50 psi** | **Check this before ordering.** The TA100D's max operating pressure is 50 psi. A 0–30 unit rated only 150% (45 psi) is under-specced; 200% (60 psi) is common and fine |
+| Range | **0–60 PSI** (revised — see below) | Covers the TA100D's full 50 psi rating with margin. 0–30 is acceptable **only** if the listing confirms proof pressure ≥ 50 psi |
+| **Thread** | **1/4" NPT — verify explicitly** | **The most likely way to buy the wrong part.** Listings for "G1/4" units look identical and are BSPP: a *parallel* British thread, where NPT is tapered. They start threading, then leak or crack the plastic multiport boss |
 | Thread | **1/4" NPT male** | Confirmed — matches the existing gauge port |
 | Output | **0.5–4.5V ratiometric** | Commodity part, easy to scale. Avoid 4–20mA: needs a loop supply and sense resistor for no benefit here |
 | Supply | **5V DC** | Confirmed available — the chimney-box buck outputs 5V |
@@ -106,6 +106,48 @@ handle's full travel and the adjacent plumbing before sealing threads.
 Do not run a 5V ratiometric transducer from 3.3V to dodge level shifting.
 Ratiometric means the output scales with supply; accuracy below the spec'd
 supply voltage is undefined.
+
+#### Range revised 0–30 → 0–60 PSI, 2026-08-07
+
+The original 0–30 choice was made before the filter was identified, on the
+reasoning that accuracy is quoted as % of full scale so a tighter range reads
+better across a 10–25 psi operating band. **Identifying the TA100D and its 50 psi
+maximum changed the calculus.**
+
+The deciding case is not a fouled filter — it is a **closed return valve with the
+pump running.** An IntelliFlo2 dead-heading can drive pressure well past 30 psi,
+and a 0–30 sensor rated only 150% proof (45 psi) is then at its limit. 0–60
+covers the tank's full rating with headroom and makes that event *measurable*
+rather than pegged at full scale.
+
+Cost of the change: ±0.6 psi instead of ±0.3 psi at 1% FS. Against an 8–10 psi
+backwash threshold that is 6–7%, and most of it cancels in the differential
+(below). Cheap insurance.
+
+#### Why commodity beats industrial here
+
+An Omega PX109 or Gems 3100 (~$130–170) is the correct part in every respect and
+is not needed. A ~$25 commodity 1/4" NPT unit is sufficient because **this
+measurement is a difference, not an absolute.**
+
+Pressure is always compared against a clean baseline established *with the same
+sensor*. Offset and gain errors are common to both terms and cancel out of the
+subtraction. What survives is nonlinearity and drift, both materially smaller
+than the headline accuracy figure.
+
+Drift is further absorbed by the workflow: the clean baseline is re-established
+after every backwash, so the only window that has to stay stable is the weeks
+between backwashes — not a season, and not the sensor's lifetime. If it fails in
+three years, replace it for $25 and re-run the two-point calibration that would
+have been done anyway.
+
+Sourcing tiers, for the record:
+
+| Tier | Example | ~$ |
+|---|---|---|
+| **Commodity — chosen** | Generic 1/4" NPT, 5V in / 0.5–4.5V out, selectable range | 20–30 |
+| Mid | Transducers Direct TDH30 — US company, published datasheet | 60–90 |
+| Industrial | Gems 3100, Omega PX109 | 130–170 |
 
 ### Plumbing
 
@@ -591,10 +633,10 @@ should be replaced yearly. Ongoing reagent cost settles around **$60–70/year**
 
 | Item | Spec | ~$ |
 |---|---|---|
-| Pressure transducer | 0–30 PSI, 1/4" NPT male, 0.5–4.5V, 5V supply, stainless, **overpressure ≥ 50 psi** | 25 |
+| Pressure transducer | **0–60 PSI**, **1/4" NPT** male (*not* G1/4), 0.5–4.5V, 5V supply, stainless | 25 |
 | Brass 1/4" NPT **street tee** | male run × female × female | 8 |
 | PTFE tape | standard white | 2 |
-| ADS1115 breakout | 16-bit, I2C, 4-channel | 6 |
+| ADS1115 breakout | 16-bit, I2C, 4-channel. Adafruit ~$15 but **ships with headers unsoldered**; generic modules ~$6 and usually pre-soldered. Either is identical to ESPHome, default address 0x48 | 6–15 |
 | Resistors | 4.7k ×1, 10k ×3 — **1% metal film** | 3 |
 | Capacitors | 100 µF electrolytic + 0.1 µF ceramic | 2 |
 | Cable | 3-conductor 22 AWG shielded, length to the chimney box | 10 |
