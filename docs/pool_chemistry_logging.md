@@ -98,10 +98,19 @@ pool_actions  (id, ts, member_id, action)   -- backwash, brush, filter clean,
 
 ## Open questions
 
-1. **Test kit type?** Determines which parameters and what precision are
-   realistic, and therefore how much forecasting is honestly achievable.
-   - Taylor K-2006 drop kit → precise FC/CC, real CYA, ~10 min, weekly cadence.
-   - Strips → 30 seconds, coarse numbers, noisy decay model.
+1. ~~**Test kit type?**~~ **ANSWERED 2026-08-07** — see
+   [pool_data_addendum.md](pool_data_addendum.md) Part 2. Three instruments, not
+   one: **Hanna HI701** for FC (this pool runs 0.4–1.0 ppm, where a drop kit
+   quantizes at 0.2 ppm/drop), **Hanna HI747** for copper (target is
+   **0.15–0.20 ppm**, not the 0.2–0.4 previously recorded), and **Taylor K-2006**
+   for pH/TA/CH/CYA. Plus a TDS pen — the R-40 needs 500–3000 ppm to produce ions
+   at all, which nothing in this repo had captured.
+
+   Two constraints this puts on the schema: copper readings are **invalid within
+   ~24h of a shock** (chlorine bleaches the test), and pH here is a
+   sanitiser-efficacy parameter, not comfort — above 7.6 the copper ions fall out
+   of solution and the ionizer stops working, so pH belongs in the forecast as a
+   driver of copper loss, not just as a logged value.
 2. **Log only, or dose calculator?** Recording "I added a gallon" is
    straightforward. "Tell me how much to add" needs pool volume, target bands,
    and current readings configured up front — more setup, but it's the part
