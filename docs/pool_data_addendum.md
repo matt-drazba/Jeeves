@@ -297,16 +297,46 @@ and it plugs into the interlock as a second independent signal.
 
 ## Part 2 — Chemistry instrumentation
 
-### The R-40 does copper AND silver
+### The R-40 is copper-only unless the silver electrode was ordered
 
-The Clearwater MineralPURE R-40 uses a copper/silver alloy electrode. Copper is
-the algaecide, silver the bactericide. **The ratio is fixed by the alloy**, so
-they are not independently adjustable — the only control is the ionizer's output
-dial, which moves both together.
+Corrected 2026-08-07 against the R-40 Installation & Pool Care Manual. An earlier
+draft of this doc stated the R-40 uses a copper/silver alloy electrode. **That is
+wrong for the standard unit.**
 
-**Test copper only.** Target 0.2–0.4 ppm. There is no consumer-grade silver test
-at the sub-ppm levels involved, and no action could be taken on the number if
-there were. Silver is inferred from copper.
+| Part | Composition | Status |
+|---|---|---|
+| **CLE-02** | **Copper only** | **Ships standard** — components list p.5, reorder note p.16 ("residential copper electrode") |
+| CLE-51 | 90% copper / 10% silver | **Optional upgrade** — spec sheet p.21 |
+
+Unless CLE-51 was specifically ordered, there is no silver in this pool at all.
+**Open item: inspect the electrode capsule and confirm which part is installed.**
+Either way the answer is the same — test copper, since there is no consumer-grade
+silver test at these levels and no independent control over it if there were.
+
+### The target is 0.15–0.20 ppm — CLAUDE.md was wrong
+
+The manual states this in a boxed callout on p.14 and repeats it on p.15 and in
+the Quick Chart on p.22:
+
+> **THE DESIRED ION LEVEL IN THE POOL IS 0.15 – 0.20 ppm**
+
+with "in very hot, humid areas, stay closer to 0.20 ppm."
+
+CLAUDE.md previously recorded 0.2–0.4 ppm. The upper half of that range is above
+the manufacturer's stated maximum. Corrected in CLAUDE.md 2026-08-07.
+
+The manual also warns separately: **"Excessive amounts of Copper may cause
+staining of pool and spa surfaces"** (p.16), and for marcite/gunite finishes
+recommends a sequestering agent — but specifically one that does **not** strip
+copper. Named safe: Pool Stain Treat (United Chemical), The Ionizer Stuff (Jack's
+Magic). Named as interfering: Sequasol, Cop-Out, Metal Magnet, aluminium
+sulfate, alum. A dose of the wrong sequestrant tanks the copper level and must be
+recorded in `pool_doses` or the dilution model will read it as an unexplained
+crash.
+
+Copper does not decay like chlorine — it leaves via backwash, splash-out, rain
+overflow, and filter media. That is why the chemistry brief models it against the
+`pool_actions` table rather than as time-based decay.
 
 Copper does not decay like chlorine — it leaves via backwash, splash-out, rain
 overflow, and filter media. That is why the chemistry brief models it against the
@@ -330,23 +360,49 @@ the one parameter that needs precision, not a replacement for a full kit.
 
 ### Coverage — what tests what
 
-| Parameter | Instrument | Cadence |
-|---|---|---|
-| **FC** | **Hanna HI701** | 2–3× / week |
-| CC | Taylor K-2006 (FAS-DPD) | Weekly |
-| pH | Taylor K-2006 | Weekly |
-| TA | Taylor K-2006 | Monthly |
-| CH | Taylor K-2006 | Monthly |
-| **CYA** | **Taylor K-2006** — already included | Monthly |
-| **Copper** | **Separate test — not in K-2006** | Every 2 weeks initially, monthly once drift is known |
-| Water temp | `sensor.pool_pad_hx_water_in_temp`, already logged | Every 2 min |
-| Salt | not applicable | — |
-| ORP | not applicable | — |
+All targets below are from the R-40 manual unless noted — they are **not**
+conventional-pool numbers and several differ materially.
 
-**CYA needs no separate purchase** — the K-2006 includes the melamine turbidity
-test with the black-dot view tube. CYA still matters on an ionizer pool: it
-protects the low FC residual from UV, and it sets the minimum FC target. It only
-moves when stabilizer is added or water is diluted, so monthly is ample.
+| Parameter | Target (R-40 manual) | Instrument | Cadence |
+|---|---|---|---|
+| **Copper** | **0.15–0.20 ppm** (p.14) | **Hanna HI747** — not in K-2006 | Weekly (manual says weekly) |
+| **FC** | **≥ 0.4 ppm floor** (EPA statement, p.4) | **Hanna HI701** | 2–3× / week |
+| **pH** | **7.2–7.6**, 7.2–7.4 preferred (p.13) | Taylor K-2006 | Weekly, and after heavy rain |
+| TA | 80–140 ppm (p.13) | Taylor K-2006 | Monthly |
+| CH | 150–350 ppm (p.13) | Taylor K-2006 | Monthly |
+| CYA | **not required**; drain if > 150 ppm (p.13) | Taylor K-2006 — included free | Occasionally |
+| **TDS** | **500–3000 ppm** (p.13) | TDS pen | Yearly |
+| Phosphate | < 125 ppb (p.18) | pool store, or Hanna HI7134 | Only when chasing algae |
+| Water temp | — | `sensor.pool_pad_hx_water_in_temp`, already logged | Every 2 min |
+| Salt | not applicable | — | — |
+| ORP | not applicable | — | — |
+
+Three of these are not obvious and are easy to get wrong:
+
+- **pH is a sanitiser-efficacy parameter here, not a comfort one.** Above 7.6 the
+  copper ions fall out of solution and the R-40 stops working — the manual calls
+  pH "the most important factor in the pool's water chemistry" and lists high pH
+  as the usual cause of an unobtainable ion level (p.13, p.18 #6). On a
+  conventional pool a pH of 7.8 is cosmetic. Here it means the sanitiser is off.
+- **TDS is a hard requirement, not a nice-to-have.** The R-40 electrolyses the
+  water and needs conductivity to do it. Below 500 ppm it cannot produce ions at
+  any dial setting (p.13, p.18 #12). This is the parameter most likely to be
+  silently out of range after a big drain-and-refill.
+- **CYA needs no separate purchase and is not a driver.** An earlier draft of
+  this doc claimed CYA sets the FC target — that is conventional-pool logic and
+  does not apply. The manual says CYA is *not required*, and only matters as an
+  upper bound (drain above 150 ppm). Free with the K-2006 regardless.
+
+**Testing trap — do not test copper after shocking.** Manual troubleshooting #7:
+high free chlorine bleaches the ion test and it reads near zero. Any copper
+reading taken shortly after an oxidiser dose is garbage. The logging UI should
+refuse or flag a copper entry within ~24h of a recorded shock in `pool_doses`.
+
+**Reagent shelf life.** The manual is emphatic that ion-test reagents be replaced
+yearly and kept out of sunlight at room temperature (p.14, p.18 #5). The same
+discipline applies to the Hanna reagents — date the packs on arrival, because a
+slow reagent drift looks exactly like a slow chemistry trend and would poison the
+model invisibly.
 
 **Copper is the gap.** The K-2006 does not test it. Verified 2026-08-07: Hanna
 makes **two** copper Checkers, and the obvious one is the wrong one.
@@ -356,14 +412,24 @@ makes **two** copper Checkers, and the obvious one is the wrong one.
 | Range | 0.00–5.00 ppm | **0–999 ppb (0–0.999 ppm)** |
 | Resolution | 0.01 ppm | **1 ppb (0.001 ppm)** |
 | Accuracy @ 25 °C | ±0.05 ppm ±5% of reading | **±10 ppb ±5% of reading** |
-| Error at the 0.3 ppm target | ±0.065 ppm → **±22%** | ±0.025 ppm → **±8%** |
+| **Error at 0.175 ppm** (mid-target) | ±58.8 ppb → **±34%** | ±18.8 ppb → **±11%** |
 | Method | Bicinchoninate | Bicinchoninate (EPA adaptation) |
 | Reagent | HI702-25 (25 tests) | **HI747-25 (25 tests)**; meter ships with 6 |
 
+All specs verified against hannainst.com 2026-08-07.
+
 **Buy the HI747.** The HI702 is aimed at reef aquariums, where copper treatment
-runs 1–3 ppm. The 0.2–0.4 ppm target here sits in the bottom 8% of the HI702's
-scale, which is where a colorimeter performs worst — roughly 3× the error of the
-low-range unit.
+runs 1–3 ppm. Against the R-40's actual 0.15–0.20 ppm band the HI702's error
+window is **wider than twice the entire target range** — it cannot distinguish
+in-spec from out-of-spec at all, at any reading.
+
+Be honest about the HI747 too: ±18.8 ppb against a 50 ppb-wide target band is
+not luxurious either. Two things make it the right buy anyway. First, the fixed
+±10 ppb term dominates, and **repeatability is better than absolute accuracy** —
+the dilution model cares about *change between tests*, where a consistent bias
+cancels. Second, look at what it replaces: the included CLA-41 kit is a colour
+match card with exactly two reference blocks, 0.15 and 0.20. Anything numeric is
+a large upgrade.
 
 The HI747's ceiling is a useful accident: 0.999 ppm is essentially the industry
 limit above which copper begins staining plaster. An in-range reading means
@@ -393,16 +459,18 @@ cadence can relax.
 | Taylor K-2006 | FAS-DPD kit — covers CC, pH, TA, CH, CYA | 80 |
 | **Hanna HI747** | copper **Low Range** Checker HC — **not** the HI702, see Part 2 | ~50 |
 | HI747-25 reagent | copper reagent, 25 tests — meter ships with 6 | ~10 |
+| TDS pen | 0–3000+ ppm — R-40 needs 500–3000 ppm to function at all | ~15 |
 | CT clamp for Shelly EM Gen3 `IB` | Shelly-branded, matching the Gen3 input | 15 |
 
-**~$290**, of which ~$213 is chemistry instrumentation and ~$76 is the pressure
+**~$305**, of which ~$228 is chemistry instrumentation and ~$76 is the pressure
 sensing hardware. For comparison, the reviewed third-party spec estimated
 $1,100–2,700 for equivalent-or-worse coverage of this specific pool.
 
-Staging, if the spend is split: the **HI747 + HI701 + K-2006** group (~$213) can
-be bought and used today with no wiring at all, and it is the prerequisite for
-the chemistry forecasting in [pool_chemistry_logging.md](pool_chemistry_logging.md).
-The pressure group (~$76) waits on the flow meter anyway.
+Staging, if the spend is split: the **HI747 + HI701 + K-2006 + TDS pen** group
+(~$228) can be bought and used today with no wiring at all, and it is the
+prerequisite for the chemistry forecasting in
+[pool_chemistry_logging.md](pool_chemistry_logging.md). The pressure group (~$76)
+waits on the flow meter anyway.
 
 If the street tee is hard to source, a 1/4" FPT tee plus a 1/4" close nipple
 gives the same result with one more joint to seal.
@@ -426,9 +494,18 @@ mode no breaker or overload will.
       whether the gauge port sits on a rotatable multiport valve
 - [ ] Confirm the existing gauge is 1/4" NPT — reported yes, verify on removal
 - [x] ~~Confirm the Hanna copper Checker model number~~ — **HI747 (Low Range)**,
-      0–999 ppb, ±10 ppb ±5%. Not the HI702, which is high-range reef-aquarium
-      gear and ~3× less accurate at this pool's 0.2–0.4 ppm target
-- [ ] Verify HI701 published accuracy against current Hanna documentation
+      0–999 ppb, ±10 ppb ±5%. Not the HI702, whose error window is wider than
+      twice the R-40's entire 0.15–0.20 ppm target band
+- [x] ~~Verify HI701 published accuracy~~ — 0.00–2.50 ppm, ±0.03 ppm ±3%, DPD
+      per EPA 330.5. Confirmed at hannainst.com 2026-08-07
+- [ ] **Inspect the R-40 electrode capsule — CLE-02 (copper only, standard) or
+      CLE-51 (90/10 copper/silver, optional upgrade)?** Determines whether this
+      pool has any silver sanitation at all. Visual check, no tools
+- [ ] **Measure TDS.** Must be 500–3000 ppm or the R-40 cannot produce ions
+      regardless of dial setting. Never verified; not currently recorded anywhere
+- [ ] Confirm which sequestering agent (if any) is in use — several common ones
+      strip copper and would corrupt the dilution model
+- [ ] Date the Hanna reagent packs on arrival; replace yearly
 - [ ] Establish the clean-filter baseline PSI at 2200 RPM immediately after the
       next backwash/clean — everything downstream compares against it
 - [ ] Decide bonding for the brass tee + transducer body (680.26(B)(6))
@@ -441,5 +518,9 @@ mode no breaker or overload will.
 - [Hanna HI747 Copper Low Range Checker HC](https://hannainst.com/hi747-copper-lr.html) — 0–999 ppb, ±10 ppb ±5%
 - [Hanna HI702 Copper High Range Checker HC](https://hannainst.com/hi702-copper-hr.html) — 0.00–5.00 ppm; **rejected**, wrong range for this pool
 - Taylor K-2006 FAS-DPD test kit — FC, CC, pH, TA, CH, CYA
-- Clearwater MineralPURE R-40 — copper/silver ionizer
+- [Clearwater MineralPURE R-40 Installation & Pool Care Manual (2024)](https://clearwaterpoolsystems.com/wp-content/uploads/R40-manual-2024.pdf)
+  — source for every chemistry target in Part 2. Key pages: p.4 EPA free-chlorine
+  floor, p.13 pH/TA/CH/CYA/TDS ranges, **p.14 the 0.15–0.20 ppm ion callout**,
+  p.16 staining warning + sequestering agents, p.18 troubleshooting (chlorine
+  bleaches the copper test; phosphate; TDS), p.21 spec sheet (CLE-02 vs CLE-51)
 - Third-party "Smart Pool Laboratory Hardware Specification", reviewed 2026-08-07

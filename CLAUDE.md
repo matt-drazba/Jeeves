@@ -235,7 +235,9 @@ cd "/Users/mattdrazba/Code Repos/Jeeves/esphome" && uvx esphome run pool-pad.yam
 - Flow switch arriving ~5 days. Breaker-kill test blocked until then.
 - Sanitizer: Clearwater MineralPURE R-40 copper/silver ionizer. ORP probe removed — meaningless with copper ions + low FC.
 - ESPHome pad node: ESP8266 HiLetgo in hand. Config at `esphome/pool-pad.yaml`. Run ESPHome container first, then flash via USB on Pi.
-- ha-poolchem via HACS: FC/TA/CH/CYA entered manually; copper tracked as separate input_number (target 0.2–0.4 ppm); pH from DS18B20 probe; ORP not used.
+- ha-poolchem via HACS: FC/TA/CH/CYA entered manually; copper tracked as separate input_number (**target 0.15–0.20 ppm** — verified against the R-40 manual p.14, 2026-08-07; an earlier 0.2–0.4 figure here was wrong, its upper half exceeds the manufacturer maximum); ORP not used.
+  - Other R-40 manual targets, none of them conventional-pool numbers: **pH 7.2–7.6** (above 7.6 the ions fall out of solution and the ionizer stops working — this is a sanitizer-efficacy parameter, not comfort), **TDS 500–3000 ppm** (hard requirement — below 500 the R-40 cannot produce ions at all), TA 80–140, CH 150–350, **CYA not required** (only drain if >150), FC floor 0.4 ppm per the EPA label statement. Full table + sources in `docs/pool_data_addendum.md`.
+  - The standard R-40 electrode **CLE-02 is copper only**; the 90/10 copper/silver CLE-51 is an optional upgrade. Which one is installed here is unconfirmed.
   - **Under review** — `docs/pool_chemistry_logging.md` proposes dropping ha-poolchem and making Jeeves' SQLite the system of record for chemistry, since HA's recorder retention can't support forecasting. Not yet ratified.
 - **Manual maintenance logging + chemistry forecasting:** parked design brief at `docs/pool_chemistry_logging.md` — phone-at-poolside entry, voice for doses / screen for numbers, two-table schema (tests vs. doses). Open questions: test kit type, log-only vs. dose calculator.
 
