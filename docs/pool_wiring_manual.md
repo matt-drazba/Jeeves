@@ -134,26 +134,7 @@ The transformer puts out 24VAC on two wires (pins 7 and 12 per manual printed p.
 
 **It does not matter which transformer leg is "hot" and which is "common."** This is 24VAC off an isolated transformer secondary — it is AC, there is no hot/neutral in the household sense, and every load in this system is unpolarized. Relay coils don't care about direction, and the IntelliComm's input is explicitly rated *"9–24V AC/DC, unpolarized."* Swapping the two conductors at the transformer would change nothing.
 
-### ⚠⚠ …but a thing you absolutely DO need to get right: yellow to yellow, green to green
-
-The paragraph above is about **polarity**, and polarity genuinely does not matter. **Which conductor lands on which terminal is a completely different question, and it matters absolutely.**
-
-**At the IntelliComm II, the control conductors are not interchangeable: YELLOW must go to yellow, GREEN must go to green.**
-
-Swap them and the 24VAC circuit back to the 90340 coil never completes. The failure is **silent and deeply misleading**:
-
-- the FPH LCD reads **"Heating"** — the controller thinks it is doing its job
-- the pump spins up to 2200 RPM on Program 4 — terminal 3 is unaffected
-- **but the Mars 90340 never energizes**, so the condenser fan keeps spinning and the valves never move
-- no heat is recovered, and nothing anywhere reports an error
-
-There is no symptom that points at the wiring. It looks exactly like a dead 90340, a stuck flow switch, or a failed FPH output, and a troubleshooter following the fan-based logic in 6.1 will chase all three before thinking of it. **VERIFIED — hit in the field on this system.** If diversion is not engaging, check this before opening the FPH box or condemning a part; it costs thirty seconds.
-
-The reason "polarity doesn't matter" and "colors matter" are both true at once: polarity is about the *direction* of an AC waveform, which no load here cares about. Color is about *topology* — which node a conductor is bonded to. Yellow is the shared-return node (also 90340 coil A and the trio bus). Land it in the wrong place and you have not reversed a signal, you have broken a circuit.
-
-### What matters is routing
-
-So this document names the two legs by where they go, not by polarity:
+**What matters is routing:** which conductor is interrupted, by what, and where. So this document names the two legs by where they go, not by polarity:
 
 - **CONTROLLER LEG — the one that goes into the FPH.** It leaves the transformer and lands in the FPH control box at the **blue butt connector**, where it **pigtails/splits in the top of the box, between the LCD and Modules A and B.** That pigtail is a junction point, not a component — several wires bonded together under the LCD is normal and correct. From there it feeds the controller's two switched outputs, **terminal 3** and **terminal 4**. **Terminal 3 goes to the IntelliComm / pool pump. Terminal 4 returns to the 90340's coil B by way of the Tecmark flow switch.** It also supplies contact power to the 90340's two commons (T1 black, T4 white).
 - **SHARED-RETURN LEG — the one that never enters the FPH controller.** It runs from the transformer **directly to the IntelliComm II**. This is the **yellow** wire in the new box. It is the same electrical node as the 90340's **coil A**, the trio's bus (the red), and the second side of the White Rodgers coil. Nothing switches it; it is simply present whenever the transformer is powered.
@@ -254,18 +235,11 @@ This reliably trips AI assistants, and it may trip people too, so say it out lou
                               │   9–24V AC/DC,     │  │                  │
                               │   unpolarized)     │  │ SPNO contact:    │
                               │                    │  │ 3.3V ─●  ●─ GPIO5│
-                              │ ⚠ YELLOW→yellow,   │  └──────────────────┘
-                              │   GREEN→green.     │        ▲      │
-                              │   NOT swappable    │        │      │
-                              └─────────┬──────────┘        │      │
-                                        │                   │      │
-      SHARED-RETURN / YELLOW ───────────┴───────────────────┴──────┘
+                              └─────────┬──────────┘  └──────────────────┘
+                                        │                     ▲      │
+      SHARED-RETURN / YELLOW ───────────┴─────────────────────┴──────┘
       (straight from the transformer — never enters
        the FPH controller; also = 90340 coil A)
-
-      ⚠ Swapping the IntelliComm's yellow and green breaks the 24VAC
-        return to the 90340 coil. FPH reads "Heating," pump runs,
-        fan never stops, nothing reports an error. VERIFIED failure.
                                         │
                                    RS-485 cable
                                         │
@@ -284,8 +258,6 @@ This reliably trips AI assistants, and it may trip people too, so say it out lou
 The wire-by-wire routing of the **90340's contact power** — T1 (black) and T4 (white) — is documented above as coming off the CONTROLLER LEG, and the trio's return as riding the shared-return / coil-A bus. That's the only arrangement consistent with the verified terminal assignments, but it wasn't traced end to end.
 
 It changes nothing operationally: contact power only matters once the coil has already been energized through the flow switch, so no error here could defeat the interlock. Confirm opportunistically the next time the box is open.
-
-Also not yet written down: **which IntelliComm terminal the green conductor lands on.** The color rule above is field-verified and is what you act on; the terminal number is a documentation gap. Capture it with the Part 8 photo of the chimney box.
 
 ---
 
@@ -389,7 +361,6 @@ Source: [Supco 90340 Installation Instructions](https://www.manualslib.com/manua
 |---|---|
 | Input used | **GPM/RPM 4 (Program 4)**, 9–24V AC/DC, **voltage-driven, not dry-contact**, unpolarized |
 | Fed by | **FPH controller terminal 3** (not 4 — see the naming-collision note in Part 2), returning on the shared-return leg (the yellow). Not flow-gated, and not the same point as the 90340 coil |
-| **Wire colors** | ⚠ **YELLOW→yellow, GREEN→green. Not interchangeable.** Swapped, the 24VAC return to the 90340 coil never completes and the whole diversion side dies silently while the FPH still reads "Heating." VERIFIED failure — see Part 2 |
 | Output | RS-485 to the pump |
 | Pump program | **Ext. Program 4, configured at 2200 RPM** (~55–60 GPM, measured against the Blue-White gauge — not estimated) |
 | Stop delay | **≥10 min**, set on the pump's own screen — flushes the heat exchanger after the FPH releases the call, then the pump returns to its normal schedule |
@@ -524,7 +495,6 @@ The two original use cases (spin up for a swim by voice; recover from a post-out
 - Persist HX in/out temps and BTU/hr to the Jeeves SQLite store so heat-recovery performance can be trended across a season (HA's recorder retention is too short).
 - Confirm whether the IntelliFlo's accessory output is line-voltage or a low-voltage relay signal — check when the drive cover is next open.
 - Investigate whether HVAC compressor **stage** (1 vs 2) can be read, via the Resideo cloud API or a CT clamp on the compressor circuit. Low-stage runs likely explain small ΔT readings at the heat exchanger.
-- Record which IntelliComm terminal the green conductor lands on (Part 2) — the color rule is verified, the terminal number is not written down.
 - Track pool chemical inputs and test readings over time, and generate predictive dosing recommendations from the trend.
 
 ---
@@ -579,18 +549,10 @@ Is the A/C compressor actually running?
                │     also check filter, valves, and for air lock), or the switch
                │     needs readjusting, or it has failed. DO NOT JUMPER IT.
                └─ Switch CLOSED (no voltage across it)
-                   │
-                   → ★ CHECK OUR OWN BOX FIRST, before condemning the FPH.
-                     Open the chimney box and confirm the IntelliComm II control
-                     wires are landed YELLOW→yellow and GREEN→green. Swapped,
-                     the 24VAC return to the 90340 coil never completes and the
-                     symptom is EXACTLY this: FPH reads "Heating", pump runs on
-                     Program 4, fan never stops, coil reads 0V. VERIFIED failure
-                     on this system — see Part 2. Costs 30 seconds to rule out.
-                   │
-                   → If the colors are correct: the signal isn't arriving from
-                     the FPH controller at all. Check controller terminal 4 and
-                     the blue butt connector. Inside the FPH — installer/HotSpot
+                   → Signal isn't arriving from the FPH controller at all.
+                     Check controller terminal 4 and the blue butt connector,
+                     and confirm the IntelliComm control wires are landed per
+                     the FPH manual. Inside the FPH — installer/HotSpot
                      territory.
                      (The pump starting only proves TERMINAL 3 is closing.
                       Terminal 4 is a separate output and can fail on its own.)
@@ -608,7 +570,7 @@ Likely causes, in order: IntelliComm II lost power (check the 12V adapter — it
 
 | What you observe | Most likely | Section |
 |---|---|---|
-| **FPH LCD says "Heating" but the condenser fan keeps spinning** | IntelliComm yellow/green swapped — the 24VAC return to the 90340 coil never completes. Check this before condemning the 90340 or the flow switch | Part 2, 6.1 |
+| **FPH LCD says "Heating" but the condenser fan keeps spinning** | Diversion never engaged — the terminal-4 branch. Meter the 90340 coil before condemning a part | 6.1, 6.5 |
 | A/C running, pool cold, pump never spins up | Terminal 3 / pump call broken | 6.1, 6.2 |
 | Pump at 2200 RPM, fan still spinning, inside the purge window | **Normal.** Wait ~2 minutes | Operating sequence |
 | Pump at 2200 RPM, fan still spinning, pool above setpoint | **Normal.** Controller correctly chose not to heat | Operating sequence |
@@ -636,7 +598,7 @@ This is a **sensing** problem, not a heating problem. The pool system is fine; t
 | IntelliComm Program-4 input | ~0V | **~24VAC** — and also ~24VAC during the purge phase, *before* the flow switch closes. That's terminal 3 working correctly, not a fault |
 | White Rodgers contact | open | **closed / continuity** |
 
-**⚠ The signature of a yellow/green swap at the IntelliComm:** the flow switch reads **closed** (~0 V across it) — so terminal 4 *is* being offered — yet the 90340 coil reads **~0 V** instead of 24VAC, and the fan keeps running. A genuinely failed 90340 reads the opposite: **~24VAC across the coil** with the contacts not moving. Those two are easy to confuse and the fix is completely different, so meter the coil before ordering a relay.
+**⚠ Two failures look alike; the coil tells them apart.** Flow switch **closed** (~0 V across it) but the 90340 coil also reading **~0 V** means the terminal-4 signal never arrived — a wiring or controller-output fault. A genuinely failed 90340 reads the opposite: **~24VAC across the coil** with the contacts not moving. The fix is completely different, so meter the coil before ordering a relay.
 
 ### 6.6 Ground rules for anyone working on this
 
@@ -644,7 +606,6 @@ This is a **sensing** problem, not a heating problem. The pool system is fine; t
 - **Never jumper the flow switch.** Not to test, not "for a second." It is the only thing preventing equipment damage — and as 3.1 documents, there is currently no software backstop behind it.
 - **Never wire anything into the safety chain that depends on a network, a computer, or software.** The Pi, Home Assistant, and the ESP8266 are all observers. Keep it that way.
 - **The FPH box and the heat pump interior are untouched by us.** Anything wrong in there is an installer/HotSpot issue, not one of our modifications.
-- **Respect wire colors at the IntelliComm** — yellow to yellow, green to green. See Part 2.
 - 16AWG minimum for the solenoid valves and transformer jumpers — **not thermostat wire**, the coils draw more than it can carry (manual printed p.8). 18AWG thermostat wire is fine for signal-only runs like the IntelliComm input.
 - If you replace the 90340, **re-read section 3.2's common-terminal trap first.** The printed schematic on the case is misleading.
 
@@ -698,7 +659,7 @@ The physical form is a **8 AWG solid bare copper** loop tying the pool shell ste
 Drop them in `docs/images/` and link them inline. Priority order:
 
 1. **Mars 90340 terminal block, wires attached, labels legible** (heat pump cabinet) — the single most valuable photo in the set. It settles the common-terminal question instantly for whoever opens the box next.
-2. **New chimney box, lid off** — IntelliComm II, White Rodgers, ESP8266, buck converter, terminal-block/resistor unit, all in one frame. **Get the IntelliComm's terminal strip in focus** — this is the shot that documents which terminal the green conductor lands on, currently the one unrecorded detail of the yellow/green rule.
+2. **New chimney box, lid off** — IntelliComm II, White Rodgers, ESP8266, buck converter, terminal-block/resistor unit, all in one frame.
 3. **FPH control box, lid off** — LCD, Modules A & B, terminal strip 1–6, and the blue butt connector / pigtail in the top of the box.
 4. The Tecmark flow switch threaded into the heat exchanger's blue outlet port.
 5. The white/yellow tap points feeding the White Rodgers coil and the IntelliComm input.
@@ -746,7 +707,7 @@ Page citations are to the HotSpot FPH installer manual, 44-page scanned PDF, **p
 | 2026-08-07 | Chimney recorded as **non-functional** — an exterior chimney no longer used as a flue, purely a mounting surface. No heat, combustion, or flue gas to design around. |
 | 2026-08-08 | **Section 4.5 rewritten again — the pool alerting package shipped.** Six automations live in `homeassistant/packages/jeeves_alerts.yaml` on the L1–L5 response-deadline ladder, replacing the old Critical/Warning wording. Recorded that the HX ΔT ≤ 0 alert was **inert for its first day** behind a `+0.3 °F` probe offset, since zeroed against 102 samples. "Pump on during unscheduled hours" dropped — heat recovery legitimately calls the pump outside its window. Sweep manual control freed from the old outside-window guard (now a 2-hour runtime cap) and maintenance mode removed entirely. |
 | 2026-08-08 | **⚠ Correction to the entry above — it over-claimed coverage.** That revision marked 3.1's "flow switch closed, pump not powered" row as **covered**, citing the new alerts. It is not. The live alert it pointed at is `jeeves_booster_dry_run_kill`, which guards the **Polaris PB4-60 booster** against the main pump being off — a different pump, a different fault, and unrelated to refrigerant diverting into the FPH exchanger. Verified repo-wide: `binary_sensor.pool_pad_pool_heat_active` is consumed only by `jeeves/server.js` (display) and as one condition inside the ΔT detector. **No automation watches the heat-recovery interlock.** 3.1 reverted to "detectable, but not detected"; 4.5 gained an explicit NOT BUILT row at the top plus the missing `jeeves_sweep_max_runtime` row; 6.2's "HA should have alerted within 30 seconds" struck; the interlock alert reinstated as the top item in 5.3. Same class of error as the +0.3 offset — a document asserting protection that was never armed. |
-| 2026-08-08 | **IntelliComm yellow/green conductors are NOT interchangeable — VERIFIED in the field.** Yellow to yellow, green to green. Swapped, the 24VAC return to the 90340 coil never completes: the FPH LCD reads "Heating," the pump runs on Program 4, the condenser fan never stops, and nothing reports an error. Added as a Part 2 subsection distinguishing *polarity* (genuinely irrelevant) from *topology* (critical), marked on the master diagram, added to the 3.4 table and 6.5's ground rules, given a metering signature in 6.4 that separates it from a failed 90340, and — most importantly — inserted into the 6.1 decision tree ahead of the branch that previously sent the troubleshooter into the FPH box for a fault that is in our own. Which terminal the green lands on is not yet recorded; logged in 5.3 and as a Part 8 photo target. |
+| 2026-08-08 | **Reverted a same-day addition documenting the IntelliComm yellow/green conductor rule.** It is standard FPH content, already covered by the installer manual, so it does not belong here — this document exists for what *differs* from that manual. 6.1 keeps a one-line pointer to land the IntelliComm wires per the FPH manual; 6.4's metering note was generalised to "signal never arrived vs. relay failed," which is useful regardless of cause. |
 | 2026-08-08 | **Section 5.2 rewritten as DROPPED.** It had instructed the reader to "uncomment the `switch:` block at the bottom of pool-pad.yaml — it's already written." That block was deleted 2026-08-05 and GPIO13 is free, which 4.2 already said — the document contradicted itself. Rewritten with the actual reason for the cut (the motivating risk was a booster problem, addressed by the dry-run interlock), keeping the input-4 priority rule and the GPIO13 idle-LOW constraint for any future revisit. GPIO4's history added to 4.2 to match the config. |
 | 2026-08-08 | **6.1 purge delay corrected from ~20 s to ~2 min.** The tree still carried the printed manual's figure and told the reader to judge the condenser fan "after ~30 s" — inside the purge window, before the controller has sampled anything. It was misdiagnosing working hardware. Added 6.3, a symptom index keyed to what the reader actually observes. |
 
@@ -754,9 +715,8 @@ Page citations are to the HotSpot FPH installer manual, 44-page scanned PDF, **p
 
 - [ ] **Build the heat-recovery interlock alert** (`pool_heat_active` && pump under 20 W) — 3.1's first row is a silent failure until this ships. Extend `scripts/verify-alerts.py` to cover it.
 - [ ] Opportunistically confirm the 90340 contact-power routing (Part 2, "Still INFERRED") next time the box is open.
-- [ ] Record which IntelliComm terminal the green conductor lands on (Part 2, Part 8 photo #2).
 - [ ] Bond the FPH heat exchanger to the pad loop (Part 7).
 - [ ] Install and calibrate the flow meter (5.1) — safety-relevant, see 3.1 coverage table.
 - [ ] Take the Part 8 photos and draw the three per-box annotated diagrams (chimney box, FPH box, heat pump cabinet). 90340 terminals first.
 - [ ] Copy the FPH manual PDF into the repo so this document stands alone without a `~/Desktop` path.
-- [ ] Label wires physically at the 90340 and the chimney box — ferrules or numbered markers — given the documented white/white collision and the yellow/green rule. Prose warnings don't survive a rewire.
+- [ ] Label wires physically at the 90340 and the chimney box — ferrules or numbered markers — given the documented white/white collision. Prose warnings don't survive a rewire.
