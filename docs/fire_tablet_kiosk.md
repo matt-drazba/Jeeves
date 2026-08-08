@@ -22,8 +22,11 @@ rather than just hiding Silk's toolbar:
 | User can navigate away | Blocks Home/Back/Recents, locks to one URL, PIN to exit |
 | Screen sleeps, device reboots | Keeps display on, launches on boot, auto-reloads on crash |
 
-Free version covers everything below. The Plus license (~$10 one-time) adds
-remote administration and removes a nag.
+**Kiosk Mode is a PLUS feature** — so is Remote Administration and motion
+detection. The free version will nag you for a license. All PLUS features are
+unlimited free to try; the only limitation is a watermark on screen, so you can
+prove the whole setup before paying. License is per device, one-time, price
+shown in the app.
 
 ## Order of operations
 
@@ -147,12 +150,22 @@ load-URL service. The useful one is load-URL: HA could **push** the tablet to
 the pool page when a pool alert fires, rather than waiting for someone to walk
 over and tap.
 
-Two caveats before counting on it:
+Requires the Plus license (confirmed — it drives Remote Admin). Enable
+*Fully → Settings → Remote Administration* with a strong password, **cloud
+off**, then add the integration with the tablet IP + that password. Never expose
+Remote Admin to the internet; Tailscale is already the remote-access path here.
 
-- Unconfirmed whether the REST interface Fully exposes for this needs the Plus
-  license. Check before building anything on it.
-- Fully's Remote Administration is worth enabling for changing settings without
-  unmounting the tablet, but give it a strong password and **never expose it to
-  the internet.** Tailscale is already the remote-access path here.
+**Deliberately deferred 2026-08-08 — the tablet stays read-only.** Alerts
+already surface three ways: the alerts tile goes red on the wall, the ticker
+names them, and L1/L2 hit the phone as iOS Critical Alerts. Auto-switching the
+display saves a glance at a screen that is already showing the problem. Not
+worth the cost until it is actually missed.
 
-Do this after the basic chain is proven, not during setup.
+That cost, if it is ever wanted: **the dashboard has no URL routing.**
+`showPoolView()` is reachable only by tapping a tile
+([dashboard.html:1545](../jeeves/public/dashboard.html#L1545)), so
+`fully_kiosk.load_url` pointed at the dashboard just reloads the tile grid. It
+would need hash routing added (`#pool`, `#alerts`), the hash cleared when the
+60s auto-return fires so a repeat alert can re-trigger, and the new entity
+references added to `verify-alerts.py`'s scan. Decide overlay-vs-pool-page at
+that point — living with it first is what answers that question.

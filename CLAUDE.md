@@ -190,6 +190,12 @@ homelab/
   - Seeded with documented test cadences only. **Backwash is deliberately absent** — it triggers at +8–10 psi over baseline, not on a calendar, and the pressure sensor is not built. Seeds stamp `last_done_at` at migration time so nothing is due on day one
   - Sources 2 (filter-pressure threshold) and 3 (chemistry model) append to the same array and need no UI work
 - **Deadhead detection (display only, 2026-08-08)** — `cachedStatus.pool.flowStatus` is `no_meter | deadhead | ok`, gated on the `POOL_FLOW_METER_INSTALLED` env flag. **Never infer "no meter" from a zero flow reading** — an unconnected pulse counter reports a real `0`, and pump-drawing-current + no-flow is a deadhead (running against a closed valve, spikes filter pressure toward the TA100D's 50 psi ceiling). The alert itself is not built; see Deferred
+- **Fire HD 8 kiosk live (2026-08-08)** — Fully Kiosk Browser on the wall tablet, pointed at `http://192.168.0.189:3000`. Setup guide, settings table, and gotchas in `docs/fire_tablet_kiosk.md`
+  - **Kiosk Mode is a Fully PLUS feature**, as are Remote Admin and motion detection. PLUS is unlimited free to try with an on-screen watermark, so the setup can be proven before paying
+  - **Motion detection stays off** — continuous camera capture plus frame differencing is the biggest CPU drain available on 2GB hardware, and it is a camera in the kitchen. The display just stays on
+  - **Do not add a Fully brightness schedule** — the dashboard already self-dims to 0.45 opacity 10pm–6am in JS; layering a second one makes it unreadable
+  - Set the Kiosk PIN *before* enabling lockdown. Doing it in the wrong order locks you out and the recovery is a factory reset
+  - Tablet is slow; two independent suspects, undiagnosed. Tablet side is Amazon bloat on 2GB (ADB debloat from the Mac, no root). Page side is `.tile.alert`/`.tile.degraded` animating `box-shadow`, which forces a full repaint every frame and cannot be GPU-composited — several tiles pulsing at once drags the whole UI. Fix is a static shadow on an `::after` with animated `opacity`. **Establish which one first:** slow everywhere = tablet, slow only on the dashboard = the animation
 
 ### Tile states
 | State | CSS class | Trigger |
@@ -289,7 +295,7 @@ cd "/Users/mattdrazba/Code Repos/Jeeves/esphome" && uvx esphome run pool-pad.yam
 - Pool water level sensor hardware
 - NVMe SSD for the Pi 5 (SD card fine to start; trim HA recorder retention to a few days)
 - Freeze-warning automation (winter concern)
-- Fire HD 8: buy (eBay), install Fully Kiosk Browser, point at `http://192.168.0.189:3000`, wall-mount
+- **Fully Kiosk → HA integration (tablet stays read-only) — deferred by decision 2026-08-08.** The core `fully_kiosk` integration would give battery/screen state plus `fully_kiosk.load_url` to push the display to a view on alert. Skipped: alerts already surface on the wall tile, the ticker, and the phone, so auto-switching saves a glance at a screen already showing the problem. Also needs Plus (Kiosk Mode and Remote Admin are both Plus) and dashboard hash routing, which does not exist. Full cost breakdown in `docs/fire_tablet_kiosk.md`.
 - **Pool heat recovery data logging** — **code written, NOT yet running on the Pi.** `pool_heat_samples` (schema v5) and `logPoolHeat()` are in `jeeves/db.js`, and `fetchPoolHeat()` in `server.js` polls the pad node every 2 min — full resolution while heat recovery is active, 10-min heartbeat when idle, `delta_f` computed on write. Flow and BTU columns stay null until the flow meter is installed, then backfill from that day.
   - **The Pi's jeeves container predates this and has no such table.** Deploying HA config via `git pull` + `docker restart homeassistant` does NOT rebuild jeeves — that needs `docker compose up -d --build jeeves`. Verified missing 2026-08-07.
 
