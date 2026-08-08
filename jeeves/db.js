@@ -114,6 +114,46 @@ function migrate() {
     db.pragma('user_version = 5');
     console.log('DB: migrated to v5');
   }
+  if (v < 6) {
+    // Recurring maintenance tasks. These drive the "Next Up" tile and promote
+    // themselves into chore tiles on their due date.
+    //
+    // Only genuinely calendar-driven work belongs here. Backwash is deliberately
+    // NOT seeded: docs/pool_data_addendum.md is explicit that it triggers at
+    // +8-10 psi over measured baseline, not on a schedule, and the filter
+    // pressure sensor isn't built yet. A calendar cadence would be invented.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS tasks (
+        id            INTEGER PRIMARY KEY,
+        key           TEXT NOT NULL UNIQUE,
+        domain        TEXT NOT NULL,
+        title         TEXT NOT NULL,
+        icon          TEXT,
+        interval_days REAL NOT NULL,
+        last_done_at  INTEGER,
+        enabled       INTEGER NOT NULL DEFAULT 1
+      );
+      CREATE INDEX IF NOT EXISTS idx_tasks_enabled ON tasks(enabled, domain);
+    `);
+
+    // Start every clock at migration time. Seeding last_done_at NULL would make
+    // all six immediately overdue and dump six chore tiles on the first morning.
+    const now = Math.floor(Date.now() / 1000);
+    const seed = db.prepare(
+      `INSERT OR IGNORE INTO tasks (key, domain, title, icon, interval_days, last_done_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    );
+    // Test cadences are the R-40 / K-2006 figures from docs/pool_data_addendum.md.
+    seed.run('test_fc',        'pool', 'Test free chlorine',   '🧪', 3,   now);
+    seed.run('test_copper_ph', 'pool', 'Test copper and pH',   '🧪', 7,   now);
+    seed.run('test_ta_ch',     'pool', 'Test TA and calcium',  '🧪', 30,  now);
+    seed.run('test_tds',       'pool', 'Test TDS',             '🧪', 365, now);
+    seed.run('hvac_filter',    'home', 'Change HVAC filter',   '🌬️', 90,  now);
+    seed.run('dishwasher_deep','home', 'Deep clean dishwasher','🍽️', 60,  now);
+
+    db.pragma('user_version = 6');
+    console.log('DB: migrated to v6');
+  }
 }
 
 migrate();
@@ -243,6 +283,47 @@ export function getOpenErrors() {
   return db.prepare(
     'SELECT * FROM behavior_errors WHERE resolved_at IS NULL ORDER BY occurred_at DESC'
   ).all();
+}
+
+export function getPoolHeatSamples(sinceTs, limit = 1000) {
+  return db.prepare(`
+    SELECT recorded_at, hx_in_f, hx_out_f, delta_f, heat_active
+    FROM pool_heat_samples
+    WHERE recorded_at >= ?
+    ORDER BY recorded_at ASC
+    LIMIT ?
+  `).all(sinceTs, limit);
+}
+
+// ── Recurring tasks ────────────────────────────────────────────────
+
+const DAY_S = 86400;
+
+// Every enabled task with its computed due date, soonest first. A task that has
+// never been done is due now — but the v6 seed stamps last_done_at, so that only
+// happens for rows added by hand later.
+export function getTaskSchedule() {
+  const rows = db.prepare(
+    'SELECT * FROM tasks WHERE enabled = 1 ORDER BY key ASC'
+  ).all();
+  return rows
+    .map((t) => ({
+      key:       t.key,
+      domain:    t.domain,
+      title:     t.title,
+      icon:      t.icon,
+      intervalDays: t.interval_days,
+      lastDoneAt:   t.last_done_at,
+      dueAt: t.last_done_at
+        ? t.last_done_at + Math.round(t.interval_days * DAY_S)
+        : Math.floor(Date.now() / 1000),
+    }))
+    .sort((a, b) => a.dueAt - b.dueAt);
+}
+
+export function markTaskDone(key, ts = Math.floor(Date.now() / 1000)) {
+  const res = db.prepare('UPDATE tasks SET last_done_at = ? WHERE key = ?').run(ts, key);
+  return res.changes > 0;
 }
 
 export function getWeeklyStats(sinceTs) {

@@ -89,8 +89,15 @@ let cachedStatus = {
     scoreboard: { label: 'Chores',      icon: '🏆', value: '—',    sub: 'This week', members: [], alert: false, degraded: false },
     homeEnergy: { label: 'Home Energy', icon: '⚡', value: '—',    sub: '', alert: false, degraded: false },
     poolPump:   { label: 'Pool Pump',   icon: '🏊', value: '—',    sub: '', alert: false, degraded: false },
+    poolTemp:   { label: 'Pool Temp',   icon: '🌡️', value: '—',    sub: '', alert: false, degraded: false },
+    nextActions:{ label: 'Next Up',     icon: '🔮', value: '—',    sub: '', alert: false, degraded: false },
+    alerts:     { label: 'Alerts',      icon: '🔔', value: '—',    sub: '', alert: false, degraded: false },
   },
   alerts: [],
+  alertDetail: [],
+  maintenance: { on: false, since: null },
+  pool: {},
+  nextActions: [],
   calendar: { days: [] },
   updatedAt: new Date().toISOString(),
 };
@@ -107,6 +114,36 @@ async function fetchHAState(entityId) {
     signal: AbortSignal.timeout(5000),
   });
   if (!res.ok) throw new Error(`HA API ${res.status} for ${entityId}`);
+  return res.json();
+}
+
+// Fetch several entities at once. Takes { key: entityId }, returns
+// { key: { state, lastChanged } } for whatever resolved — missing keys mean that
+// entity failed or doesn't exist, which callers are expected to handle.
+async function fetchHAStates(map) {
+  const keys = Object.keys(map);
+  const results = await Promise.allSettled(keys.map((k) => fetchHAState(map[k])));
+  const out = {};
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') {
+      out[keys[i]] = { state: r.value.state, lastChanged: r.value.last_changed };
+    }
+  });
+  return out;
+}
+
+// HA reports missing/erroring entities as literal strings, not nulls.
+const haNum = (s) =>
+  s === undefined || s === null || s === 'unknown' || s === 'unavailable' ? NaN : parseFloat(s);
+
+async function callHAService(domain, service, entityId) {
+  const res = await fetch(`${HA_URL}/api/services/${domain}/${service}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${HA_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ entity_id: entityId }),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) throw new Error(`HA service ${domain}.${service} → ${res.status} for ${entityId}`);
   return res.json();
 }
 
@@ -569,16 +606,8 @@ const POOL_PAD_ENTITIES = {
 async function fetchPoolHeat() {
   if (!HA_TOKEN) return;
   try {
-    const keys = Object.keys(POOL_PAD_ENTITIES);
-    const results = await Promise.allSettled(
-      keys.map((k) => fetchHAState(POOL_PAD_ENTITIES[k]))
-    );
-
-    /** @type {Record<string, string|undefined>} */
-    const state = {};
-    results.forEach((r, i) => {
-      if (r.status === 'fulfilled') state[keys[i]] = r.value.state;
-    });
+    const res = await fetchHAStates(POOL_PAD_ENTITIES);
+    const state = Object.fromEntries(Object.entries(res).map(([k, v]) => [k, v.state]));
 
     // The pad node sleeps or drops off WiFi; a fully unavailable node is not a sample.
     if (state.hxIn === undefined && state.hxOut === undefined) {
@@ -587,13 +616,11 @@ async function fetchPoolHeat() {
     }
     db.resolveError('pool_pad', 'unavailable');
 
-    const num = (s) => (s === undefined || s === 'unknown' || s === 'unavailable' ? NaN : parseFloat(s));
-
     db.logPoolHeat({
-      hxInF:      num(state.hxIn),
-      hxOutF:     num(state.hxOut),
-      flowGpm:    num(state.flow),
-      btuHr:      num(state.btu),
+      hxInF:      haNum(state.hxIn),
+      hxOutF:     haNum(state.hxOut),
+      flowGpm:    haNum(state.flow),
+      btuHr:      haNum(state.btu),
       heatActive: state.active === 'on',
       pumpWatts:  lastPumpWatts,
     });
@@ -604,6 +631,286 @@ async function fetchPoolHeat() {
 
 fetchPoolHeat().catch(() => {});
 setInterval(() => fetchPoolHeat().catch(() => {}), 2 * 60 * 1000);
+
+// ── Pool page state ────────────────────────────────────────────────
+const POOL_EXTRA_ENTITIES = {
+  sweep:     'switch.pool_sweep_socket_1',
+  sweepRan:  'input_boolean.sweep_ran_tonight',
+};
+
+async function fetchPoolStatus() {
+  if (!HA_TOKEN) return;
+  try {
+    const res = await fetchHAStates({ ...POOL_PAD_ENTITIES, ...POOL_EXTRA_ENTITIES });
+    const s = (k) => res[k]?.state;
+
+    const hxInF   = haNum(s('hxIn'));
+    const hxOutF  = haNum(s('hxOut'));
+    const padOnline = !isNaN(hxInF) || !isNaN(hxOutF);
+    const deltaF  = !isNaN(hxInF) && !isNaN(hxOutF) ? +(hxOutF - hxInF).toFixed(1) : null;
+    const heatActive = s('active') === 'on';
+
+    cachedStatus.pool = {
+      waterTempF: isNaN(hxInF) ? null : +hxInF.toFixed(1),
+      hxInF:      isNaN(hxInF) ? null : +hxInF.toFixed(1),
+      hxOutF:     isNaN(hxOutF) ? null : +hxOutF.toFixed(1),
+      deltaF,
+      heatActive,
+      flowGpm:    isNaN(haNum(s('flow'))) ? null : +haNum(s('flow')).toFixed(1),
+      btuHr:      isNaN(haNum(s('btu')))  ? null : Math.round(haNum(s('btu'))),
+      padOnline,
+      pumpWatts:  isNaN(lastPumpWatts) ? null : Math.round(lastPumpWatts),
+      pumpRunning: lastPumpWatts > POOL_PUMP_WATTS_THRESHOLD,
+      sweepOn:     s('sweep') === 'on',
+      sweepRanTonight: s('sweepRan') === 'on',
+    };
+
+    // Tile: water temp. The HX inlet probe is the pool water temperature.
+    if (padOnline && !isNaN(hxInF)) {
+      cachedStatus.status.poolTemp = {
+        label: 'Pool Temp', icon: '🌡️',
+        value: `${hxInF.toFixed(1)}°F`,
+        sub: heatActive && deltaF !== null ? `Heat on · ${deltaF > 0 ? '+' : ''}${deltaF}°F` : 'Heat off',
+        alert: false, degraded: false,
+      };
+    } else {
+      cachedStatus.status.poolTemp = {
+        label: 'Pool Temp', icon: '🌡️', value: '—', sub: 'Pad node offline',
+        alert: false, degraded: true,
+      };
+    }
+  } catch (err) {
+    console.error('Pool status fetch failed:', err.message);
+  }
+}
+
+fetchPoolStatus().catch(() => {});
+setInterval(() => fetchPoolStatus().catch(() => {}), 30 * 1000);
+
+// ── Alerts ─────────────────────────────────────────────────────────
+// Level and runbook text are facts from docs/alerting_levels.md — HA doesn't
+// expose them — so they live here. The open-alert flag entity is DERIVED from
+// the key (input_boolean.alert_open_<key>), and the key must be a member of this
+// registry, so nothing client-supplied ever reaches an entity_id.
+const ALERT_REGISTRY = {
+  booster_kill_failed: {
+    level: 1,
+    title: 'Pool booster running dry — kill FAILED',
+    detector: 'binary_sensor.pool_booster_dry_run',
+    action: 'Go kill the breaker for the sweep circuit now.',
+  },
+  booster_dry_run: {
+    level: 2,
+    title: 'Booster dry run caught and killed',
+    detector: 'binary_sensor.pool_booster_dry_run',
+    action: 'Check why the main pump was off during the sweep window.',
+  },
+  pump_off: {
+    level: 2,
+    title: 'Main pump unexpectedly off',
+    detector: 'binary_sensor.pool_pump_unexpectedly_off',
+    action: 'Check the breaker and the IntelliFlo panel.',
+  },
+  pad_offline: {
+    level: 3,
+    title: 'Pool pad node offline',
+    detector: 'binary_sensor.pool_pad_node_offline',
+    action: 'Power-cycle the ESP; check WiFi coverage at the pad.',
+  },
+  meter_offline: {
+    level: 3,
+    title: 'Pump power meter offline',
+    detector: 'binary_sensor.pool_pump_meter_offline',
+    action: 'Check the Shelly EM in the subpanel.',
+  },
+  hx_no_transfer: {
+    level: 3,
+    title: 'Heat exchanger not transferring',
+    detector: 'binary_sensor.pool_hx_not_transferring',
+    action: 'HX calling but ΔT ≤ 0 — check the trio circuit and probe seating.',
+  },
+  sweep_skipped: {
+    level: 3,
+    title: 'Sweep did not run tonight',
+    detector: null, // nightly 11:45pm check, no live detector to re-read
+    action: 'Check whether the pump ran ≥30 min before 9:45pm.',
+  },
+};
+
+function _ageText(sinceMs) {
+  if (!sinceMs) return '';
+  const mins = Math.floor((Date.now() - sinceMs) / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ${mins % 60}m`;
+  return `${Math.floor(hrs / 24)}d ${hrs % 24}h`;
+}
+
+async function fetchAlerts() {
+  if (!HA_TOKEN) return;
+  try {
+    const keys = Object.keys(ALERT_REGISTRY);
+    const map = { maintenance: 'input_boolean.pool_maintenance' };
+    for (const k of keys) map[`flag_${k}`] = `input_boolean.alert_open_${k}`;
+    for (const k of keys) {
+      if (ALERT_REGISTRY[k].detector) map[`det_${k}`] = ALERT_REGISTRY[k].detector;
+    }
+
+    const res = await fetchHAStates(map);
+
+    const maintOn = res.maintenance?.state === 'on';
+    cachedStatus.maintenance = {
+      on: maintOn,
+      since: maintOn ? res.maintenance.lastChanged : null,
+      ageText: maintOn ? _ageText(Date.parse(res.maintenance.lastChanged)) : '',
+    };
+
+    const detail = [];
+    for (const k of keys) {
+      const flag = res[`flag_${k}`];
+      if (!flag || flag.state !== 'on') continue;
+      const reg = ALERT_REGISTRY[k];
+      const sinceMs = Date.parse(flag.lastChanged);
+      detail.push({
+        key: k,
+        level: reg.level,
+        title: reg.title,
+        action: reg.action,
+        since: flag.lastChanged,
+        ageText: _ageText(sinceMs),
+        // The flag never clears on recovery, so "is this still broken?" is a
+        // separate question from "is this still open". Null = no live detector.
+        conditionActive: reg.detector ? res[`det_${k}`]?.state === 'on' : null,
+      });
+    }
+    detail.sort((a, b) => a.level - b.level || Date.parse(a.since) - Date.parse(b.since));
+
+    cachedStatus.alertDetail = detail;
+    cachedStatus.alerts = detail.map((d) => `L${d.level} · ${d.title} (${d.ageText})`);
+
+    // Tile. Colour by highest open level, using the inline color/bg mechanism the
+    // AQI tiles use — the diff-patcher overwrites className every render, but
+    // inline styles survive and override the class colours.
+    const LEVEL_STYLE = {
+      1: { color: '#e53935', bg: '#1a0000' },
+      2: { color: '#ff6b35', bg: '#1a0a00' },
+      3: { color: '#f0c040', bg: '#1a1500' },
+    };
+    const counts = detail.reduce((m, d) => ((m[d.level] = (m[d.level] || 0) + 1), m), {});
+    const countText = Object.keys(counts).sort()
+      .map((lv) => `${counts[lv]}× L${lv}`).join(' · ');
+
+    const maintPrefix = maintOn ? '🔧 Maintenance ON' : '';
+    if (detail.length === 0) {
+      cachedStatus.status.alerts = {
+        label: 'Alerts', icon: '🔔', value: 'All clear',
+        sub: maintPrefix || `${keys.length} checks passing`,
+        alert: false, degraded: false,
+        ...(maintOn ? LEVEL_STYLE[3] : {}),
+      };
+    } else {
+      const top = detail[0].level;
+      cachedStatus.status.alerts = {
+        label: 'Alerts', icon: '🔔',
+        value: `${detail.length} open`,
+        sub: maintPrefix ? `${maintPrefix} · ${countText}` : countText,
+        alert: false, degraded: false,
+        ...LEVEL_STYLE[top],
+      };
+    }
+  } catch (err) {
+    console.error('Alerts fetch failed:', err.message);
+  }
+}
+
+fetchAlerts().catch(() => {});
+setInterval(() => fetchAlerts().catch(() => {}), 30 * 1000);
+
+// ── Next Actions ───────────────────────────────────────────────────
+// Recurring work, shown as a tile and promoted into a real chore tile on its due
+// date. Source 1 (fixed cadence, below) is the only one built. Threshold-based
+// (filter backwash, needs the pressure sensor) and chemistry-model-based
+// projections append to the same array later and need no UI work.
+const DAY_MS = 86400 * 1000;
+
+function _relativeDay(dueMs) {
+  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+  const days = Math.round((dueMs - startOfToday.getTime()) / DAY_MS);
+  if (days < 0)  return days === -1 ? 'Yesterday · overdue' : `${-days} days overdue`;
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Tomorrow';
+  const weekday = new Date(dueMs).toLocaleDateString('en-US', { weekday: 'long' });
+  return days < 7 ? `${weekday} · in ${days} days` : `in ${days} days`;
+}
+
+function refreshNextActions() {
+  try {
+    const actions = db.getTaskSchedule().map((t) => ({
+      id: t.key,
+      domain: t.domain,
+      title: t.title,
+      icon: t.icon,
+      dueAt: t.dueAt,
+      confidence: 'scheduled',
+      basis: `every ${t.intervalDays} days · last done ${
+        t.lastDoneAt ? new Date(t.lastDoneAt * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'never'
+      }`,
+      promoteOnDue: true,
+    }));
+
+    cachedStatus.nextActions = actions;
+
+    const next = actions[0];
+    if (!next) {
+      cachedStatus.status.nextActions = {
+        label: 'Next Up', icon: '🔮', value: 'Nothing due', sub: '',
+        alert: false, degraded: false,
+      };
+      return;
+    }
+    const dueMs = next.dueAt * 1000;
+    cachedStatus.status.nextActions = {
+      label: 'Next Up', icon: '🔮',
+      value: next.title,
+      sub: _relativeDay(dueMs),
+      alert: false,
+      degraded: dueMs < Date.now(),
+    };
+  } catch (err) {
+    console.error('Next actions refresh failed:', err.message);
+  }
+}
+
+// Promotion: at 07:00 each day, anything due today (or overdue) becomes a chore
+// tile via the existing _addChore path — tap to claim, PIN credit, scoreboard.
+// _promotedTasks maps choreId → task key so completing the chore stamps
+// last_done_at and the next due date recalculates.
+const _promotedTasks = new Map();
+let _lastPromotionDate = null;
+
+function promoteDueTasks() {
+  const now = Date.now();
+  for (const action of cachedStatus.nextActions) {
+    if (!action.promoteOnDue) continue;
+    if (action.dueAt * 1000 > now) continue;
+    // Already on the board? Don't stack duplicates across restarts or reruns.
+    if ([..._promotedTasks.values()].includes(action.id)) continue;
+    const choreId = _addChore(action.title, action.icon);
+    _promotedTasks.set(choreId, action.id);
+    console.log(`Promoted task "${action.title}" to chore ${choreId}`);
+  }
+}
+
+refreshNextActions();
+setInterval(() => {
+  const now = new Date();
+  const today = now.toDateString();
+  if (now.getHours() === 7 && _lastPromotionDate !== today) {
+    _lastPromotionDate = today;
+    refreshNextActions();
+    promoteDueTasks();
+  }
+}, 60 * 1000);
 
 // ── BiblioCommons (RCPL library holds) ───────────────────────────
 const BIBLIO_LIBRARY = 'rcpl';
@@ -1005,6 +1312,45 @@ app.get('/api/errors', (req, res) => {
   res.json({ errors: db.getOpenErrors() });
 });
 
+// Acknowledging clears the open-alert flag in HA — the same thing the
+// Acknowledge button on the phone notification does. The key must be a registry
+// member, so the entity_id can never be built from arbitrary input.
+app.post('/api/alerts/:key/ack', express.json(), async (req, res) => {
+  const { key } = req.params;
+  if (!Object.hasOwn(ALERT_REGISTRY, key)) {
+    return res.status(400).json({ error: 'Unknown alert' });
+  }
+  try {
+    await callHAService('input_boolean', 'turn_off', `input_boolean.alert_open_${key}`);
+    await fetchAlerts();               // reflect it now, don't wait for the 30s poll
+    console.log(`Alert "${key}" acknowledged from the dashboard`);
+    res.json({ ok: true, alerts: cachedStatus.alerts, alertDetail: cachedStatus.alertDetail });
+  } catch (err) {
+    console.error('Alert ack failed:', err.message);
+    res.status(502).json({ error: 'HA service call failed' });
+  }
+});
+
+app.post('/api/pool/maintenance', express.json(), async (req, res) => {
+  const { on } = req.body || {};
+  if (typeof on !== 'boolean') return res.status(400).json({ error: 'on (boolean) required' });
+  try {
+    await callHAService('input_boolean', on ? 'turn_on' : 'turn_off', 'input_boolean.pool_maintenance');
+    await fetchAlerts();
+    console.log(`Pool maintenance mode turned ${on ? 'ON' : 'off'} from the dashboard`);
+    res.json({ ok: true, maintenance: cachedStatus.maintenance });
+  } catch (err) {
+    console.error('Maintenance toggle failed:', err.message);
+    res.status(502).json({ error: 'HA service call failed' });
+  }
+});
+
+app.get('/api/pool/history', (req, res) => {
+  const hours = Math.min(Math.max(parseInt(req.query.hours) || 24, 1), 168);
+  const sinceTs = Math.floor((Date.now() - hours * 3600 * 1000) / 1000);
+  res.json({ hours, samples: db.getPoolHeatSamples(sinceTs) });
+});
+
 function refreshScoreboard() {
   const sinceTs = Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000);
   const credits = db.getWeeklyCredits(sinceTs);
@@ -1077,12 +1423,27 @@ app.post('/api/chores/:id/complete', express.json(), async (req, res) => {
   if (!creditedTo) return res.json({ ok: false, creditedTo: null });
   _removeChore(id);
   refreshScoreboard();
+
+  // If this chore was promoted from a recurring task, restart that task's clock.
+  const taskKey = _promotedTasks.get(id);
+  if (taskKey) {
+    db.markTaskDone(taskKey);
+    _promotedTasks.delete(id);
+    refreshNextActions();
+    console.log(`Task "${taskKey}" marked done — next due date recalculated`);
+  }
+
   console.log(`Chore "${choreName}" completed by ${creditedTo}`);
   res.json({ ok: true, creditedTo });
 });
 
 app.delete('/api/chores/:id', (req, res) => {
-  _removeChore(parseInt(req.params.id));
+  const id = parseInt(req.params.id);
+  // Deleting a promoted chore dismisses it from the board but does NOT mark the
+  // task done — it's still due, so it re-promotes tomorrow. Marking it done
+  // would falsify the maintenance record.
+  _promotedTasks.delete(id);
+  _removeChore(id);
   res.json({ ok: true });
 });
 
