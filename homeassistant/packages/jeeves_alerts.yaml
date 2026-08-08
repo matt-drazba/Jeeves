@@ -66,6 +66,14 @@ input_boolean:
     name: Open Alert - Sweep Did Not Run
     icon: mdi:robot-vacuum-off
 
+  alert_open_ionizer_no_pump:
+    name: Open Alert - Ionizer On Without Pump
+    icon: mdi:flash-off
+
+  alert_open_hx_no_transfer:
+    name: Open Alert - Heat Exchanger Not Transferring
+    icon: mdi:heat-wave
+
   # Latch, not an alert flag. Set the moment the sweep actually switches on
   # inside its window; checked and reset at 11:45pm. This is what makes a
   # SILENT skip visible — the schedule deliberately declines to start the
@@ -171,6 +179,50 @@ template:
         state: >
           {{ not has_value(
                'sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power') }}
+
+      # ---------------------------------------------------------------------
+      # L3 — R-40 ionizer energised with no pump running.
+      #
+      # The relay is driven by an on-device Shelly script (20 W threshold,
+      # 60 s on-delay for flow establishment), so this fires when that script
+      # has failed or the relay has stuck. Ions produced into still water do
+      # nothing useful and the electrode is a consumable, so this is waste
+      # rather than damage.
+      #
+      # 10-minute debounce comfortably clears the script's own 60 s on-delay.
+      # ---------------------------------------------------------------------
+      - name: "Pool Ionizer On Without Pump"
+        unique_id: pool_ionizer_no_pump
+        device_class: problem
+        delay_on: "00:10:00"
+        state: >
+          {{ is_state('switch.shellyemg3_dcb4d9ce63a4', 'on')
+             and is_state('binary_sensor.pool_pump_running', 'off') }}
+
+      # ---------------------------------------------------------------------
+      # L3 — heat recovery is calling but the exchanger moves no heat.
+      #
+      # Deliberately triggers on delta <= 0 (outlet no warmer than inlet), NOT
+      # on "delta is small". Stage-1 compressor runs legitimately produce small
+      # HX gains (see pool_heat_recovery.md), and out_temp_offset_f is still a
+      # provisional 0.3 F, so any "small delta" threshold would fire constantly
+      # during normal low-stage operation. Zero or negative transfer while the
+      # FPH is calling is unambiguous.
+      #
+      # 20-minute debounce: water temperature moves slowly and the pad node
+      # only samples every couple of minutes.
+      # ---------------------------------------------------------------------
+      - name: "Pool HX Not Transferring"
+        unique_id: pool_hx_not_transferring
+        device_class: problem
+        delay_on: "00:20:00"
+        state: >
+          {{ is_state('binary_sensor.pool_pad_pool_heat_active', 'on')
+             and has_value('sensor.pool_pad_hx_water_in_temp')
+             and has_value('sensor.pool_pad_hx_water_out_temp')
+             and (states('sensor.pool_pad_hx_water_out_temp') | float(0))
+                 - (states('sensor.pool_pad_hx_water_in_temp') | float(0))
+                 <= 0 }}
 
 # ===========================================================================
 # Notification scripts — one per delivery style
@@ -448,6 +500,49 @@ automation:
           ack_action: "ACK_{{ trigger.id | upper }}"
 
   # -------------------------------------------------------------------------
+  # L3 — pad equipment faults. Nothing is being damaged; something is running
+  # without doing its job.
+  # -------------------------------------------------------------------------
+  - id: jeeves_pool_equipment_fault
+    alias: "Pool: equipment not doing its job"
+    mode: parallel
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.pool_ionizer_no_pump
+        to: "on"
+        id: ionizer_no_pump
+      - platform: state
+        entity_id: binary_sensor.pool_hx_not_transferring
+        to: "on"
+        id: hx_no_transfer
+    condition:
+      - condition: state
+        entity_id: input_boolean.pool_maintenance
+        state: "off"
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: "input_boolean.alert_open_{{ trigger.id }}"
+      - service: script.normal_alert
+        data:
+          title: >
+            {{ 'Ionizer running without the pump'
+               if trigger.id == 'ionizer_no_pump'
+               else 'Heat exchanger is not transferring heat' }}
+          message: >
+            {{ 'The R-40 ionizer relay is on but the main pump is not running.
+                Ions into still water do nothing and the electrode is a
+                consumable. The Shelly on-device script that gates this relay
+                has probably failed or the relay has stuck.'
+               if trigger.id == 'ionizer_no_pump' else
+               'Heat recovery is calling but the HX outlet is no warmer than
+                the inlet. In ' ~ states('sensor.pool_pad_hx_water_in_temp') ~
+                ' F, out ' ~ states('sensor.pool_pad_hx_water_out_temp') ~
+                ' F. Check the FPH pump and the pad valves.' }}
+          tag: "pool-{{ trigger.id }}"
+          ack_action: "ACK_{{ trigger.id | upper }}"
+
+  # -------------------------------------------------------------------------
   # The L3 delivery mechanism. Fixed 9:15pm checkpoint rather than a presence
   # trigger — presence is fragile, and this batches with the dishwasher nudge.
   # -------------------------------------------------------------------------
@@ -505,6 +600,34 @@ automation:
               tag: "pool-sweep-skipped"
               ack_action: "ACK_SWEEP_SKIPPED"
 
+      - if:
+          - condition: state
+            entity_id: input_boolean.alert_open_ionizer_no_pump
+            state: "on"
+        then:
+          - service: script.normal_alert
+            data:
+              title: "Still open: ionizer ran without the pump"
+              message: >
+                Unacknowledged. Check the Shelly on-device script that gates
+                the R-40 relay.
+              tag: "pool-ionizer_no_pump"
+              ack_action: "ACK_IONIZER_NO_PUMP"
+
+      - if:
+          - condition: state
+            entity_id: input_boolean.alert_open_hx_no_transfer
+            state: "on"
+        then:
+          - service: script.normal_alert
+            data:
+              title: "Still open: heat exchanger not transferring"
+              message: >
+                Unacknowledged. Heat recovery called but moved no heat. Check
+                the FPH pump and the pad valves.
+              tag: "pool-hx_no_transfer"
+              ack_action: "ACK_HX_NO_TRANSFER"
+
   # -------------------------------------------------------------------------
   # Acknowledge buttons. trigger.id is the suffix of the matching flag, so one
   # automation serves every alert.
@@ -543,6 +666,16 @@ automation:
         event_data:
           action: "ACK_SWEEP_SKIPPED"
         id: sweep_skipped
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "ACK_IONIZER_NO_PUMP"
+        id: ionizer_no_pump
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "ACK_HX_NO_TRANSFER"
+        id: hx_no_transfer
     action:
       - service: input_boolean.turn_off
         target:

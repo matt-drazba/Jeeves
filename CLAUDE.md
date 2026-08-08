@@ -267,7 +267,7 @@ cd "/Users/mattdrazba/Code Repos/Jeeves/esphome" && uvx esphome run pool-pad.yam
 - NVMe SSD for the Pi 5 (SD card fine to start; trim HA recorder retention to a few days)
 - Freeze-warning automation (winter concern)
 - Fire HD 8: buy (eBay), install Fully Kiosk Browser, point at `http://192.168.0.189:3000`, wall-mount
-- **Pool heat recovery data logging:** HX in/out temp and BTU/hr (`sensor.pool_pad_hx_water_in_temp`, `hx_water_out_temp`, `pool_heat_btu_hr`) are live-only in HA today — not persisted. Extend the existing SQLite `maybeLogEnergy` path (currently used for `pool_pump` wattage) to also log these on the same poll, so heat-recovery performance can be trended over a season instead of just HA's short-retention recorder. Natural small addition to existing plumbing, not a new subsystem.
+- ~~**Pool heat recovery data logging**~~ — **DONE** (confirmed 2026-08-07, the "not persisted" note here was stale). `pool_heat_samples` table exists at schema v5 in `jeeves/db.js`; `fetchPoolHeat()` in `server.js` polls the pad node every 2 min and calls `db.logPoolHeat()`, which writes full resolution while heat recovery is active and a 10-min heartbeat when idle, computing `delta_f` on write. Flow and BTU columns stay null until the flow meter is installed and backfill themselves from that day.
 
 ## Parked — decide later (do NOT build unless explicitly asked)
 - **HVAC compressor stage visibility (branch plan, not yet decided):** Want to know whether the Bryant 226ANA048-B two-stage heat pump is running stage 1 or stage 2 — relevant to interpreting pool heat recovery ΔT (low-stage runs likely explain small HX gains, see `docs/pool_heat_recovery.md`). Two candidate paths, not mutually exclusive:
