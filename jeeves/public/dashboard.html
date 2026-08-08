@@ -427,6 +427,149 @@
       to   { opacity: 1; transform: translateY(0); }
     }
 
+    /* ── Pool view ───────────────────────────────────────────────── */
+    #view-pool {
+      display: none;              /* shown as `grid` by showPoolView() */
+      padding: 12px 16px;
+      grid-template-rows: 124px 76px 1fr 76px;
+      gap: 10px;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    #pool-hero { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+
+    .pool-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 11px 14px;
+      display: flex; flex-direction: column; justify-content: space-between;
+      overflow: hidden;
+    }
+    .pool-card-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+    .pool-card-value { font-size: 29px; font-weight: 700; line-height: 1; }
+    .pool-card-sub   { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pool-card.good .pool-card-value { color: var(--good); }
+    .pool-card.warn { border-color: var(--warn-bdr); background: var(--warn-bg); }
+    .pool-card.warn .pool-card-value { color: var(--warn-col); }
+    .pool-card.bad  { border-color: var(--error-col); background: #1a0000; }
+    .pool-card.bad  .pool-card-value { color: var(--error-col); font-size: 25px; }
+
+    /* Schedule timeline — every pool alert is window-scoped, so "where are we
+       in the day" is what makes the rest of the page interpretable. */
+    #pool-timeline {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 9px 14px;
+    }
+    #pool-tl-track { position: relative; height: 18px; background: #232323; border-radius: 5px; }
+    .tl-band { position: absolute; top: 0; bottom: 0; }
+    .tl-band.pump  { background: #1d3a4a; }
+    .tl-band.peak  { background: #3a2410; }
+    .tl-band.sweep { background: #2f5f7e; }
+    #pool-tl-now { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--text); border-radius: 1px; }
+    #pool-tl-axis, #pool-tl-legend { display: flex; font-size: 10px; color: var(--muted); margin-top: 5px; }
+    #pool-tl-axis { justify-content: space-between; }
+    #pool-tl-legend { gap: 16px; }
+    .tl-key { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+    #pool-mid { display: grid; grid-template-columns: 1fr 292px; gap: 10px; overflow: hidden; }
+
+    .pool-panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 9px 14px;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .pool-panel-title {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+      color: var(--muted); flex-shrink: 0; margin-bottom: 4px;
+    }
+
+    /* Two stacked single-series charts sharing a time axis — NOT one chart with
+       two y-scales. Water temp (~78-86 F) and dT (~0-3 F) are different scales;
+       overlaying them on a dual axis is the classic misleading-chart mistake. */
+    #pool-charts { flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+    .chart-block { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .chart-head  { display: flex; justify-content: space-between; align-items: baseline; flex-shrink: 0; }
+    .chart-name  { font-size: 12px; color: var(--text); }
+    .chart-now   { font-size: 13px; font-weight: 700; }
+    .chart-svg   { width: 100%; flex: 1; min-height: 0; }
+    .chart-foot  { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); flex-shrink: 0; }
+    .chart-empty { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); text-align: center; }
+
+    .pool-read { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; padding: 5px 0; border-bottom: 1px solid #242424; }
+    .pool-read:last-child { border-bottom: none; }
+    .pool-read-k { color: var(--muted); }
+    .pool-read-v { font-weight: 600; }
+    .pool-read-v.muted { color: var(--muted); font-weight: 400; font-size: 11px; }
+    .pool-read-v.bad   { color: var(--error-col); }
+
+    #pool-foot {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 0 16px;
+      display: flex; align-items: center; gap: 16px;
+    }
+    #pool-foot.has-alerts { border-color: var(--alert-bdr); background: #1a0800; }
+    #pool-foot-next { flex: 1; overflow: hidden; }
+    #pool-foot-next .fn-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+    #pool-foot-next .fn-body  { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #pool-foot-alerts { font-size: 13px; white-space: nowrap; }
+
+    .pool-btn {
+      background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+      font-size: 13px; padding: 9px 15px; border-radius: var(--radius-sm); cursor: pointer;
+    }
+    .pool-btn:active { transform: scale(0.97); }
+
+    /* ── Alert overlay ───────────────────────────────────────────── */
+    /* Outside #root on purpose, so it stays full brightness during the
+       10pm-6am night dim — you only open it because something is wrong. */
+    #alert-overlay {
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.72);
+      display: none; align-items: center; justify-content: center; z-index: 120;
+    }
+    #alert-overlay.open { display: flex; }
+
+    #alert-panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); width: 840px; max-height: 640px;
+      display: flex; flex-direction: column;
+    }
+    #alert-panel-head {
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+    }
+    #alert-panel-title { font-size: 15px; font-weight: 600; }
+    #alert-panel-close { background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; padding: 0 4px; line-height: 1; }
+    #alert-list { overflow-y: auto; padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; }
+
+    .al-row {
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 12px 14px; display: grid; grid-template-columns: 46px 1fr auto;
+      gap: 13px; align-items: center;
+    }
+    .al-row.l1 { border-color: var(--error-col); background: #1a0000; }
+    .al-row.l2 { border-color: var(--alert-bdr);  background: var(--alert-bg); }
+    .al-row.l3 { border-color: var(--warn-bdr);   background: var(--warn-bg); }
+    .al-chip { font-size: 12px; font-weight: 700; text-align: center; padding: 4px 0; border-radius: 4px; border: 1px solid currentColor; }
+    .al-row.l1 .al-chip { color: var(--error-col); }
+    .al-row.l2 .al-chip { color: var(--alert-col); }
+    .al-row.l3 .al-chip { color: var(--warn-col); }
+    .al-title  { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+    .al-meta   { font-size: 12px; color: var(--muted); }
+    .al-cond          { font-weight: 700; }
+    .al-cond.active   { color: var(--alert-col); }
+    .al-cond.cleared  { color: var(--good); }
+    .al-action { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .al-ack {
+      background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+      font-size: 13px; padding: 10px 15px; border-radius: var(--radius-sm);
+      cursor: pointer; white-space: nowrap;
+    }
+    .al-ack.armed { background: var(--error-col); border-color: var(--error-col); color: #fff; font-weight: 600; }
+    .al-ack:active { transform: scale(0.97); }
+    #alert-empty { padding: 40px; text-align: center; color: var(--muted); font-size: 14px; }
+
     /* ── Page dots ───────────────────────────────────────────────── */
     #page-dots { display: flex; gap: 7px; align-items: center; }
     .page-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); transition: background 0.3s; }
@@ -742,6 +885,39 @@
     <div id="calendar-grid"></div>
   </div>
 
+  <!-- Pool view -->
+  <div id="view-pool">
+    <div id="pool-hero"></div>
+
+    <div id="pool-timeline">
+      <div id="pool-tl-track"></div>
+      <div id="pool-tl-axis"></div>
+      <div id="pool-tl-legend">
+        <span><i class="tl-key" style="background:#1d3a4a"></i>Main pump 9pm–4pm</span>
+        <span><i class="tl-key" style="background:#3a2410"></i>Peak rate 4–9pm</span>
+        <span><i class="tl-key" style="background:#2f5f7e"></i>Sweep 9:45–11:15pm</span>
+      </div>
+    </div>
+
+    <div id="pool-mid">
+      <div class="pool-panel">
+        <div class="pool-panel-title">Last 24 hours</div>
+        <div id="pool-charts"></div>
+      </div>
+      <div class="pool-panel">
+        <div class="pool-panel-title">Pad node</div>
+        <div id="pool-reads"></div>
+      </div>
+    </div>
+
+    <div id="pool-foot">
+      <div id="pool-foot-next"></div>
+      <div id="pool-foot-alerts"></div>
+      <button class="pool-btn" id="pool-alerts-btn">Manage alerts</button>
+      <button class="pool-btn" id="pool-back-btn">Back</button>
+    </div>
+  </div>
+
   <footer id="alert-strip">
     <span id="alert-badge">Alert</span>
     <div id="alert-ticker-wrap">
@@ -755,6 +931,16 @@
     <div id="chore-btn" title="Add Chore">📋</div>
   </footer>
 
+</div>
+
+<div id="alert-overlay">
+  <div id="alert-panel">
+    <div id="alert-panel-head">
+      <div id="alert-panel-title">Open alerts</div>
+      <button id="alert-panel-close">✕</button>
+    </div>
+    <div id="alert-list"></div>
+  </div>
 </div>
 
 <div id="chat-overlay">
@@ -827,24 +1013,60 @@
   // Calendar is no longer part of the auto-rotation — it's opened by
   // tapping the "Today" tile and auto-returns after a short timeout.
   let _onCalendar = false;
+  let _onPool     = false;
   let _calendarReturnTimer = null;
+  let _poolReturnTimer     = null;
 
   function showDashboardView() {
     _onCalendar = false;
+    _onPool     = false;
     clearTimeout(_calendarReturnTimer);
+    clearTimeout(_poolReturnTimer);
     document.getElementById('main').style.display          = '';
     document.getElementById('view-calendar').style.display = 'none';
+    document.getElementById('view-pool').style.display     = 'none';
   }
 
   function showCalendarView() {
     _onCalendar = true;
+    _onPool     = false;
+    clearTimeout(_poolReturnTimer);
     document.getElementById('main').style.display          = 'none';
+    document.getElementById('view-pool').style.display     = 'none';
     document.getElementById('view-calendar').style.display = 'block';
     clearTimeout(_calendarReturnTimer);
     _calendarReturnTimer = setTimeout(showDashboardView, 20_000);
   }
 
+  function showPoolView() {
+    _onPool     = true;
+    _onCalendar = false;
+    clearTimeout(_calendarReturnTimer);
+    document.getElementById('main').style.display          = 'none';
+    document.getElementById('view-calendar').style.display = 'none';
+    document.getElementById('view-pool').style.display     = 'grid';
+    if (_lastData) renderPool(_lastData);
+    renderPoolTimeline();
+    loadPoolHistory();
+    bumpPoolTimer();
+  }
+
+  // 60s rather than the calendar's 20s — this is a page you read and act on,
+  // and every tap inside it starts the clock over.
+  function bumpPoolTimer() {
+    clearTimeout(_poolReturnTimer);
+    _poolReturnTimer = setTimeout(() => {
+      // Don't yank the page out from under an open alert overlay.
+      if (document.getElementById('alert-overlay').classList.contains('open')) {
+        bumpPoolTimer();
+        return;
+      }
+      showDashboardView();
+    }, 60_000);
+  }
+
   document.getElementById('view-calendar').addEventListener('click', showDashboardView);
+  document.getElementById('view-pool').addEventListener('click', bumpPoolTimer);
 
   /* ── Data fetch ─────────────────────────────────────────────────── */
   let _lastData = null;
@@ -903,7 +1125,10 @@
   let _fullRebuildCounter = 0;
   let _renderedPage   = -1;
   const FULL_REBUILD_EVERY = 30;
-  const TILES_PER_PAGE     = 20;
+  // 22 status tiles + the 2 weather tiles = the 24 cells that actually fit
+  // (6 cols x 4 rows at 1280x800). #main is overflow:hidden, so anything past
+  // this silently clips rather than scrolling.
+  const TILES_PER_PAGE     = 22;
   let _tilePage       = 0;
   let _totalTilePages = 1;
 
@@ -1053,7 +1278,7 @@
 
   /* ── Tile page cycling ──────────────────────────────────────────── */
   setInterval(() => {
-    if (_onCalendar || _totalTilePages <= 1) return;
+    if (_onCalendar || _onPool || _totalTilePages <= 1) return;
     _tilePage = (_tilePage + 1) % _totalTilePages;
     if (_lastData) renderStatus(_lastData.status);
   }, 25_000);
@@ -1160,6 +1385,10 @@
       renderStatus(data.status);
       renderAlerts(data.alerts);
       renderCalendar(data.calendar);
+      if (_onPool) { renderPool(data); renderPoolTimeline(); }
+      if (document.getElementById('alert-overlay').classList.contains('open')) {
+        renderAlertOverlay(data.alertDetail || []);
+      }
       updateTimestamp();
       setDataState('ok');
     } catch (err) {
@@ -1313,6 +1542,8 @@
     if (tile.dataset.key === 'library') { openLibraryOverlay(); return; }
     if (tile.dataset.key === 'booksOut') { openBooksOutOverlay(); return; }
     if (tile.dataset.key === 'upNext') { showCalendarView(); return; }
+    if (tile.dataset.key === 'poolPump' || tile.dataset.key === 'poolTemp') { showPoolView(); return; }
+    if (tile.dataset.key === 'alerts') { openAlertOverlay(); return; }
     const isChore = tile.classList.contains('chore-tile');
     const isDone  = tile.classList.contains('done');
     if (!isChore && !isDone) return;
@@ -1624,6 +1855,303 @@
       if (name) submitChore(name, '🧹');
     }
   });
+
+  /* ── Pool view rendering ────────────────────────────────────────── */
+  function renderPool(data) {
+    const p = data.pool || {};
+
+    const cards = [
+      { label: 'Water',
+        value: p.waterTempF != null ? `${p.waterTempF}°F` : '—',
+        sub:   p.padOnline ? 'HX inlet probe' : 'pad node offline',
+        cls:   p.padOnline ? '' : 'warn' },
+      { label: 'Main pump',
+        value: p.pumpRunning ? 'Running' : 'Off',
+        sub:   p.pumpWatts != null ? `${p.pumpWatts} W · one leg` : 'no meter data',
+        cls:   p.pumpRunning ? 'good' : '' },
+      { label: 'Heat recovery',
+        value: p.heatActive
+                 ? (p.deltaF != null ? `${p.deltaF > 0 ? '+' : ''}${p.deltaF}°F` : 'On')
+                 : 'Idle',
+        sub:   (p.hxInF != null && p.hxOutF != null) ? `${p.hxInF} → ${p.hxOutF}°F` : '—',
+        cls:   p.heatActive ? (p.deltaF > 0 ? 'good' : 'warn') : '' },
+      { label: 'Sweep',
+        value: p.sweepOn ? 'Running' : (p.sweepRanTonight ? 'Ran tonight' : 'Not yet'),
+        sub:   '9:45–11:15pm · 2h cap',
+        cls:   p.sweepOn ? 'good' : '' },
+    ];
+
+    // Pump energised with no flow is a deadhead — running against a closed
+    // valve. It outranks anything else this card would say.
+    if (p.flowStatus === 'deadhead') {
+      cards[1] = {
+        label: 'Main pump', value: 'NO FLOW',
+        sub: `${p.pumpWatts} W but ${p.flowGpm} GPM — check the valve`,
+        cls: 'bad',
+      };
+    }
+
+    document.getElementById('pool-hero').innerHTML = cards.map((c) => `
+      <div class="pool-card ${c.cls}">
+        <div class="pool-card-label">${c.label}</div>
+        <div class="pool-card-value">${c.value}</div>
+        <div class="pool-card-sub">${c.sub}</div>
+      </div>`).join('');
+
+    const noMeter = p.flowStatus === 'no_meter';
+    const reads = [
+      ['HX in',    p.hxInF  != null ? `${p.hxInF} °F`  : '—', ''],
+      ['HX out',   p.hxOutF != null ? `${p.hxOutF} °F` : '—', ''],
+      ['ΔT',       p.deltaF != null ? `${p.deltaF > 0 ? '+' : ''}${p.deltaF} °F` : '—', ''],
+      ['Heat active', p.heatActive ? 'yes' : 'no', ''],
+      ['Flow',     noMeter ? 'awaiting meter' : (p.flowGpm != null ? `${p.flowGpm} GPM` : '—'),
+                   noMeter ? 'muted' : (p.flowStatus === 'deadhead' ? 'bad' : '')],
+      ['BTU/hr',   noMeter ? 'awaiting meter' : (p.btuHr != null ? p.btuHr.toLocaleString() : '—'),
+                   noMeter ? 'muted' : ''],
+      ['Pump',     p.pumpWatts != null ? `${p.pumpWatts} W` : '—', ''],
+      ['Pad node', p.padOnline ? 'online' : 'OFFLINE', p.padOnline ? '' : 'bad'],
+    ];
+    document.getElementById('pool-reads').innerHTML = reads.map(([k, v, cls]) => `
+      <div class="pool-read">
+        <span class="pool-read-k">${k}</span>
+        <span class="pool-read-v ${cls}">${v}</span>
+      </div>`).join('');
+
+    // Footer: next action + alert summary
+    const next = (data.nextActions || []).filter(a => a.domain === 'pool')[0];
+    document.getElementById('pool-foot-next').innerHTML = next
+      ? `<div class="fn-label">Next up</div>
+         <div class="fn-body">${next.icon || ''} ${next.title} — ${next.basis}</div>`
+      : `<div class="fn-label">Next up</div><div class="fn-body">Nothing scheduled</div>`;
+
+    const open = data.alertDetail || [];
+    const foot = document.getElementById('pool-foot');
+    foot.classList.toggle('has-alerts', open.length > 0);
+    document.getElementById('pool-foot-alerts').textContent = open.length
+      ? `${open.length} open · highest L${open[0].level}`
+      : 'No open alerts';
+  }
+
+  function renderPoolTimeline() {
+    const pct  = (h) => (h / 24) * 100;
+    const now  = new Date();
+    const nowH = now.getHours() + now.getMinutes() / 60;
+
+    // Pump runs 9pm-4pm, so it wraps midnight and needs two bands.
+    const bands = [
+      { cls: 'pump',  from: 0,     to: 16    },
+      { cls: 'peak',  from: 16,    to: 21    },
+      { cls: 'pump',  from: 21,    to: 24    },
+      { cls: 'sweep', from: 21.75, to: 23.25 },
+    ];
+
+    document.getElementById('pool-tl-track').innerHTML =
+      bands.map(b => `<div class="tl-band ${b.cls}" style="left:${pct(b.from)}%;width:${pct(b.to - b.from)}%"></div>`).join('') +
+      `<div id="pool-tl-now" style="left:${pct(nowH)}%"></div>`;
+
+    document.getElementById('pool-tl-axis').innerHTML =
+      ['12a','4a','8a','12p','4p','8p','12a'].map(l => `<span>${l}</span>`).join('');
+  }
+
+  /* ── Pool history charts ────────────────────────────────────────── */
+  // Two stacked single-series charts on a shared time axis. Water temperature
+  // (~78-86F) and heat-exchanger dT (~0-3F) live on different scales; putting
+  // them on one plot with two y-axes would misrepresent both.
+  const POOL_SERIES = [
+    { key: 'hx_in_f', name: 'Water temperature',   unit: '°F', color: '#3987e5' },
+    { key: 'delta_f', name: 'Heat exchanger ΔT',   unit: '°F', color: '#d95926' },
+  ];
+
+  let _poolHistory = null;
+
+  async function loadPoolHistory() {
+    try {
+      const res = await fetch('/api/pool/history?hours=24');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      _poolHistory = (await res.json()).samples || [];
+    } catch {
+      _poolHistory = [];
+    }
+    renderPoolCharts();
+  }
+
+  function _buildPath(samples, key) {
+    const pts = samples
+      .filter(s => s[key] !== null && s[key] !== undefined)
+      .map(s => ({ t: s.recorded_at, v: s[key] }));
+    if (pts.length < 2) return null;
+
+    const W = 1000, H = 100, PAD = 8;
+    const t0 = pts[0].t, t1 = pts[pts.length - 1].t;
+    const vs = pts.map(p => p.v);
+    let min = Math.min(...vs), max = Math.max(...vs);
+    // A dead-flat series would divide by zero and render on the baseline;
+    // give it a small band so the line sits mid-plot instead.
+    if (max - min < 0.5) { const mid = (max + min) / 2; min = mid - 0.25; max = mid + 0.25; }
+
+    const x = (t) => ((t - t0) / ((t1 - t0) || 1)) * W;
+    const y = (v) => H - PAD - ((v - min) / (max - min)) * (H - PAD * 2);
+
+    return {
+      d: pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join(' '),
+      min, max, last: pts[pts.length - 1].v, count: pts.length,
+    };
+  }
+
+  function renderPoolCharts() {
+    const host = document.getElementById('pool-charts');
+    const samples = _poolHistory || [];
+
+    host.innerHTML = POOL_SERIES.map((s) => {
+      const p = _buildPath(samples, s.key);
+      if (!p) {
+        return `<div class="chart-block">
+            <div class="chart-head"><span class="chart-name">${s.name}</span></div>
+            <div class="chart-empty">No samples yet — logging writes every 2 min<br>while heat recovery runs, 10 min otherwise.</div>
+          </div>`;
+      }
+      const fmt = (n) => (Math.round(n * 10) / 10).toFixed(1);
+      return `<div class="chart-block">
+          <div class="chart-head">
+            <span class="chart-name">${s.name}</span>
+            <span class="chart-now" style="color:${s.color}">${fmt(p.last)} ${s.unit}</span>
+          </div>
+          <svg class="chart-svg" viewBox="0 0 1000 100" preserveAspectRatio="none">
+            <path d="${p.d}" fill="none" stroke="${s.color}" stroke-width="2"
+                  stroke-linejoin="round" stroke-linecap="round"
+                  vector-effect="non-scaling-stroke"/>
+          </svg>
+          <div class="chart-foot">
+            <span>low ${fmt(p.min)}</span>
+            <span>${p.count} samples</span>
+            <span>high ${fmt(p.max)}</span>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  /* ── Alert overlay ──────────────────────────────────────────────── */
+  let _armedAck = null;   // L1 requires a second, deliberate tap
+
+  function openAlertOverlay() {
+    renderAlertOverlay(_lastData?.alertDetail || []);
+    document.getElementById('alert-overlay').classList.add('open');
+  }
+
+  function closeAlertOverlay() {
+    document.getElementById('alert-overlay').classList.remove('open');
+    _armedAck = null;
+    if (_onPool) bumpPoolTimer();
+  }
+
+  function renderAlertOverlay(detail) {
+    const list = document.getElementById('alert-list');
+    list.textContent = '';
+    _armedAck = null;
+
+    if (!detail.length) {
+      const empty = document.createElement('div');
+      empty.id = 'alert-empty';
+      empty.textContent = 'No open alerts. Everything is being watched.';
+      list.appendChild(empty);
+      return;
+    }
+
+    for (const a of detail) {
+      const row = document.createElement('div');
+      row.className = `al-row l${a.level}`;
+
+      const chip = document.createElement('div');
+      chip.className = 'al-chip';
+      chip.textContent = `L${a.level}`;
+      row.appendChild(chip);
+
+      const body = document.createElement('div');
+
+      const title = document.createElement('div');
+      title.className = 'al-title';
+      title.textContent = a.title;
+      body.appendChild(title);
+
+      const meta = document.createElement('div');
+      meta.className = 'al-meta';
+      meta.appendChild(document.createTextNode(`Open ${a.ageText} · `));
+      // The open flag never clears on recovery, so "still open" and "still
+      // broken" are different questions. Answer the second one explicitly.
+      const cond = document.createElement('span');
+      if (a.conditionActive === null) {
+        cond.className = 'al-cond';
+        cond.textContent = 'no live check';
+      } else if (a.conditionActive) {
+        cond.className = 'al-cond active';
+        cond.textContent = 'condition STILL ACTIVE';
+      } else {
+        cond.className = 'al-cond cleared';
+        cond.textContent = 'condition cleared';
+      }
+      meta.appendChild(cond);
+      body.appendChild(meta);
+
+      const action = document.createElement('div');
+      action.className = 'al-action';
+      action.textContent = a.action;
+      body.appendChild(action);
+
+      row.appendChild(body);
+
+      const btn = document.createElement('button');
+      btn.className = 'al-ack';
+      btn.textContent = 'Acknowledge';
+      btn.addEventListener('click', () => ackAlert(a.key, a.level, btn));
+      row.appendChild(btn);
+
+      list.appendChild(row);
+    }
+  }
+
+  async function ackAlert(key, level, btn) {
+    // Acknowledging is not fixing, and a wall tablet is a much lower-friction
+    // surface than the phone. Make the L1 case deliberate.
+    if (level === 1 && _armedAck !== key) {
+      _armedAck = key;
+      btn.classList.add('armed');
+      btn.textContent = "Confirm — I've seen it";
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Acknowledging…';
+    try {
+      const res = await fetch(`/api/alerts/${encodeURIComponent(key)}/ack`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error('ack failed');
+      if (_lastData) {
+        _lastData.alerts      = data.alerts;
+        _lastData.alertDetail = data.alertDetail;
+      }
+      renderAlerts(data.alerts);
+      renderAlertOverlay(data.alertDetail);
+      if (_onPool && _lastData) renderPool(_lastData);
+    } catch {
+      btn.disabled = false;
+      btn.classList.remove('armed');
+      btn.textContent = 'Retry';
+      _armedAck = null;
+    }
+  }
+
+  document.getElementById('alert-panel-close').addEventListener('click', closeAlertOverlay);
+  document.getElementById('alert-overlay').addEventListener('click', (e) => {
+    if (e.target.id === 'alert-overlay') closeAlertOverlay();
+  });
+  // The strip's ticker area only — the mic/chat/chore buttons live there too.
+  document.getElementById('alert-ticker-wrap').addEventListener('click', openAlertOverlay);
+  document.getElementById('pool-alerts-btn').addEventListener('click', openAlertOverlay);
+  document.getElementById('pool-back-btn').addEventListener('click', showDashboardView);
 
   /* ── Boot ───────────────────────────────────────────────────────── */
   updateClock();
