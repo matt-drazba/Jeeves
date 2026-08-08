@@ -712,8 +712,12 @@ automation:
   #
   # Now it caps total runtime instead of policing the clock. A manual press
   # works at any hour and runs a full cycle; only a genuinely stuck-on sweep
-  # gets shut off. The scheduled run is 90 minutes, so the 100-minute cap never
-  # interferes with it.
+  # gets shut off.
+  #
+  # The cap is 2 hours: the owner's stated maximum for this pool size. Normal
+  # runs are 90 minutes either way — the schedule, or a manual countdown set on
+  # the Tuya app / an inline timer — so the cap is a backstop that should
+  # essentially never fire, not the mechanism runs normally end by.
   #
   # Uses time_pattern + last_changed rather than a state trigger with `for:`,
   # so it still fires for a sweep that was already on when HA started.
@@ -810,11 +814,13 @@ automation:
       - condition: state
         entity_id: input_boolean.pool_maintenance
         state: "off"
-      # 100 minutes. The scheduled run is 90 (21:45-23:15), so this only ever
-      # catches a sweep that should have stopped and didn't.
+      # 2 hours — the owner's stated maximum sweep runtime for this pool size.
+      # Normal use is a 90-minute manual countdown or the 90-minute scheduled
+      # run (21:45-23:15), so this only catches a sweep that should have
+      # stopped and didn't. It is a backstop, not the normal way runs end.
       - condition: template
         value_template: >
-          {{ (now() - states.switch.pool_sweep_socket_1.last_changed).total_seconds() > 6000 }}
+          {{ (now() - states.switch.pool_sweep_socket_1.last_changed).total_seconds() > 7200 }}
     action:
       - service: switch.turn_off
         target:
@@ -823,7 +829,7 @@ automation:
         data:
           title: "Pool sweep turned off"
           message: >
-            The Polaris had been running over 100 minutes, so it was shut off.
-            If you started it by hand, just press it again for another cycle.
+            The Polaris hit the 2-hour maximum runtime and was shut off. If you
+            started it by hand, just press it again for another cycle.
           data:
             tag: sweep_max_runtime
