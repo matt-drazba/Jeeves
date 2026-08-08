@@ -99,8 +99,10 @@ Status: **live** = built and verified · **planned** = designed, not built ·
 |---|---|---|
 | Booster still on after HA tried to kill it | **Kill the breaker for the sweep circuit** | **live** |
 | Water leak detected | Shut the main supply valve | planned — no sensors |
-| Freeze risk at the pool pad | Force circulation, or drain | planned — winter |
 | Smoke / CO | Leave the house | planned — no sensors |
+
+**Freeze protection is deliberately absent.** This location does not get cold
+enough to threaten the pad or the plumbing. Do not propose it.
 
 The booster is the archetype and shows why verification matters. A dry PB4-60
 destroys its seal and impeller within minutes, and a dry centrifugal pump draws
@@ -145,15 +147,20 @@ protecting anything the moment its sensor dies.
 
 | Thing | Status |
 |---|---|
-| Pump running during the 4–9pm PG&E peak | planned |
 | Maintenance tickler item due | planned |
 | OhmHour scheduled | planned |
-| Weekly energy and cost summary | planned |
 | Anything promoted from Level 5 by accumulation | planned |
 | Laundry / dishwasher cycle done | **live** (dashboard tiles) |
 | Dishwasher not started by 9:15pm | **live** (HA automation) |
 
-Cost is not safety. Peak-hours pump runtime is money, and money waits.
+**Cost is not an alert.** Money never notifies — not at any level. Energy
+spend, TOU placement, and rate optimization belong in reports and dashboard
+tiles, where they can be looked at deliberately. An alert means something is
+*wrong*, and an expensive-but-working pump is not wrong.
+
+The one exception is when a cost signal is really a *fault* signal: pump energy
+climbing 15% month over month means something is loading the pump, and that is
+a problem wearing a dollar sign. See the Level 5 promotion table.
 
 ### Level 5 — system only
 
