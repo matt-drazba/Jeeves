@@ -10,6 +10,10 @@ Source docs: [pool_heat_recovery.md](pool_heat_recovery.md) ·
 [pool_chemistry_logging.md](pool_chemistry_logging.md) ·
 [pool_wiring_manual.md](pool_wiring_manual.md)
 
+**Recurring checks are not in this file.** One-time build tasks live here;
+monthly, seasonal, and power-cycle verification lives in
+[pool_system_checks.md](pool_system_checks.md).
+
 ---
 
 ## 0. Go look at things — mostly closed 2026-08-07

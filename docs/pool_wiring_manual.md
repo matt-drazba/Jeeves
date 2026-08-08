@@ -3,7 +3,7 @@
 **What this is:** the field manual for the pool heat recovery system as it is *actually wired at this house*, which has real differences and modifications compared to the HotSpot FPH manual. Written so that an electrician, an HVAC tech, a neighbor, a child of the house, or a prospective homebuyer who has never seen this system can open the boxes, use a chat assistant, understand what they're looking at, and troubleshoot it without me present.
 
 Last updated: 2026-08-08.
-Companion docs: [pool_heat_recovery.md](pool_heat_recovery.md) (design rationale, project status, Home Assistant / Jeeves custom dashboard layer) and the HotSpot FPH installer manual PDF (`~/Desktop/Hot Spot Energy FPH Free Pool Heater Manual.pdf`).
+Companion docs: [pool_heat_recovery.md](pool_heat_recovery.md) (design rationale, project status, Home Assistant / Jeeves custom dashboard layer), [pool_system_checks.md](pool_system_checks.md) (the recurring monthly / seasonal / power-cycle verification list), and the HotSpot FPH installer manual PDF (`~/Desktop/Hot Spot Energy FPH Free Pool Heater Manual.pdf`).
 Authority order when docs disagree: **this doc** (as-built) → FPH manual (generic) → anything else.
 
 **A note for HVAC techs:** an HVAC person will think we're crazy for what we've done here. Fair. The techs we currently use — **SVS** — are good and already know this system. **Any new tech has to be oriented to it before touching anything**, and Part 1 plus the master diagram in Part 2 are that orientation. Do not assume a standard FPH install.
