@@ -163,6 +163,10 @@ homelab/
   - **L1 budget: under ~6/year.** A noisy L1 is a bug in the levels doc, not a fact about the house
   - **Live: booster dry-run kill (L1/L2)** — booster on + pump under 20 W for 30s → shuts `switch.pool_sweep_socket_1` off, waits, retries, re-checks. Kill confirmed = L2; **kill unconfirmed = L1** ("go kill the breaker"), since the Tuya cloud round trip can fail or be overridden by a schedule still in the Tuya app. Fails closed — an unavailable power meter reads as pump-off and kills the booster
   - **Live: main pump off during 9pm–4pm window (L2)** — under 20 W for 15 min
+  - **Live L3 alerts** — pool pad node offline · Shelly meter offline · sweep did not run tonight · ionizer energised with no pump · HX calling but ΔT ≤ 0
+  - HX alert triggers on **ΔT ≤ 0, not "ΔT is small"** — stage-1 compressor runs legitimately produce small HX gains and `out_temp_offset_f` is provisional, so a small-delta threshold would fire constantly
+  - **Sweep schedule now runs in HA** — `switch.pool_sweep_socket_1`, 9:45–11:15pm, deliberately offset *inside* Tuya's 10:00–11:30pm window. Tuya stays a backup during the trial, and the start time reveals which system acted (9:45 = HA, 10:00 = HA failed). Gated on the pump having genuinely run ≥30 min, per the PB4-60 manual
+  - **Pending: delete the sweep schedule from the Tuya app** once HA is observed running it for a few nights. That deletion is what makes the interlock safe — the switch becomes a dumb relay and every failure degrades to "the booster never runs." Then tighten `jeeves_sweep_outside_window_guard` from 23:30 back to 23:15
   - The 20 W threshold answers "is the pump energized at all" and is deliberately RPM- and filter-independent. **Do not raise it** — the pump reads ~172 W on one leg at current RPM, so a higher threshold causes false kills. Watts cannot prove the pump moves *enough* water; that needs the flow meter
   - Open-alert flags (`input_boolean.alert_open_*`) clear only on Acknowledge, never on recovery — a fault that self-heals at 2am still surfaces at breakfast
   - `input_boolean.pool_maintenance` suppresses L2–L4, never L1, and never blocks the booster kill
@@ -267,7 +271,8 @@ cd "/Users/mattdrazba/Code Repos/Jeeves/esphome" && uvx esphome run pool-pad.yam
 - NVMe SSD for the Pi 5 (SD card fine to start; trim HA recorder retention to a few days)
 - Freeze-warning automation (winter concern)
 - Fire HD 8: buy (eBay), install Fully Kiosk Browser, point at `http://192.168.0.189:3000`, wall-mount
-- ~~**Pool heat recovery data logging**~~ — **DONE** (confirmed 2026-08-07, the "not persisted" note here was stale). `pool_heat_samples` table exists at schema v5 in `jeeves/db.js`; `fetchPoolHeat()` in `server.js` polls the pad node every 2 min and calls `db.logPoolHeat()`, which writes full resolution while heat recovery is active and a 10-min heartbeat when idle, computing `delta_f` on write. Flow and BTU columns stay null until the flow meter is installed and backfill themselves from that day.
+- **Pool heat recovery data logging** — **code written, NOT yet running on the Pi.** `pool_heat_samples` (schema v5) and `logPoolHeat()` are in `jeeves/db.js`, and `fetchPoolHeat()` in `server.js` polls the pad node every 2 min — full resolution while heat recovery is active, 10-min heartbeat when idle, `delta_f` computed on write. Flow and BTU columns stay null until the flow meter is installed, then backfill from that day.
+  - **The Pi's jeeves container predates this and has no such table.** Deploying HA config via `git pull` + `docker restart homeassistant` does NOT rebuild jeeves — that needs `docker compose up -d --build jeeves`. Verified missing 2026-08-07.
 
 ## Parked — decide later (do NOT build unless explicitly asked)
 - **HVAC compressor stage visibility (branch plan, not yet decided):** Want to know whether the Bryant 226ANA048-B two-stage heat pump is running stage 1 or stage 2 — relevant to interpreting pool heat recovery ΔT (low-stage runs likely explain small HX gains, see `docs/pool_heat_recovery.md`). Two candidate paths, not mutually exclusive:

@@ -191,7 +191,10 @@ template:
       #
       # 10-minute debounce comfortably clears the script's own 60 s on-delay.
       # ---------------------------------------------------------------------
-      - name: "Pool Ionizer On Without Pump"
+      # NOTE: HA derives the entity_id from `name`, NOT from `unique_id`. This
+      # name must stay in sync with binary_sensor.pool_ionizer_no_pump as
+      # referenced by the automation below.
+      - name: "Pool Ionizer No Pump"
         unique_id: pool_ionizer_no_pump
         device_class: problem
         delay_on: "00:10:00"

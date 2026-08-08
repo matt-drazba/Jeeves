@@ -131,6 +131,9 @@ breakfast. A fault that fixed itself is still a fault you should know about.
 |---|---|
 | Pool pad ESP node offline >30 min | **live** |
 | Shelly EM pump meter offline >30 min | **live** |
+| Sweep did not run tonight | **live** |
+| Ionizer energised with no pump running | **live** |
+| Heat exchanger calling but ΔT ≤ 0 | **live** |
 | Filter pressure above clean baseline → backwash due | blocked — transducer |
 | pH above 7.6 — the ionizer stops working at this point | blocked — test kit |
 | Copper outside 0.15–0.20 ppm | blocked — test kit |
