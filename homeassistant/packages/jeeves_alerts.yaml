@@ -1,20 +1,20 @@
-# Jeeves — critical alerting
+# Jeeves — critical alerting + pool safety
 #
 # Deploy: lives at ~/homelab/homeassistant/packages/jeeves_alerts.yaml on the Pi,
-# arrives via `git pull`. Requires this in configuration.yaml:
+# arrives via `git pull`. configuration.yaml has:
 #
 #   homeassistant:
 #     packages: !include_dir_named packages
 #
 # Alerting is iOS Critical Alerts via the HA Companion app — free, no third-party
-# service. Verified working 2026-08-07: rings at full volume through the silent
-# switch. Reserved for hardware damage and safety only; if everything is
-# critical, nothing is.
+# service. Verified 2026-08-07: rings at full volume through the silent switch,
+# and the Acknowledge button routes back to HA. Reserved for hardware damage and
+# safety only; if everything is critical, nothing is.
 #
 # BUILD ORDER — one piece at a time, each verified before the next is added:
 #   [x] 1. Critical alert reaches the phone
-#   [>] 2. Main pump off when it should be running   <- this file
-#   [ ] 3. Booster dry-run kill (switch.pool_sweep_socket_1)
+#   [x] 2. Main pump off when it should be running
+#   [>] 3. Booster dry-run kill                       <- this file
 #   [ ] 4. Peak-hours cost alert, sensor-offline alerts
 
 # ===========================================================================
@@ -26,25 +26,34 @@ input_boolean:
     icon: mdi:wrench
     # Turn ON before backwashing or servicing the pad, so routine work does not
     # fire critical alerts.
+    #
+    # Deliberately does NOT suppress the booster dry-run kill below. This mutes
+    # nuisance alerts; it never disables hardware protection. There is no state
+    # of the world in which running the PB4-60 dry is acceptable.
 
   ack_pump_unexpectedly_off:
     name: Acknowledged - Pump Unexpectedly Off
     icon: mdi:bell-off
 
+  ack_booster_dry_run:
+    name: Acknowledged - Booster Dry Run
+    icon: mdi:bell-off
+
 # ===========================================================================
-# Problem detector
-#
-# Main pump schedule is 9pm -> 4pm (19 hours on, off 4pm-9pm). Catches breaker
-# trips, power outages, IntelliComm faults, lost prime.
-#
-# `delay_on` debounces 15 minutes — the pump ramps and Program 4 transitions
-# would false-positive an instantaneous trigger.
-#
-# `has_value` guard means an offline meter does NOT fire this alert. "Pump died"
-# and "meter died" are different problems and get different alerts (piece 4).
+# Problem detectors
 # ===========================================================================
 template:
   - binary_sensor:
+      # ---------------------------------------------------------------------
+      # Main pump schedule is 9pm -> 4pm (19 hours on, off 4pm-9pm). Catches
+      # breaker trips, power outages, IntelliComm faults, lost prime.
+      #
+      # 15-minute debounce — the pump ramps and Program 4 transitions would
+      # false-positive an instantaneous trigger.
+      #
+      # The has_value guard means an offline meter does NOT fire this. "Pump
+      # died" and "meter died" are different problems with different fixes.
+      # ---------------------------------------------------------------------
       - name: "Pool Pump Unexpectedly Off"
         unique_id: pool_pump_unexpectedly_off
         device_class: problem
@@ -55,6 +64,33 @@ template:
                   | float(0)) < 20
              and (now() >= today_at('21:00') or now() < today_at('16:00'))
              and is_state('input_boolean.pool_maintenance', 'off') }}
+
+      # ---------------------------------------------------------------------
+      # Booster (Polaris PB4-60) commanded on while the main pump draws nothing.
+      #
+      # The PB4-60 is not self-priming and has no dry-run protection. Its seal
+      # is water-lubricated; run dry, the faces overheat within minutes and melt
+      # the impeller around the seal's porcelain face.
+      #
+      # Critically: a dry centrifugal pump draws LESS current than a loaded one.
+      # No breaker, overload, or high-amp rule will ever catch this.
+      #
+      # 30-second debounce, not 15 minutes. The tradeoff is asymmetric — a false
+      # kill costs one night of sweeping, a missed kill costs a pump.
+      #
+      # float(0) on an unavailable meter is deliberate: unknown pump state reads
+      # as "pump off", so a dead sensor kills the booster. Fails closed.
+      #
+      # No maintenance-mode condition here, by design. See input_boolean above.
+      # ---------------------------------------------------------------------
+      - name: "Pool Booster Dry Run"
+        unique_id: pool_booster_dry_run
+        device_class: problem
+        delay_on: "00:00:30"
+        state: >
+          {{ is_state('switch.pool_sweep_socket_1', 'on')
+             and (states('sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power')
+                  | float(0)) < 20 }}
 
 # ===========================================================================
 # Notification script
@@ -97,6 +133,63 @@ script:
 # Automations
 # ===========================================================================
 automation:
+  # -------------------------------------------------------------------------
+  # SAFETY: kill the booster the moment it looks dry.
+  #
+  # The switch is turned off FIRST, before any notification. The damage window
+  # is minutes; the notification is not what saves the pump.
+  #
+  # This is the watts-based interim version, using only hardware already
+  # installed. It catches the catastrophic case — booster running with no main
+  # pump at all. The full flow-gated interlock in docs/pool_booster_interlock.md
+  # supersedes it once the DN50 flow meter is installed and calibrated.
+  #
+  # NOTE: this is only fully effective once the sweep schedule is DELETED from
+  # the Tuya app. Until then Tuya can re-command the switch on by itself while
+  # HA is down, which is the exact failure being engineered away.
+  # -------------------------------------------------------------------------
+  - id: jeeves_booster_dry_run_kill
+    alias: "Pool: booster dry-run kill"
+    description: >
+      Booster on while the main pump draws under 20 W. Shuts the booster off
+      immediately, then alerts every 5 minutes until acknowledged.
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.pool_booster_dry_run
+        to: "on"
+    action:
+      - service: switch.turn_off
+        target:
+          entity_id: switch.pool_sweep_socket_1
+
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.ack_booster_dry_run
+
+      - repeat:
+          sequence:
+            - service: script.critical_alert
+              data:
+                title: "POOL BOOSTER DRY RUN"
+                message: >
+                  Booster was running with the main pump at
+                  {{ states('sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power')
+                  }} W. Switched off to protect the seal. Check the main pump
+                  before running the sweep again.
+                tag: "pool-booster-dry-run"
+                ack_action: "ACK_BOOSTER_DRY_RUN"
+            - delay: "00:05:00"
+          while:
+            - condition: state
+              entity_id: input_boolean.ack_booster_dry_run
+              state: "off"
+            - condition: template
+              value_template: "{{ repeat.index < 24 }}"
+
+  # -------------------------------------------------------------------------
+  # SAFETY: main pump not running during its 9pm-4pm window.
+  # -------------------------------------------------------------------------
   - id: jeeves_pump_unexpectedly_off
     alias: "Pool: main pump unexpectedly off"
     description: >
@@ -133,31 +226,46 @@ automation:
             - condition: template
               value_template: "{{ repeat.index < 12 }}"
 
-  - id: jeeves_pump_off_acknowledged
-    alias: "Pool: pump-off alert acknowledged"
-    description: Acknowledge button tapped on the iPhone notification.
-    mode: single
+  # -------------------------------------------------------------------------
+  # Acknowledge buttons tapped on the iPhone notification. trigger.id is the
+  # suffix of the matching input_boolean, so one automation serves both alerts.
+  # -------------------------------------------------------------------------
+  - id: jeeves_alert_acknowledged
+    alias: "Alerts: acknowledge button tapped"
+    mode: parallel
     trigger:
       - platform: event
         event_type: mobile_app_notification_action
         event_data:
           action: "ACK_PUMP_UNEXPECTEDLY_OFF"
+        id: pump_unexpectedly_off
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "ACK_BOOSTER_DRY_RUN"
+        id: booster_dry_run
     action:
       - service: input_boolean.turn_on
         target:
-          entity_id: input_boolean.ack_pump_unexpectedly_off
+          entity_id: "input_boolean.ack_{{ trigger.id }}"
 
-  - id: jeeves_pump_off_ack_reset
-    alias: "Pool: reset pump-off acknowledgement on recovery"
-    description: >
-      Clears the acknowledgement once the pump is running again, so the next
-      failure alerts instead of staying permanently muted.
-    mode: single
+  # -------------------------------------------------------------------------
+  # Clear acknowledgements once the problem clears, so the next occurrence
+  # alerts instead of staying permanently muted.
+  # -------------------------------------------------------------------------
+  - id: jeeves_alert_ack_reset
+    alias: "Alerts: reset acknowledgement on recovery"
+    mode: parallel
     trigger:
       - platform: state
         entity_id: binary_sensor.pool_pump_unexpectedly_off
         to: "off"
+        id: pump_unexpectedly_off
+      - platform: state
+        entity_id: binary_sensor.pool_booster_dry_run
+        to: "off"
+        id: booster_dry_run
     action:
       - service: input_boolean.turn_off
         target:
-          entity_id: input_boolean.ack_pump_unexpectedly_off
+          entity_id: "input_boolean.ack_{{ trigger.id }}"
