@@ -94,13 +94,26 @@ task on the list.
 Gated entirely on tier 3. This is the one where failure destroys hardware.
 → [pool_booster_interlock.md](pool_booster_interlock.md)
 
-- [ ] Recreate the sweep schedule as an HA automation.
-- [ ] **Delete the schedule from the Tuya app.** This is the step that makes it
-      safe — without it, Tuya can still start the booster while HA is down.
-- [ ] HA gating: turn on only when flow is proven **and** sustained ≥30 min
-      **and** inside the window. Turn off immediately on flow loss, main pump
-      stop, 30 min before scheduled pump stop, or **flow sensor unavailable**
-      (unknown flow = no flow, fail closed).
+- [x] ~~Recreate the sweep schedule as an HA automation.~~ **Done** — 9:45–11:15pm,
+      gated on the pump having genuinely run ≥30 min. Verified running 2026-08-08.
+- [x] ~~**Delete the schedule from the Tuya app.**~~ **Done 2026-08-08. Never
+      re-add one.** HA is now the only thing that commands the switch, which is
+      what makes the interlock safe: every failure path (HA down, network down,
+      Tuya cloud down) degrades to "the booster never runs."
+- [x] ~~Dry-run interlock~~ **Live** — booster on + pump under 20 W for 30 s kills
+      the sweep, retries, re-checks. Kill confirmed = L2, kill **unconfirmed = L1**.
+      Fails closed: an unavailable meter reads as pump-off and still kills.
+      Currently gates on **watts, not flow** — see the interim note below.
+- [x] ~~Manual sweep control~~ — the original outside-window guard killed any
+      hand-started run within 15 minutes, silently, which read as a broken
+      switch. Replaced 2026-08-08 with a **2-hour runtime cap** (the owner's max
+      for this pool size; normal runs are 90 min). Field-verified: a 90-minute
+      manual run completed with no silent kill. The dry-run interlock stays armed
+      throughout, so safety is unchanged.
+- [ ] **Upgrade the interlock from watts to measured flow.** Blocked on tier 3.
+      Watts prove the pump is energized, not that it is moving water. Turn off
+      immediately on flow loss, main pump stop, 30 min before scheduled pump
+      stop, or **flow sensor unavailable** (unknown flow = no flow, fail closed).
 - [ ] Install the CT on the booster circuit → runtime logging + **watts-too-low**
       dry-run alarm. Inverted from every other appliance alert in the house.
 - [ ] If EV2-A confirmed in tier 0: shift the window to ~12:30–2:00am.
@@ -184,10 +197,38 @@ SQLite is the system of record — **ha-poolchem is not being installed** — an
 - [ ] Open question: is the IntelliFlo accessory output line-voltage or
       low-voltage? Check next time the drive cover is off.
 
+## 7b. Dashboard + alerting — shipped 2026-08-08
+
+→ [alerting_runbook.md](alerting_runbook.md), [alerting_levels.md](alerting_levels.md)
+
+- [x] ~~Six alerts live~~ — dry-run kill (L1/L2), pump off in window (L2), pad
+      node offline (L3), meter offline (L3), HX not transferring (L3), sweep
+      skipped (L3). Acknowledge via iOS Critical Alert action or the tablet.
+- [x] ~~Pool page on the dashboard~~ — hero readings, 24h schedule timeline,
+      two stacked history charts, pad readout. Tap a pool tile; auto-returns.
+- [x] ~~Alert management from the tablet~~ — overlay lists open alerts with age,
+      the runbook line, and **whether the underlying detector is still active**.
+      Open flags never clear on recovery, so "still open" and "still broken" are
+      different questions the phone notification cannot answer.
+- [x] ~~`pool_heat_samples` logging actually running~~ — the code predated the
+      deployed container and had never executed. Writes every 2 min while heat
+      recovery is active, 10 min otherwise.
+- [x] ~~Maintenance mode removed~~ — a global L2–L4 mute that nothing ever turned
+      off. Any future suppression must **expire on its own**.
+- [ ] **Extend `verify-alerts.py` to scan `jeeves/server.js`.** It only reads
+      `jeeves_alerts.yaml` today, so the `ALERT_REGISTRY` added 2026-08-08 —
+      seven flag entities and six detector sensors — is unchecked. That is
+      exactly the silent-failure mode the script was written for. Roughly a
+      three-line change; would retroactively cover every HA entity Jeeves touches.
+- [ ] Nothing can alert when HA itself is down — it kills the pump, the meter,
+      and the messenger together. Needs a watcher outside the house. Unresolved.
+
 ## 8. Documentation debt
 
 → [pool_wiring_manual.md](pool_wiring_manual.md)
 
+- [x] ~~Manual section 4.5 said "no alerts exist yet"~~ — corrected 2026-08-08,
+      along with the 3.1 coverage table.
 - [ ] Bond the FPH heat exchanger to the pad loop (Part 7).
 - [ ] **Label wires physically at the 90340 and the chimney box** — ferrules or
       numbered markers, given the documented white/white collision. Prose warnings

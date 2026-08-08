@@ -287,10 +287,10 @@ It changes nothing operationally: contact power only matters once the coil has a
 
 | Failure | Covered now? | By what |
 |---|---|---|
-| Flow switch closed, **pump not powered** | **No — detectable, but not detected.** | The *signals* exist today: the Shelly EM CT reads pump watts and `pool_heat_active` reads the White Rodgers. **No alert has been built yet**, so nothing tells you. Building it is the next task (see 4.5) |
+| Flow switch closed, **pump not powered** | **Yes, since 2026-08-08.** | The Shelly EM CT reads pump watts and `pool_heat_active` reads the White Rodgers; the alerts in 4.5 are built and live. Pushes to the phone, and the booster case kills the sweep outright |
 | Flow switch closed, **pump powered but water not actually moving** — blocked impeller, closed valve, air lock, clogged filter, failed switch | **No — not even detectable.** | The flow *meter* is not installed, so no signal exists to alert on |
 
-**Nothing alerts today.** Every alert in section 4.5 is still unbuilt, so both rows above are currently silent failures — the difference is that the first one only needs software, while the second also needs hardware. The pump-watts check, once wired into an alert, is still only a proxy for flow, not a measurement of it. **Until the flow meter in section 5.1 is installed, no instrument in this system measures actual water movement** — the only real flow proof is the Tecmark itself, and these are the failures where the Tecmark is the thing that failed. That is why the flow meter is a safety item, not a nice-to-have data toy, and why section 3.1's calibration discipline (replace a switch that won't hold a stable trip point, don't nurse it) matters more than it otherwise would.
+**The first row now alerts; the second still cannot.** As of 2026-08-08 the pump-watts checks in section 4.5 are built and live, so "flow switch closed, pump not powered" is detected and pushed. The second row remains a genuine silent failure: no instrument measures water movement, so nothing can see it. The pump-watts check is only a proxy for flow, not a measurement of it. **Until the flow meter in section 5.1 is installed, no instrument in this system measures actual water movement** — the only real flow proof is the Tecmark itself, and these are the failures where the Tecmark is the thing that failed. That is why the flow meter is a safety item, not a nice-to-have data toy, and why section 3.1's calibration discipline (replace a switch that won't hold a stable trip point, don't nurse it) matters more than it otherwise would.
 
 ### 3.2 Mars/Supco 90340 relay
 
@@ -424,16 +424,22 @@ Both are converted from °C to °F in the ESPHome config. A third probe for pool
 
 ### 4.5 The alerts that matter
 
-**⚠ None of these exist yet. Every alert below is unbuilt — the system currently notifies nobody of anything.** The sensors feeding the first, third, and fourth already report into Home Assistant, so those are software-only work. The second additionally needs the flow meter installed. Building these is the next task.
+**Built and live as of 2026-08-08**, in `homeassistant/packages/jeeves_alerts.yaml`. Severity now uses the response-deadline ladder from [alerting_levels.md](alerting_levels.md) — L1 means act now, wherever you are, whatever the hour; L2 means by morning; L3 means when you get home — rather than the older Critical/Warning wording. Delivery, acknowledgement, and troubleshooting are in [alerting_runbook.md](alerting_runbook.md).
 
-| Alert | Severity | Status | Meaning |
+| Alert | Level | Status | Meaning |
 |---|---|---|---|
-| `pool_heat_active` && pump not drawing power for >30 s | **Critical** | **Not built** — signals exist | The hardware interlock has failed or been bypassed. Investigate immediately |
-| `pool_heat_active` && `pool_flow_gpm ≈ 0` sustained | **Critical** | **Not built** — also needs the flow meter | The flow-switch-stuck-closed case: diverting refrigerant into stagnant water while the pump spins uselessly. This is the entire reason the flow sensor is worth installing. See the coverage table in 3.1 |
-| Pump **off** during scheduled hours | Warning | **Not built** — signals exist | Schedule not running, or the pump lost its clock after a power outage |
-| Pump **on** during unscheduled hours | Warning | **Not built** — signals exist | Either heat recovery legitimately called it (check `pool_heat_active` first) or the pump's schedule has drifted |
+| Booster on && pump under 20 W for 30 s | **L1 / L2** | **Live** | Dry-run kill. Shuts the sweep off, retries, re-checks. Kill confirmed = L2; **kill unconfirmed = L1** ("go kill the breaker"). Fails closed — an unavailable meter reads as pump-off and still kills |
+| `pool_heat_active` && `pool_flow_gpm ≈ 0` sustained | — | **Not built — needs the flow meter** | The flow-switch-stuck-closed case: refrigerant into stagnant water while the pump spins uselessly. Also covers the deadhead (pump running against a closed valve). Signals do not exist yet; see the coverage table in 3.1 |
+| Pump **off** during its 9pm–4pm window, 15 min | **L2** | **Live** | Schedule not running, or the pump lost its clock after a power outage |
+| Pad node offline / Shelly meter offline, 30 min | **L3** | **Live** | Monitoring itself has failed. A dead meter also blocks the scheduled sweep, by design |
+| Heat exchanger calling but ΔT ≤ 0, 20 min | **L3** | **Live** | See the offset note below — this alert was inert until 2026-08-08 |
+| Sweep did not run tonight (11:45pm check) | **L3** | **Live** | The scheduled 9:45pm start was skipped, usually because the pump had not run ≥30 min |
 
-Note the last two are a matched pair: after a power outage the IntelliFlo2's clock can be wrong, so "running when it shouldn't" and "not running when it should" are the same underlying fault seen from two directions.
+**⚠ The HX alert was silently disarmed for its first day.** It fires on ΔT ≤ 0, and the outlet probe carried a `+0.3 °F` calibration offset, so a heat exchanger that had completely stopped transferring would still have read positive and never alerted. The offset was zeroed 2026-08-08 against 102 logged samples that put the raw probes a median 0.00 °F apart. It is genuinely armed now for the first time. If it starts firing on legitimate low-stage compressor runs that quantize to zero, the fix is a threshold clearly *below* zero, not at it — do not simply widen it back into inertness.
+
+**"Pump on during unscheduled hours" was deliberately dropped.** It was originally paired with "pump off during scheduled hours" as the same power-outage clock fault seen from two directions. In practice heat recovery legitimately calls the pump outside its window, so the alert would fire on correct behaviour. The off-during-window direction catches the clock drift on its own.
+
+Manual runs are not faults. Pressing the Tuya sweep switch by hand works at any hour; a 2-hour runtime cap is the only thing that intervenes, and the dry-run interlock stays armed throughout. There is no maintenance mode — see the runbook for why it was removed.
 
 ---
 
@@ -476,7 +482,7 @@ Two real uses: **spin the pump up for a swim by voice command**, and **recover f
 - Persist HX in/out temps and BTU/hr to the Jeeves SQLite store so heat-recovery performance can be trended across a season (HA's recorder retention is too short).
 - Confirm whether the IntelliFlo's accessory output is line-voltage or a low-voltage relay signal — check when the drive cover is next open.
 - Investigate whether HVAC compressor **stage** (1 vs 2) can be read, via the Resideo cloud API or a CT clamp on the compressor circuit. Low-stage runs likely explain small ΔT readings at the heat exchanger.
-- **Build the alerts in section 4.5** — none of them exist yet. This is the next task.
+- ~~Build the alerts in section 4.5~~ — **done 2026-08-07/08**, live and field-tested. The remaining alert gap is flow-dependent and blocked on 5.1.
 - Track pool chemical inputs and test readings over time, and generate predictive dosing recommendations from the trend.
 
 ---
@@ -669,6 +675,8 @@ Page citations are to the HotSpot FPH installer manual, 44-page scanned PDF, **p
 
 | 2026-08-05 | Owner review of Parts 1–5 merged. Key factual corrections: **the new box is on the chimney next to the FPH, not at the pool pad** (the ESPHome node keeps the historical name `pool-pad` — naming trap now flagged in the Cast section and 4.1); Tecmark mounting is a ¾"FPT×¾"FPT plus ¾"MPT×⅛"FPT adapter pair, not a single reducer bushing; DS18B20s sit in labeled stainless thermowells and can be swapped physically as easily as in config; purge delay is FPH-configured; pump RPM is set at the pump's own control pad. Added the HVAC-tech orientation note (SVS know this system; new techs must be briefed). |
 | 2026-08-05 | **Section 4.5 rewritten — no alerts exist yet.** All four are marked not built, including the new "pump on during unscheduled hours" warning; noted that the two schedule alerts are one fault seen from two directions after a power-outage clock reset. Section 3.1's coverage table corrected to match: the pump-not-powered case is **detectable but not detected** (signals exist, alert unbuilt), not "covered." Building the alerts added to 5.3 as the next task. |
+
+| 2026-08-08 | **Section 4.5 rewritten again — the alerts are built and live.** Six alerts shipped in `homeassistant/packages/jeeves_alerts.yaml` on the L1–L5 response-deadline ladder, replacing the old Critical/Warning wording. Section 3.1's coverage table updated: the pump-not-powered row is now genuinely **covered**; the pump-powered-but-no-flow row remains undetectable and still blocks on the flow meter (5.1). "Pump on during unscheduled hours" dropped — heat recovery legitimately calls the pump outside its window, so it would fire on correct behaviour. Recorded that the HX ΔT ≤ 0 alert was **inert for its first day** behind a `+0.3 °F` probe offset, since zeroed against 102 samples. Sweep manual control freed from the old outside-window guard (now a 2-hour runtime cap) and maintenance mode removed entirely. |
 
 ### Open items carried forward
 
