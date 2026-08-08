@@ -62,6 +62,19 @@ input_boolean:
     name: Open Alert - Pump Meter Offline
     icon: mdi:lan-disconnect
 
+  alert_open_sweep_skipped:
+    name: Open Alert - Sweep Did Not Run
+    icon: mdi:robot-vacuum-off
+
+  # Latch, not an alert flag. Set the moment the sweep actually switches on
+  # inside its window; checked and reset at 11:45pm. This is what makes a
+  # SILENT skip visible — the schedule deliberately declines to start the
+  # booster against an unproven pump, and without this that decision leaves
+  # no trace anywhere.
+  sweep_ran_tonight:
+    name: Sweep Ran Tonight
+    icon: mdi:robot-vacuum
+
 # ===========================================================================
 # Problem detectors
 # ===========================================================================
@@ -478,6 +491,20 @@ automation:
               tag: "pool-meter_offline"
               ack_action: "ACK_METER_OFFLINE"
 
+      - if:
+          - condition: state
+            entity_id: input_boolean.alert_open_sweep_skipped
+            state: "on"
+        then:
+          - service: script.normal_alert
+            data:
+              title: "Still open: sweep did not run"
+              message: >
+                The sweep was skipped on a previous night and has not been
+                acknowledged. If the pool looks fine, just acknowledge it.
+              tag: "pool-sweep-skipped"
+              ack_action: "ACK_SWEEP_SKIPPED"
+
   # -------------------------------------------------------------------------
   # Acknowledge buttons. trigger.id is the suffix of the matching flag, so one
   # automation serves every alert.
@@ -511,6 +538,11 @@ automation:
         event_data:
           action: "ACK_METER_OFFLINE"
         id: meter_offline
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "ACK_SWEEP_SKIPPED"
+        id: sweep_skipped
     action:
       - service: input_boolean.turn_off
         target:
@@ -599,6 +631,78 @@ automation:
   # Skipped while maintenance mode is on, so the sweep can be run manually at
   # any hour without this turning it off 15 minutes later.
   # -------------------------------------------------------------------------
+  # -------------------------------------------------------------------------
+  # Records that the sweep actually ran. Triggers on the switch going on from
+  # ANY source — HA's schedule, Tuya's backup schedule, or a manual press —
+  # because the question being answered is "did the pool get cleaned", not
+  # "did my automation fire".
+  # -------------------------------------------------------------------------
+  - id: jeeves_sweep_ran_latch
+    alias: "Pool: record that the sweep ran"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: switch.pool_sweep_socket_1
+        to: "on"
+    condition:
+      - condition: template
+        value_template: >
+          {{ today_at('21:45') <= now() < today_at('23:30') }}
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.sweep_ran_tonight
+
+  # -------------------------------------------------------------------------
+  # L3 — the sweep never ran tonight.
+  #
+  # Closes the one silent failure in the schedule: if the main pump has not
+  # been running for 30 minutes at 9:45pm, the sweep is deliberately skipped
+  # rather than started against an unproven pump. That is the correct and safe
+  # behaviour, but on its own it is indistinguishable from a working system,
+  # and the only symptom is a gradually dirtier pool.
+  #
+  # Runs at 11:45pm, after both HA's window (ends 11:15) and Tuya's backup
+  # window (ends 11:30), so a Tuya-started sweep still counts as "it ran".
+  # -------------------------------------------------------------------------
+  - id: jeeves_sweep_missed_check
+    alias: "Pool: sweep did not run tonight"
+    description: >
+      Checks at 11:45pm whether the sweep ran at all, then resets the latch for
+      tomorrow. Skipped entirely while maintenance mode is on.
+    mode: single
+    trigger:
+      - platform: time
+        at: "23:45:00"
+    action:
+      - if:
+          - condition: state
+            entity_id: input_boolean.sweep_ran_tonight
+            state: "off"
+          - condition: state
+            entity_id: input_boolean.pool_maintenance
+            state: "off"
+        then:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.alert_open_sweep_skipped
+          - service: script.normal_alert
+            data:
+              title: "Pool sweep did not run tonight"
+              message: >
+                The sweep was skipped — the main pump had not been running long
+                enough at 9:45pm to start the booster safely. Pump is currently
+                at
+                {{ states('sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power')
+                }} W. Check the pump schedule.
+              tag: "pool-sweep-skipped"
+              ack_action: "ACK_SWEEP_SKIPPED"
+
+      # Always reset, whether or not it ran, so tomorrow starts clean.
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.sweep_ran_tonight
+
   - id: jeeves_sweep_outside_window_guard
     alias: "Pool: sweep running outside its window"
     description: Turns the sweep off if it is on outside 9:45-11:30pm.
