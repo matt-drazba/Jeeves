@@ -26,11 +26,11 @@ rather than just hiding Silk's toolbar:
 detection. PLUS features are unlimited free to try, so the whole setup can be
 proven before paying. License is per device, one-time, price shown in the app.
 
-**But the trial is not just a watermark — unlicensed Fully displays the kiosk
-PIN on screen as a hint** (observed on this device 2026-08-08). Anyone who
-walks up can read it and exit. Until it is licensed the lockdown is decorative,
-so treat the license as the thing that makes kiosk mode real, not as a nag
-removal.
+**The trial is not just a watermark — unlicensed Fully also displays the kiosk
+PIN on screen as a hint** (observed on this device 2026-08-08). Judged
+acceptable here: you have to know the exit gesture to get that far, and a guest
+who does not know to tap seven times never sees it. Worth knowing rather than
+worth fixing, unless this tablet ever ends up somewhere public.
 
 ## Order of operations
 
