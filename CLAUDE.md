@@ -94,7 +94,10 @@ homelab/
 - Jeeves dashboard live at `http://192.168.0.189:3000` — accessible from Pi, MacBook, iPad
 - Tailscale installed on Pi — IP `100.99.104.79`, accessible from anywhere on Tailscale network
 - Live weather from Open-Meteo (no API key), refreshes every 10 min
-- Google Calendar weekly view (Sun-Sat grid), fetched from ICS URL every 5 min; timezone-correct for both standard and recurring events (rrule fix in place)
+- Google Calendar weekly view (Sun-Sat grid), fetched every 5 min from **HA's calendar API** (`/api/calendars/calendar.matthew_drazba`), not from an ICS URL — the ICS path was replaced in commit `66536da` and `node-ical` is now a dead dependency in `jeeves/package.json`
+  - HA exposes **one entity per Google calendar** — `matthew_drazba`, `family`, `jessica`, `birthdays`, `reserves`, `holidays_in_united_states`, `roy_cloud_community_calendar`. Jeeves reads **only `calendar.matthew_drazba`**, by decision 2026-08-08. Accepted invites copy onto the primary calendar, so they arrive there; events created *on* Family or Jessica's calendar are invisible to Jeeves on purpose
+  - **A failed calendar fetch is silent and leaves a stale week on the tablet.** `fetchCalendar()` assigns `cachedStatus.calendar` only on full success, so one throw wipes all seven days to `days: []`; `renderCalendar()` then early-returns on empty data and leaves the previously drawn grid up with no staleness indicator. This masked a multi-day outage as "the calendar is missing some events." Not fixed — the fix is per-calendar isolation plus a stale marker
+  - **Diagnosing "missing events" — check auth before touching Jeeves code.** All entities `unavailable` + `/api/calendars/<entity>` returning **404** means the config entry failed setup, not that the entity id is wrong (an unavailable calendar entity is absent from the calendar component entirely). See the Google OAuth note below
 - Dashboard cycles dashboard ↔ calendar every 15s
 - Repo cloned at `~/homelab` on Pi; `.env` at `~/homelab/.env` holds secrets (never committed)
 - **Washer tile live** — Samsung SmartThings via HA REST API, polls every 30s
@@ -208,10 +211,23 @@ homelab/
 
 ### Secrets in `~/homelab/.env`
 ```
-CALENDAR_ICS_URL=...      # Google Calendar private ICS URL
+                          # (no CALENDAR_ICS_URL — calendar comes from HA now)
 HA_TOKEN=...              # HA long-lived token (Profile → Security → Long-lived access tokens, "Jeeves")
 PURPLEAIR_API_KEY=...     # PurpleAir read API key
 ```
+
+### HA URLs and OAuth reauth
+- HA is at **`http://192.168.0.189:8123`** (`raspberrypi.local`). **`homeassistant.local` does not resolve on this network** — verified 2026-08-08. Any integration reauth that redirects to `http://homeassistant.local:8123/auth/external/callback` hangs forever with no error message
+- The redirect target comes from the instance URL stored per-browser at **`my.home-assistant.io` → Configure**, not from HA itself. That and **Settings → System → Network → Internal URL** are both set to the IP as of 2026-08-08. Use the IP, never the hostname
+- **The Google Cloud OAuth consent screen must stay in "In production" publishing status.** In **Testing** status Google expires refresh tokens after **7 days**, which killed the calendar repeatedly — HA logs `400 Bad Request` from `https://oauth2.googleapis.com/token` and every calendar entity goes `unavailable`. Published 2026-08-08
+  - The "your app will be available to any user with a Google Account" warning governs who may *grant* consent using their own account; it exposes nothing of ours. Completing the flow requires the client ID **and secret**, which live only in Google Cloud and HA's config entry — never in this repo
+  - The unverified-app interstitial is expected and unrelated to publishing status. Do not pursue Google verification for a personal project
+- Check a suspect integration before blaming Jeeves code:
+  ```bash
+  cd ~/homelab && curl -s -H "Authorization: Bearer $(grep ^HA_TOKEN .env | cut -d= -f2-)" \
+    http://localhost:8123/api/config/config_entries/entry \
+    | python3 -c "import sys,json;[print(e['domain'],e.get('state'),e.get('reason')) for e in json.load(sys.stdin) if e.get('state')!='loaded']"
+  ```
 
 ### Deployment workflow (Pi) — Jeeves + HA only
 ```bash
