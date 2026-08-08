@@ -36,13 +36,28 @@ substitutions:
   # pin_boost_relay:     GPIO13   # D7 — dropped 2026-08-05, see note at end of file
   # GPIO4 (D2) freed — was FPH pump-call sensor, dropped 2026-07-28 (see docs/pool_heat_recovery.md)
 
-  # Probe zero-offset, °F, added to the HX outlet reading. With the pump running
-  # and no heat, the outlet read 0.3–0.5°F below the inlet (the ±0.1 wobble is
-  # one 12-bit LSB, 0.0625°C ≈ 0.11°F — the resolution floor, not instability).
-  # Provisional value 2026-08-05, to be retuned against several days of data
-  # across a wider water-temp range. If the gap turns out to track water temp
-  # rather than staying flat, replace this with a calibrate_linear two-point fit.
-  out_temp_offset_f: "0.3"
+  # Probe zero-offset, °F, added to the HX outlet reading.
+  #
+  # ZEROED 2026-08-08 against 102 logged samples, all pump-running / heat-off,
+  # which is exactly the zero-delta condition this is meant to calibrate. With
+  # +0.3 applied the measured delta was a median +0.3 (range 0.19-0.53, i.e.
+  # 0.11°F quantization steps either side). Subtracting the offset back out puts
+  # the raw probes at a median 0.0 apart — they already agree to within one LSB.
+  #
+  # The old 0.3 came from a 2026-08-05 spot reading of "outlet 0.3-0.5°F below
+  # inlet." That no longer reproduces; a single reading at the resolution floor
+  # was too thin a basis, and the probes have been reseated since.
+  #
+  # This was not cosmetic. binary_sensor.pool_hx_not_transferring fires on
+  # ΔT <= 0, so a permanent +0.3 meant a heat exchanger that had genuinely
+  # stopped transferring would still read positive and never alert. It would
+  # also have injected phantom heat into BTU/hr (GPM x ΔT x 500 — about 8,000
+  # BTU/hr of fiction at 55 GPM) the day the flow meter goes in.
+  #
+  # Still only ~3.5 hours of data across a narrow 79.1-79.6°F band. Re-check
+  # across a wider water-temp range; if the gap tracks temperature rather than
+  # staying flat, replace this with a calibrate_linear two-point fit.
+  out_temp_offset_f: "0.0"
 
 # ── Relay dry-contact input ───────────────────────────────────────────────
 # Switched from an opto module to a White Rodgers Type 84 fan relay (24VAC
