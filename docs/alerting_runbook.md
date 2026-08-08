@@ -94,34 +94,24 @@ cd ~/homelab && curl -s -H "Authorization: Bearer $(grep '^HA_TOKEN=' .env | cut
 
 ---
 
-## Maintenance mode
+## Maintenance mode — removed
 
-Turn this on **before backwashing or working on the pad**, or the routine work
-fires alerts.
+There is no maintenance mode. `input_boolean.pool_maintenance` was deleted
+2026-08-08 along with every condition that referenced it. **Alerts always fire.**
 
-```bash
-cd ~/homelab && curl -s -X POST -H "Authorization: Bearer $(grep '^HA_TOKEN=' .env | cut -d= -f2-)" -H "Content-Type: application/json" -d '{"entity_id":"input_boolean.pool_maintenance"}' http://localhost:8123/api/services/input_boolean/turn_on
-```
+It was a global mute for L2–L4 that nothing ever turned off. That made its
+failure mode silent and open-ended: flip it before a backwash, get distracted,
+and the pool is unmonitored for days with no indication anywhere that alerting
+is off. A safety system you can accidentally leave disabled is worse than one
+that occasionally annoys you.
 
-Swap `turn_on` for `turn_off` when you're done. **Remember to turn it off** —
-nothing turns it off for you, and while it's on you are running unmonitored.
+**You do not need it to run the Polaris by hand.** Press the Tuya button whenever
+you like, or set a countdown in the app as usual. HA only intervenes if the sweep
+is still running after 2 hours.
 
-What it does and does not do:
-
-| | |
-|---|---|
-| Suppresses | All L2 and L3 alerts, and both re-raises |
-| Suppresses | The 2-hour sweep runtime cap — for a long manual session at the pad |
-| Does **not** suppress | The Level 1 booster alarm |
-| Does **not** prevent | The booster kill itself from firing |
-
-**You do not need maintenance mode to run the Polaris by hand.** Press the Tuya
-button whenever you like, or set a countdown in the app as usual. HA shuts it off
-only if it is still running after 2 hours. Maintenance mode is only for running
-it *longer* than that. This changed 2026-08-08 — the old window guard killed any
-manual run within 15 minutes, which made the switch look broken.
-
-Muting nuisance alerts is fine. Disabling protection against destruction is not.
+If servicing does turn out to generate real nuisance alerts, the fix is a mute
+that **expires on its own** — a timer you cannot forget to cancel — not one that
+waits to be remembered. Do not reintroduce the old behaviour.
 
 ---
 
@@ -146,8 +136,8 @@ safe — if HA, the network, or the Tuya cloud fails, the booster simply never
 runs. Dirty pool, healthy pump. A schedule living in the Tuya app could start the
 booster with no idea whether the main pump is on.
 
-**To run the Polaris manually:** turn on maintenance mode first, or the
-outside-window guard shuts it off within 15 minutes.
+**To run the Polaris manually:** just turn it on. Any hour, any method — the Tuya
+button, an app countdown, an inline timer. HA only steps in at the 2-hour cap.
 
 ---
 
@@ -192,7 +182,7 @@ is a bug in [alerting_levels.md](alerting_levels.md), not a fact about the house
 
 **The sweep isn't running.** In order: is the pump running >20 W for 30 min
 before 9:45pm; is the Shelly meter online (a dead meter blocks the sweep by
-design); is maintenance mode stuck on.
+design).
 
 **An automation seems dead.** Run `verify-alerts.py`. The classic cause is an
 entity_id that never existed — HA derives a template entity's id from its `name`,

@@ -155,7 +155,7 @@ homelab/
   - Note: single CT reads one leg only; a second CT on the Gen3's `IB` channel would give true two-leg wattage if added later
   - Same Shelly also runs an on-device script driving `switch.shellyemg3_dcb4d9ce63a4` → R-40 ionizer relay (20W threshold, 60s on-delay for flow establishment) — replaces the originally planned IntelliFlo accessory-output wiring; see `docs/pool_heat_recovery.md`
   - Energy readings logged to SQLite (`pool_pump` device row) via the same `maybeLogEnergy` path as other appliances
-- **Alerting system live** — `homeassistant/packages/jeeves_alerts.yaml`, deployed via `git pull` on the Pi. Two docs: `docs/alerting_levels.md` is the spec (why the levels are what they are), `docs/alerting_runbook.md` is the operator manual (what to do when one fires, acknowledging, maintenance mode, deploy, troubleshooting)
+- **Alerting system live** — `homeassistant/packages/jeeves_alerts.yaml`, deployed via `git pull` on the Pi. Two docs: `docs/alerting_levels.md` is the spec (why the levels are what they are), `docs/alerting_runbook.md` is the operator manual (what to do when one fires, acknowledging, deploy, troubleshooting)
   - Verify after any change with `python3 scripts/verify-alerts.py` — checks every entity, automation id, and notify service the package references actually exists. `check_config` passing proves none of that
   - **Levels are defined by when you must act**: L1 now/anywhere/any hour · L2 in the morning · L3 when you get home · L4 over the weekend · L5 system only
   - Delivery: L1 = iOS Critical Alert repeating until acknowledged · L2 = normal push + 7am re-raise · L3 = push + re-raise on arrival home · L4 = digest only
@@ -172,7 +172,8 @@ homelab/
   - A missed night is caught by the 11:45pm "sweep did not run" check
   - The 20 W threshold answers "is the pump energized at all" and is deliberately RPM- and filter-independent. **Do not raise it** — the pump reads ~172 W on one leg at current RPM, so a higher threshold causes false kills. Watts cannot prove the pump moves *enough* water; that needs the flow meter
   - Open-alert flags (`input_boolean.alert_open_*`) clear only on Acknowledge, never on recovery — a fault that self-heals at 2am still surfaces at breakfast
-  - `input_boolean.pool_maintenance` suppresses L2–L4, never L1, and never blocks the booster kill
+  - **No global mute exists.** `input_boolean.pool_maintenance` was removed 2026-08-08 — it suppressed L2–L4 and nothing ever turned it off, so alerting could be silently disabled for days. Alerts always fire. Any future mute must expire on its own; do not reintroduce one that waits to be remembered
+  - **Manual sweep runs are not faults.** Press the Tuya switch any hour, by any method; `jeeves_sweep_max_runtime` only intervenes after 2 hours. The old outside-window guard killed manual runs within 15 min and was removed 2026-08-08
   - **Known blind spot:** nothing can alert when HA itself is down (outage kills the pump, the Shelly, and the messenger together). Needs a watcher outside the house — unresolved
   - HA config is deployable: `homeassistant/packages/` is un-ignored in `.gitignore`; secrets, DB, and logs stay ignored. `configuration.yaml` has `homeassistant: packages: !include_dir_named packages`
 

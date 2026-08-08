@@ -95,7 +95,6 @@ let cachedStatus = {
   },
   alerts: [],
   alertDetail: [],
-  maintenance: { on: false, since: null },
   pool: {},
   nextActions: [],
   calendar: { days: [] },
@@ -780,20 +779,13 @@ async function fetchAlerts() {
   if (!HA_TOKEN) return;
   try {
     const keys = Object.keys(ALERT_REGISTRY);
-    const map = { maintenance: 'input_boolean.pool_maintenance' };
+    const map = {};
     for (const k of keys) map[`flag_${k}`] = `input_boolean.alert_open_${k}`;
     for (const k of keys) {
       if (ALERT_REGISTRY[k].detector) map[`det_${k}`] = ALERT_REGISTRY[k].detector;
     }
 
     const res = await fetchHAStates(map);
-
-    const maintOn = res.maintenance?.state === 'on';
-    cachedStatus.maintenance = {
-      on: maintOn,
-      since: maintOn ? res.maintenance.lastChanged : null,
-      ageText: maintOn ? _ageText(Date.parse(res.maintenance.lastChanged)) : '',
-    };
 
     const detail = [];
     for (const k of keys) {
@@ -830,22 +822,19 @@ async function fetchAlerts() {
     const countText = Object.keys(counts).sort()
       .map((lv) => `${counts[lv]}× L${lv}`).join(' · ');
 
-    const maintPrefix = maintOn ? '🔧 Maintenance ON' : '';
     if (detail.length === 0) {
       cachedStatus.status.alerts = {
         label: 'Alerts', icon: '🔔', value: 'All clear',
-        sub: maintPrefix || `${keys.length} checks passing`,
+        sub: `${keys.length} checks passing`,
         alert: false, degraded: false,
-        ...(maintOn ? LEVEL_STYLE[3] : {}),
       };
     } else {
-      const top = detail[0].level;
       cachedStatus.status.alerts = {
         label: 'Alerts', icon: '🔔',
         value: `${detail.length} open`,
-        sub: maintPrefix ? `${maintPrefix} · ${countText}` : countText,
+        sub: countText,
         alert: false, degraded: false,
-        ...LEVEL_STYLE[top],
+        ...LEVEL_STYLE[detail[0].level],
       };
     }
   } catch (err) {
@@ -1357,20 +1346,6 @@ app.post('/api/alerts/:key/ack', express.json(), async (req, res) => {
     res.json({ ok: true, alerts: cachedStatus.alerts, alertDetail: cachedStatus.alertDetail });
   } catch (err) {
     console.error('Alert ack failed:', err.message);
-    res.status(502).json({ error: 'HA service call failed' });
-  }
-});
-
-app.post('/api/pool/maintenance', express.json(), async (req, res) => {
-  const { on } = req.body || {};
-  if (typeof on !== 'boolean') return res.status(400).json({ error: 'on (boolean) required' });
-  try {
-    await callHAService('input_boolean', on ? 'turn_on' : 'turn_off', 'input_boolean.pool_maintenance');
-    await fetchAlerts();
-    console.log(`Pool maintenance mode turned ${on ? 'ON' : 'off'} from the dashboard`);
-    res.json({ ok: true, maintenance: cachedStatus.maintenance });
-  } catch (err) {
-    console.error('Maintenance toggle failed:', err.message);
     res.status(502).json({ error: 'HA service call failed' });
   }
 });

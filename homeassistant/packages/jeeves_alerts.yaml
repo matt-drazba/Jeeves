@@ -29,14 +29,12 @@
 # Helpers
 # ===========================================================================
 input_boolean:
-  pool_maintenance:
-    name: Pool Maintenance Mode
-    icon: mdi:wrench
-    # Turn ON before backwashing or servicing the pad.
-    #
-    # Suppresses L2-L4 notifications. Deliberately does NOT suppress L1, and
-    # never prevents the booster kill itself from firing. Muting nuisance
-    # alerts is legitimate; disabling protection against destruction is not.
+  # Maintenance mode was removed 2026-08-08. It was a global mute for L2-L4
+  # that nothing ever turned off, so the failure mode was silent: leave it on
+  # after a backwash and the pool is unmonitored indefinitely, with no
+  # indication anywhere. Alerts now always fire. If servicing turns out to
+  # generate real nuisance alerts, the fix is a mute that expires on its own,
+  # not one that waits to be remembered.
 
   # "Open" = this alert has fired and has not been acknowledged yet. Cleared
   # only by tapping Acknowledge, so nothing silently disappears overnight —
@@ -102,8 +100,7 @@ template:
           {{ has_value('sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power')
              and (states('sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power')
                   | float(0)) < 20
-             and (now() >= today_at('21:00') or now() < today_at('16:00'))
-             and is_state('input_boolean.pool_maintenance', 'off') }}
+             and (now() >= today_at('21:00') or now() < today_at('16:00')) }}
 
       # ---------------------------------------------------------------------
       # Booster (Polaris PB4-60) on while the main pump draws nothing.
@@ -350,9 +347,6 @@ automation:
           - service: input_boolean.turn_on
             target:
               entity_id: input_boolean.alert_open_booster_dry_run
-          - condition: state
-            entity_id: input_boolean.pool_maintenance
-            state: "off"
           - service: script.normal_alert
             data:
               title: "Pool sweep shut off — booster was running dry"
@@ -403,10 +397,6 @@ automation:
     trigger:
       - platform: time
         at: "07:00:00"
-    condition:
-      - condition: state
-        entity_id: input_boolean.pool_maintenance
-        state: "off"
     action:
       - if:
           - condition: state
@@ -487,10 +477,6 @@ automation:
       - platform: state
         entity_id: binary_sensor.pool_hx_not_transferring
         to: "on"
-    condition:
-      - condition: state
-        entity_id: input_boolean.pool_maintenance
-        state: "off"
     action:
       - service: input_boolean.turn_on
         target:
@@ -517,10 +503,6 @@ automation:
     trigger:
       - platform: time
         at: "21:15:00"
-    condition:
-      - condition: state
-        entity_id: input_boolean.pool_maintenance
-        state: "off"
     action:
       - if:
           - condition: state
@@ -672,9 +654,6 @@ automation:
         entity_id: binary_sensor.pool_pump_running
         state: "on"
         for: "00:30:00"
-      - condition: state
-        entity_id: input_boolean.pool_maintenance
-        state: "off"
     action:
       - service: switch.turn_on
         target:
@@ -758,7 +737,7 @@ automation:
     alias: "Pool: sweep did not run tonight"
     description: >
       Checks at 11:45pm whether the sweep ran at all, then resets the latch for
-      tomorrow. Skipped entirely while maintenance mode is on.
+      tomorrow.
     mode: single
     trigger:
       - platform: time
@@ -767,9 +746,6 @@ automation:
       - if:
           - condition: state
             entity_id: input_boolean.sweep_ran_tonight
-            state: "off"
-          - condition: state
-            entity_id: input_boolean.pool_maintenance
             state: "off"
         then:
           - service: input_boolean.turn_on
@@ -797,7 +773,7 @@ automation:
     description: >
       Turns the sweep off once it has run continuously for longer than any
       legitimate cycle. Replaces the old outside-window guard, so pressing the
-      Tuya button by hand works at any hour — no maintenance mode required.
+      Tuya button by hand works at any hour.
 
       Informational notification only: no open-alert flag, and notify is called
       directly rather than through script.normal_alert, because there is
@@ -811,9 +787,6 @@ automation:
       - condition: state
         entity_id: switch.pool_sweep_socket_1
         state: "on"
-      - condition: state
-        entity_id: input_boolean.pool_maintenance
-        state: "off"
       # 2 hours — the owner's stated maximum sweep runtime for this pool size.
       # Normal use is a 90-minute manual countdown or the 90-minute scheduled
       # run (21:45-23:15), so this only catches a sweep that should have

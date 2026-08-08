@@ -70,9 +70,9 @@ for L3.** Both loop until acknowledged.
   it isn't Level 1.
 - Levels 1 and 2 require an **Acknowledge button**, and the acknowledgement
   **auto-clears on recovery** so the next occurrence still alerts.
-- **Maintenance mode (`input_boolean.pool_maintenance`) suppresses Levels 2–4.
-  It never suppresses Level 1.** Muting nuisance alerts is legitimate; disabling
-  protection against destruction is not.
+- **There is no global mute.** Maintenance mode was removed 2026-08-08: it
+  suppressed Levels 2–4 and nothing ever turned it back off, so alerting could be
+  silently disabled indefinitely. Any future mute must expire on its own.
 - **Fail closed.** Anything protective treats an unavailable sensor as the
   dangerous state, never the safe one.
 
