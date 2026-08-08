@@ -29,6 +29,13 @@ PACKAGE = os.path.join(
 # excluded here and checked against the services API instead.
 ENTITY_DOMAINS = ("binary_sensor", "sensor", "switch", "input_boolean", "script")
 
+# `switch.turn_on` and friends are service calls that look exactly like entity
+# ids. Without this the checker reports them as missing entities.
+SERVICE_VERBS = {
+    "turn_on", "turn_off", "toggle", "reload", "trigger",
+    "select_option", "set_value", "set_datetime", "increment", "decrement",
+}
+
 
 def token():
     """Read HA_TOKEN from the environment, or fall back to ~/homelab/.env."""
@@ -64,12 +71,16 @@ def main():
     with open(PACKAGE) as fh:
         blob = fh.read()
 
-    # Templated references like input_boolean.alert_open_{{ trigger.id }} cannot
-    # be resolved statically, so expand them from the helpers actually defined.
+    # Two things must not be collected here:
+    #   1. Service calls (switch.turn_on) — identical in shape to an entity id.
+    #   2. Templated ids (input_boolean.alert_open_{{ trigger.id }}) — these
+    #      cannot be resolved statically. The trailing negative lookahead makes
+    #      the match fail outright rather than silently truncating to a prefix,
+    #      which is what produced a bogus "missing" entry on the first run.
     refs = set()
     for domain in ENTITY_DOMAINS:
-        for match in re.findall(rf"\b{domain}\.[a-z0-9_]+", blob):
-            if "{" not in match:
+        for match in re.findall(rf"\b{domain}\.[a-z0-9_]+(?![a-z0-9_{{])", blob):
+            if match.split(".", 1)[1] not in SERVICE_VERBS:
                 refs.add(match)
 
     states = get("/api/states", tok)
