@@ -778,7 +778,17 @@ automation:
 
   - id: jeeves_sweep_outside_window_guard
     alias: "Pool: sweep running outside its window"
-    description: Turns the sweep off if it is on outside 9:45-11:15pm.
+    description: >
+      Turns the sweep off if it is on outside 9:45-11:15pm.
+
+      This also catches MANUAL turn-ons, which is intended — but it used to do
+      it silently, so switching the Polaris on by hand looked like the switch
+      was broken: it would just die at the next quarter hour with no
+      explanation. It now says why, and points at the override.
+
+      Informational only: no open-alert flag, and notify is called directly
+      rather than through script.normal_alert, because there is nothing to
+      acknowledge and an Acknowledge button that clears nothing is a lie.
     mode: single
     trigger:
       - platform: time_pattern
@@ -797,3 +807,12 @@ automation:
       - service: switch.turn_off
         target:
           entity_id: switch.pool_sweep_socket_1
+      - service: notify.mobile_app_matt_drazba_s_iphone
+        data:
+          title: "Pool sweep turned off"
+          message: >
+            The Polaris was on outside its 9:45-11:15pm window, so the guard
+            shut it off. To run it by hand, turn on Pool Maintenance first —
+            the dry-run interlock stays armed either way.
+          data:
+            tag: sweep_outside_window
