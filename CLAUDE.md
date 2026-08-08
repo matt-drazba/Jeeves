@@ -155,7 +155,8 @@ homelab/
   - Note: single CT reads one leg only; a second CT on the Gen3's `IB` channel would give true two-leg wattage if added later
   - Same Shelly also runs an on-device script driving `switch.shellyemg3_dcb4d9ce63a4` → R-40 ionizer relay (20W threshold, 60s on-delay for flow establishment) — replaces the originally planned IntelliFlo accessory-output wiring; see `docs/pool_heat_recovery.md`
   - Energy readings logged to SQLite (`pool_pump` device row) via the same `maybeLogEnergy` path as other appliances
-- **Alerting system live** — `homeassistant/packages/jeeves_alerts.yaml`, deployed via `git pull` on the Pi. Levels and rules specified in `docs/alerting_levels.md`
+- **Alerting system live** — `homeassistant/packages/jeeves_alerts.yaml`, deployed via `git pull` on the Pi. Two docs: `docs/alerting_levels.md` is the spec (why the levels are what they are), `docs/alerting_runbook.md` is the operator manual (what to do when one fires, acknowledging, maintenance mode, deploy, troubleshooting)
+  - Verify after any change with `python3 scripts/verify-alerts.py` — checks every entity, automation id, and notify service the package references actually exists. `check_config` passing proves none of that
   - **Levels are defined by when you must act**: L1 now/anywhere/any hour · L2 in the morning · L3 when you get home · L4 over the weekend · L5 system only
   - Delivery: L1 = iOS Critical Alert repeating until acknowledged · L2 = normal push + 7am re-raise · L3 = push + re-raise on arrival home · L4 = digest only
   - **iOS Critical Alerts** via HA Companion — free, no third-party service. Requires iPhone **Settings → Notifications → Home Assistant → Critical Alerts** (iOS setting, not an in-app one). Verified 2026-08-07: full volume through the silent switch, Acknowledge button routes back to HA

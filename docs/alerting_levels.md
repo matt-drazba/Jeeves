@@ -118,7 +118,7 @@ the Tuya app. Unconfirmed kill = still being destroyed = Level 1.
 | Booster dry run **caught and successfully killed** | **live** |
 | Main pump off during its 9pm–4pm window | **live** |
 | Heat recovery pump failure | planned |
-| HA / Pi offline seen from outside the house | **blocked** — see blind spot |
+| HA / Pi offline seen from outside the house | **not building** — see blind spot |
 
 Both deliver as a normal push immediately, plus a 7am re-raise if still
 unacknowledged. The open-alert flags clear **only** on Acknowledge, never on
@@ -191,12 +191,17 @@ silence is indistinguishable from everything being fine. This is exactly the
 scenario that matters most on vacation, and it is a Level 1 event delivered as
 nothing at all.
 
-Fixing it requires a watcher **outside the house**; anything on the Pi or the Mac
-mini dies in the same outage. That means a third-party service — a dead-man's
-switch that alerts when scheduled pings *stop* — deferred pending a decision on
-free vs. paid tooling.
+Fixing it properly requires a watcher **outside the house**; anything on the Pi
+or the Mac mini dies in the same outage.
 
-Recorded here so it stays a known gap rather than a surprise.
+**Decision (2026-08-08): not building one.** PG&E already sends a text when the
+power is out, which covers the most likely and most consequential cause. The
+residual gap is the set of failures where power is fine but the Pi is not — SD
+card corruption, a Docker or HA crash, Pi hardware death, a router failure. Those
+are silent and will stay silent.
+
+Accepted deliberately rather than left open. Revisit only if that residual class
+actually bites.
 
 ---
 
