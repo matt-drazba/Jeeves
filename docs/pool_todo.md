@@ -152,10 +152,20 @@ SQLite is the system of record — **ha-poolchem is not being installed** — an
 
 → [pool_heat_recovery.md](pool_heat_recovery.md)
 
-- [ ] **Retune `out_temp_offset_f`** (currently provisional 0.3°F, set 2026-08-05)
-      against several days of data across a wider water-temp range. If the gap
-      tracks temperature rather than staying flat, replace with a
-      `calibrate_linear` two-point fit.
+- [x] **Retune `out_temp_offset_f`** — zeroed 0.3 → 0.0 and flashed 2026-08-08.
+      102 pump-running/heat-off samples put the raw probes a median 0.00°F apart
+      (quantization steps −0.11/0.00/+0.11, 60 of 102 at exactly zero). The old
+      0.3 came from one 2026-08-05 spot reading that no longer reproduces.
+      Note this had been masking the HX L3, which fires on ΔT ≤ 0.
+- [ ] **Re-check the offset across a wider water-temp range.** The zeroing used
+      only ~3.5 h in a narrow 79.1–79.6°F band. If the probe gap tracks water
+      temperature rather than staying flat, replace the single offset with a
+      `calibrate_linear` two-point fit. `pool_heat_samples` now logs
+      continuously, so this answers itself over the next few weeks.
+- [ ] **Watch the HX L3 now that it is genuinely armed.** It has never been able
+      to fire. If a legitimate low-stage compressor run quantizes to 0.00 or
+      −0.11 for 20 minutes it will alert; the fix is a threshold clearly below
+      zero, not at it. Do not pre-emptively widen it — wait for a real firing.
 - [ ] Pool-return probe — third DS18B20, add a `dallas_temp` block.
 - [ ] **Breaker-kill acceptance test — only after the flow switch is wired and
       calibrated.** Before that it creates the dangerous state with nothing to
