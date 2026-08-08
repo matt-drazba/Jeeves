@@ -23,10 +23,14 @@ rather than just hiding Silk's toolbar:
 | Screen sleeps, device reboots | Keeps display on, launches on boot, auto-reloads on crash |
 
 **Kiosk Mode is a PLUS feature** — so is Remote Administration and motion
-detection. The free version will nag you for a license. All PLUS features are
-unlimited free to try; the only limitation is a watermark on screen, so you can
-prove the whole setup before paying. License is per device, one-time, price
-shown in the app.
+detection. PLUS features are unlimited free to try, so the whole setup can be
+proven before paying. License is per device, one-time, price shown in the app.
+
+**But the trial is not just a watermark — unlicensed Fully displays the kiosk
+PIN on screen as a hint** (observed on this device 2026-08-08). Anyone who
+walks up can read it and exit. Until it is licensed the lockdown is decorative,
+so treat the license as the thing that makes kiosk mode real, not as a nag
+removal.
 
 ## Order of operations
 
@@ -65,6 +69,8 @@ going further.
 
 **Do this first and write the PIN down.** Enabling kiosk lockdown without a PIN
 set locks you out of your own tablet, and the recovery is a factory reset.
+
+Note the PIN is shown on screen as a hint until Fully is licensed — see above.
 
 ### 4. Settings
 
@@ -126,8 +132,13 @@ do.
 
 ## Debloating
 
-Only if the tablet is actually slow. A stock Fire HD 8 running one browser is
-usually fine, and changing system packages for no reason is how you break it.
+**Not needed here — checked 2026-08-08.** This tablet is sluggish in Silk but
+the dashboard under Fully is fine, and Silk is not used. Do not debloat, and do
+not chase the animation note below, on the strength of Silk being slow.
+
+Kept only in case the symptom ever appears *under Fully*. A stock Fire HD 8
+running one browser is usually fine, and changing system packages for no reason
+is how you break it.
 
 If it is slow, the fix is ADB from the Mac mini —
 `adb shell pm uninstall -k --user 0 <package>` against Appstore, Silk, Kindle,
