@@ -155,6 +155,19 @@ homelab/
   - Note: single CT reads one leg only; a second CT on the Gen3's `IB` channel would give true two-leg wattage if added later
   - Same Shelly also runs an on-device script driving `switch.shellyemg3_dcb4d9ce63a4` → R-40 ionizer relay (20W threshold, 60s on-delay for flow establishment) — replaces the originally planned IntelliFlo accessory-output wiring; see `docs/pool_heat_recovery.md`
   - Energy readings logged to SQLite (`pool_pump` device row) via the same `maybeLogEnergy` path as other appliances
+- **Alerting system live** — `homeassistant/packages/jeeves_alerts.yaml`, deployed via `git pull` on the Pi. Levels and rules specified in `docs/alerting_levels.md`
+  - **Levels are defined by when you must act**: L1 now/anywhere/any hour · L2 in the morning · L3 when you get home · L4 over the weekend · L5 system only
+  - Delivery: L1 = iOS Critical Alert repeating until acknowledged · L2 = normal push + 7am re-raise · L3 = push + re-raise on arrival home · L4 = digest only
+  - **iOS Critical Alerts** via HA Companion — free, no third-party service. Requires iPhone **Settings → Notifications → Home Assistant → Critical Alerts** (iOS setting, not an in-app one). Verified 2026-08-07: full volume through the silent switch, Acknowledge button routes back to HA
+  - `notify.mobile_app_matt_drazba_s_iphone` is the notify service; scripts `script.critical_alert` / `script.normal_alert` wrap it
+  - **L1 budget: under ~6/year.** A noisy L1 is a bug in the levels doc, not a fact about the house
+  - **Live: booster dry-run kill (L1/L2)** — booster on + pump under 20 W for 30s → shuts `switch.pool_sweep_socket_1` off, waits, retries, re-checks. Kill confirmed = L2; **kill unconfirmed = L1** ("go kill the breaker"), since the Tuya cloud round trip can fail or be overridden by a schedule still in the Tuya app. Fails closed — an unavailable power meter reads as pump-off and kills the booster
+  - **Live: main pump off during 9pm–4pm window (L2)** — under 20 W for 15 min
+  - The 20 W threshold answers "is the pump energized at all" and is deliberately RPM- and filter-independent. **Do not raise it** — the pump reads ~172 W on one leg at current RPM, so a higher threshold causes false kills. Watts cannot prove the pump moves *enough* water; that needs the flow meter
+  - Open-alert flags (`input_boolean.alert_open_*`) clear only on Acknowledge, never on recovery — a fault that self-heals at 2am still surfaces at breakfast
+  - `input_boolean.pool_maintenance` suppresses L2–L4, never L1, and never blocks the booster kill
+  - **Known blind spot:** nothing can alert when HA itself is down (outage kills the pump, the Shelly, and the messenger together). Needs a watcher outside the house — unresolved
+  - HA config is deployable: `homeassistant/packages/` is un-ignored in `.gitignore`; secrets, DB, and logs stay ignored. `configuration.yaml` has `homeassistant: packages: !include_dir_named packages`
 
 ### Tile states
 | State | CSS class | Trigger |
