@@ -102,6 +102,25 @@ template:
              and (states('sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power')
                   | float(0)) < 20 }}
 
+      # ---------------------------------------------------------------------
+      # Plain "is the main pump energized" signal, used by the sweep schedule
+      # to satisfy the PB4-60 manual's "start at least 30 minutes after the
+      # filtration pump" rule via a `for:` condition.
+      #
+      # 20 W answers "energized at all" and is deliberately independent of RPM
+      # and filter state — the pump draws ~172 W on one leg at current RPM, so
+      # a higher threshold would false-negative at lower speeds.
+      #
+      # has_value guard means an offline meter reads as NOT running, so the
+      # sweep is skipped rather than started blind. Fails closed.
+      # ---------------------------------------------------------------------
+      - name: "Pool Pump Running"
+        unique_id: pool_pump_running
+        state: >
+          {{ has_value('sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power')
+             and (states('sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power')
+                  | float(0)) > 20 }}
+
 # ===========================================================================
 # Notification scripts — one per delivery style
 # ===========================================================================
@@ -366,3 +385,108 @@ automation:
       - service: input_boolean.turn_off
         target:
           entity_id: "input_boolean.alert_open_{{ trigger.id }}"
+
+  # =========================================================================
+  # SWEEP SCHEDULE — HA runs 9:45pm - 11:15pm, deliberately OFFSET INSIDE the
+  # Tuya app's existing 10:00pm - 11:30pm window.
+  #
+  # The overlap is the point, and it does two jobs at once:
+  #
+  #   1. TUYA BECOMES A BACKUP. If HA is down, Tuya still starts the sweep at
+  #      10:00 and stops it at 11:30. Nothing is lost during the trial period.
+  #   2. IT MAKES THE TEST OBSERVABLE. Sweep comes on at 9:45 -> HA did it.
+  #      Comes on at 10:00 -> HA failed and Tuya covered. Otherwise there is no
+  #      way to tell which system acted.
+  #
+  # The commands are idempotent, so the two schedules cannot fight: Tuya's
+  # 10:00 "on" lands on an already-on switch, and its 11:30 "off" lands on an
+  # already-off one.
+  #
+  # ONCE OBSERVED WORKING, DELETE THE TUYA SCHEDULE. That deletion is the step
+  # that makes the dry-run interlock actually safe — the Tuya switch becomes a
+  # dumb relay that only ever acts on HA's command, so every failure (HA down,
+  # network down, Tuya cloud down) degrades to "the booster never runs."
+  # Dirty pool, healthy pump. While the Tuya schedule still exists, Tuya can
+  # start the booster by itself with no idea whether the main pump is running.
+  #
+  # Manual rules being satisfied (PB4-60 install manual):
+  #   "start at least half an hour AFTER the filtration pump"  -> pump starts
+  #     9pm, sweep 9:45pm (45 min), and the >=30 min condition is enforced
+  #     against measured pump draw rather than assumed from the clock
+  #   "stop at least half an hour BEFORE the filtration pump"  -> pump runs to
+  #     4pm, leaving 16.75 h of margin
+  #
+  # INTERIM: gates on pump WATTS, not flow — same limitation as the dry-run
+  # kill. Watts prove the pump is energized, not that it is moving enough
+  # water. The DN50 flow meter replaces this condition.
+  # =========================================================================
+  - id: jeeves_sweep_schedule_on
+    alias: "Pool: sweep schedule on"
+    description: >
+      Starts the Polaris at 9:45pm, but only if the main pump has genuinely
+      been running for 30 minutes. If it has not, the sweep is skipped rather
+      than started against an unproven pump — and Tuya's 10:00pm schedule is
+      the backup during the trial period.
+    mode: single
+    trigger:
+      - platform: time
+        at: "21:45:00"
+    condition:
+      - condition: state
+        entity_id: binary_sensor.pool_pump_running
+        state: "on"
+        for: "00:30:00"
+      - condition: state
+        entity_id: input_boolean.pool_maintenance
+        state: "off"
+    action:
+      - service: switch.turn_on
+        target:
+          entity_id: switch.pool_sweep_socket_1
+
+  - id: jeeves_sweep_schedule_off
+    alias: "Pool: sweep schedule off"
+    description: Ends the sweep window. Unconditional — always turns off.
+    mode: single
+    trigger:
+      - platform: time
+        at: "23:15:00"
+    action:
+      - service: switch.turn_off
+        target:
+          entity_id: switch.pool_sweep_socket_1
+
+  # -------------------------------------------------------------------------
+  # Backstop for the case where HA is down at 11:15pm and misses the off
+  # trigger entirely. Without this the sweep would run until the main pump
+  # stops at 4pm — not damaging, since there is water, but hours of needless
+  # wear and ~1.5 kW of billing.
+  #
+  # The guard window is widened to Tuya's 11:30pm rather than HA's 11:15pm, so
+  # that during the overlap period it does not fight a sweep that Tuya legitimately
+  # started. Once the Tuya schedule is deleted, tighten this back to 23:15.
+  #
+  # Skipped while maintenance mode is on, so the sweep can be run manually at
+  # any hour without this turning it off 15 minutes later.
+  # -------------------------------------------------------------------------
+  - id: jeeves_sweep_outside_window_guard
+    alias: "Pool: sweep running outside its window"
+    description: Turns the sweep off if it is on outside 9:45-11:30pm.
+    mode: single
+    trigger:
+      - platform: time_pattern
+        minutes: "/15"
+    condition:
+      - condition: state
+        entity_id: switch.pool_sweep_socket_1
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.pool_maintenance
+        state: "off"
+      - condition: template
+        value_template: >
+          {{ not (today_at('21:45') <= now() < today_at('23:30')) }}
+    action:
+      - service: switch.turn_off
+        target:
+          entity_id: switch.pool_sweep_socket_1
