@@ -111,9 +111,15 @@ What it does and does not do:
 | | |
 |---|---|
 | Suppresses | All L2 and L3 alerts, and both re-raises |
-| Suppresses | The guard that shuts the sweep off outside its window — so you can run the Polaris manually at any hour |
+| Suppresses | The 100-minute sweep runtime cap — for a long manual session at the pad |
 | Does **not** suppress | The Level 1 booster alarm |
 | Does **not** prevent | The booster kill itself from firing |
+
+**You do not need maintenance mode to run the Polaris by hand.** Press the Tuya
+button whenever you like; it runs a full cycle and shuts off after 100 minutes.
+Maintenance mode is only for running it *longer* than that. This changed
+2026-08-08 — the old window guard killed any manual run within 15 minutes, which
+made the switch look broken.
 
 Muting nuisance alerts is fine. Disabling protection against destruction is not.
 
@@ -126,7 +132,14 @@ Muting nuisance alerts is fine. Disabling protection against destruction is not.
 | Window | 9:45pm – 11:15pm daily |
 | Switch | `switch.pool_sweep_socket_1` |
 | Condition to start | Main pump drawing >20 W continuously for ≥30 min |
+| Manual runs | Allowed at any hour, capped at 100 minutes |
 | Tuya app schedule | **Deleted 2026-08-08. Never re-add one.** |
+
+A manual press is not a fault and is not treated as one. The only thing standing
+between a hand-started sweep and a dry booster is the dry-run kill — which is
+exactly the right protection, fires within 30 seconds, and is never suppressed.
+Note the pump is off 4pm–9pm, so a sweep started then will be killed by that
+interlock within about half a minute. That is the protection working, not a bug.
 
 HA is the only thing that commands that switch. That is what makes the interlock
 safe — if HA, the network, or the Tuya cloud fails, the booster simply never

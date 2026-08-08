@@ -693,18 +693,30 @@ automation:
           entity_id: switch.pool_sweep_socket_1
 
   # -------------------------------------------------------------------------
-  # Backstop for the case where HA is down at 11:15pm and misses the off
-  # trigger entirely. Without this the sweep would run until the main pump
-  # stops at 4pm — not damaging, since there is water, but hours of needless
-  # wear and ~1.5 kW of billing.
+  # Backstop against the sweep running for hours unattended — if HA misses the
+  # 11:15pm off trigger, the Polaris would otherwise run until the main pump
+  # stops at 4pm. Not damaging (there is water), but needless wear and ~1.5 kW
+  # of billing.
   #
-  # The guard window matches HA's schedule exactly. It was temporarily widened
-  # to 23:30 while the Tuya app schedule still existed, so it would not fight a
-  # Tuya-started sweep. The Tuya schedule was deleted 2026-08-08 and the window
-  # tightened back — HA is now the only thing that ever commands this switch.
+  # This is a COST AND WEAR backstop, not a safety interlock. The safety
+  # interlock is the dry-run kill, which is independent, has no maintenance
+  # condition, and stays armed at all times.
   #
-  # Skipped while maintenance mode is on, so the sweep can be run manually at
-  # any hour without this turning it off 15 minutes later.
+  # It used to be a window guard: sweep on outside 9:45-11:15pm -> off, checked
+  # every 15 minutes. That over-reached. It treated a deliberate button press as
+  # a fault and killed it within 15 minutes, silently, so manual control simply
+  # appeared broken. Trading away the ability to run your own pool cleaner to
+  # save roughly 75 cents of electricity is the wrong trade. (It also could not
+  # do the job its comment claimed: if HA is down at 11:15pm, this automation's
+  # own time_pattern trigger is down too.)
+  #
+  # Now it caps total runtime instead of policing the clock. A manual press
+  # works at any hour and runs a full cycle; only a genuinely stuck-on sweep
+  # gets shut off. The scheduled run is 90 minutes, so the 100-minute cap never
+  # interferes with it.
+  #
+  # Uses time_pattern + last_changed rather than a state trigger with `for:`,
+  # so it still fires for a sweep that was already on when HA started.
   # -------------------------------------------------------------------------
   # -------------------------------------------------------------------------
   # Records that the sweep actually ran. Triggers on the switch going on from
@@ -776,19 +788,17 @@ automation:
         target:
           entity_id: input_boolean.sweep_ran_tonight
 
-  - id: jeeves_sweep_outside_window_guard
-    alias: "Pool: sweep running outside its window"
+  - id: jeeves_sweep_max_runtime
+    alias: "Pool: sweep exceeded max runtime"
     description: >
-      Turns the sweep off if it is on outside 9:45-11:15pm.
+      Turns the sweep off once it has run continuously for longer than any
+      legitimate cycle. Replaces the old outside-window guard, so pressing the
+      Tuya button by hand works at any hour — no maintenance mode required.
 
-      This also catches MANUAL turn-ons, which is intended — but it used to do
-      it silently, so switching the Polaris on by hand looked like the switch
-      was broken: it would just die at the next quarter hour with no
-      explanation. It now says why, and points at the override.
-
-      Informational only: no open-alert flag, and notify is called directly
-      rather than through script.normal_alert, because there is nothing to
-      acknowledge and an Acknowledge button that clears nothing is a lie.
+      Informational notification only: no open-alert flag, and notify is called
+      directly rather than through script.normal_alert, because there is
+      nothing to acknowledge and an Acknowledge button that clears nothing is
+      a lie.
     mode: single
     trigger:
       - platform: time_pattern
@@ -800,9 +810,11 @@ automation:
       - condition: state
         entity_id: input_boolean.pool_maintenance
         state: "off"
+      # 100 minutes. The scheduled run is 90 (21:45-23:15), so this only ever
+      # catches a sweep that should have stopped and didn't.
       - condition: template
         value_template: >
-          {{ not (today_at('21:45') <= now() < today_at('23:15')) }}
+          {{ (now() - states.switch.pool_sweep_socket_1.last_changed).total_seconds() > 6000 }}
     action:
       - service: switch.turn_off
         target:
@@ -811,8 +823,7 @@ automation:
         data:
           title: "Pool sweep turned off"
           message: >
-            The Polaris was on outside its 9:45-11:15pm window, so the guard
-            shut it off. To run it by hand, turn on Pool Maintenance first —
-            the dry-run interlock stays armed either way.
+            The Polaris had been running over 100 minutes, so it was shut off.
+            If you started it by hand, just press it again for another cycle.
           data:
-            tag: sweep_outside_window
+            tag: sweep_max_runtime
