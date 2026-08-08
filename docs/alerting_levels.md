@@ -41,7 +41,7 @@ ladder — each level arrives *when you can act on it*, not the instant it happe
 |---|---|
 | **1** | iOS Critical Alert — full volume through the silent switch and Do Not Disturb. Repeats every 5 min until acknowledged. |
 | **2** | Normal push immediately, then a **7am re-notification** if still unresolved. Never breaks through DND. |
-| **3** | Normal push, sent once. Re-notified **on arrival home** if still open. |
+| **3** | Normal push now, then a **9:15pm re-raise** if still unacknowledged. |
 | **4** | No push. Dashboard tile plus the **weekend digest**. |
 | **5** | SQLite only. Accumulation thresholds promote it to Level 4. |
 
@@ -49,8 +49,13 @@ Level 2 is the one people get wrong. "In the morning" means the alert must
 *survive* the night without waking you and still be in front of you at breakfast
 — which is a re-notification, not a louder notification.
 
-Level 3's presence trigger matters for the same reason: an alert that fires while
-you're at work is an alert you've already forgotten by the time you could act.
+Level 3 uses a **fixed 9:15pm checkpoint, not a presence trigger.** Presence was
+considered and rejected: device trackers are fragile, and "did he arrive" is hard
+to reason about when it misfires. 9:15pm is reliably home, and it batches with
+the dishwasher reminder already answered at that hour.
+
+The two re-raise times are the whole delivery system — **7:00am for L2, 9:15pm
+for L3.** Both loop until acknowledged.
 
 ---
 
@@ -122,8 +127,8 @@ breakfast. A fault that fixed itself is still a fault you should know about.
 
 | Thing | Status |
 |---|---|
-| Pool pad ESP node offline >30 min | planned |
-| Shelly EM pump meter offline >30 min | planned |
+| Pool pad ESP node offline >30 min | **live** |
+| Shelly EM pump meter offline >30 min | **live** |
 | Filter pressure above clean baseline → backwash due | blocked — transducer |
 | pH above 7.6 — the ionizer stops working at this point | blocked — test kit |
 | Copper outside 0.15–0.20 ppm | blocked — test kit |

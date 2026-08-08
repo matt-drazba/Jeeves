@@ -10,10 +10,14 @@
 # In short — the level is WHEN YOU MUST ACT:
 #
 #   L1 now, anywhere, any hour  -> iOS Critical Alert, repeats until acknowledged
-#   L2 in the morning           -> normal push now + 7am re-notify until acked
-#   L3 when you get home        -> normal push, re-notify on arrival
+#   L2 in the morning           -> normal push now + 7:00am re-raise until acked
+#   L3 when you get home        -> normal push now + 9:15pm re-raise until acked
 #   L4 over the weekend         -> digest only, no push
 #   L5 never                    -> logged; accumulation promotes to L4
+#
+# L3 uses a fixed 9:15pm checkpoint rather than a presence trigger. Presence is
+# fragile and hard to reason about; 9:15pm is reliably "home", and it batches
+# with the existing dishwasher reminder.
 #
 # iOS Critical Alerts verified working 2026-08-07: full volume through the
 # silent switch, and the Acknowledge button routes back to HA.
@@ -49,6 +53,14 @@ input_boolean:
   alert_open_booster_kill_failed:
     name: Open Alert - Booster Kill Failed
     icon: mdi:alert-octagon
+
+  alert_open_pad_offline:
+    name: Open Alert - Pool Pad Node Offline
+    icon: mdi:lan-disconnect
+
+  alert_open_meter_offline:
+    name: Open Alert - Pump Meter Offline
+    icon: mdi:lan-disconnect
 
 # ===========================================================================
 # Problem detectors
@@ -120,6 +132,32 @@ template:
           {{ has_value('sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power')
              and (states('sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power')
                   | float(0)) > 20 }}
+
+      # ---------------------------------------------------------------------
+      # L3 — sensor liveness. These exist because every L1 and L2 rule above
+      # silently stops protecting anything the moment its sensor dies, and a
+      # dead sensor looks exactly like a healthy pool.
+      #
+      # The pump meter one matters most: the booster dry-run kill fails CLOSED
+      # on an unavailable meter, so a dead Shelly does not endanger the pump —
+      # it stops the sweep from ever running. Silent, and only noticed weeks
+      # later as a dirty pool.
+      #
+      # 30-minute debounce rides out a Wi-Fi blip or an HA restart.
+      # ---------------------------------------------------------------------
+      - name: "Pool Pad Node Offline"
+        unique_id: pool_pad_node_offline
+        device_class: problem
+        delay_on: "00:30:00"
+        state: "{{ not has_value('sensor.pool_pad_hx_water_in_temp') }}"
+
+      - name: "Pool Pump Meter Offline"
+        unique_id: pool_pump_meter_offline
+        device_class: problem
+        delay_on: "00:30:00"
+        state: >
+          {{ not has_value(
+               'sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power') }}
 
 # ===========================================================================
 # Notification scripts — one per delivery style
@@ -359,6 +397,88 @@ automation:
               ack_action: "ACK_BOOSTER_DRY_RUN"
 
   # -------------------------------------------------------------------------
+  # L3 — sensor offline. Nothing is being damaged; the house has just gone
+  # partially blind. Push once, then re-raise each evening until acknowledged.
+  # -------------------------------------------------------------------------
+  - id: jeeves_pool_sensor_offline
+    alias: "Pool: sensor offline"
+    description: >
+      A pool sensor has stopped reporting for 30 minutes. Alerts that depend on
+      it are not protecting anything until it returns.
+    mode: parallel
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.pool_pad_node_offline
+        to: "on"
+        id: pad_offline
+      - platform: state
+        entity_id: binary_sensor.pool_pump_meter_offline
+        to: "on"
+        id: meter_offline
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: "input_boolean.alert_open_{{ trigger.id }}"
+      - service: script.normal_alert
+        data:
+          title: >
+            {{ 'Pool pad node offline' if trigger.id == 'pad_offline'
+               else 'Pool pump meter offline' }}
+          message: >
+            {{ 'The pool pad ESP has not reported for 30 minutes. HX temps,
+                flow and BTU readings are dead.'
+               if trigger.id == 'pad_offline' else
+               'The Shelly EM pump meter has not reported for 30 minutes. The
+                booster dry-run kill fails closed on a dead meter, so the sweep
+                will not run until this is back.' }}
+          tag: "pool-{{ trigger.id }}"
+          ack_action: "ACK_{{ trigger.id | upper }}"
+
+  # -------------------------------------------------------------------------
+  # The L3 delivery mechanism. Fixed 9:15pm checkpoint rather than a presence
+  # trigger — presence is fragile, and this batches with the dishwasher nudge.
+  # -------------------------------------------------------------------------
+  - id: jeeves_l3_evening_renotify
+    alias: "Alerts: 9:15pm re-raise of unacknowledged L3"
+    description: Re-sends every L3 alert still open at 9:15pm.
+    mode: single
+    trigger:
+      - platform: time
+        at: "21:15:00"
+    condition:
+      - condition: state
+        entity_id: input_boolean.pool_maintenance
+        state: "off"
+    action:
+      - if:
+          - condition: state
+            entity_id: input_boolean.alert_open_pad_offline
+            state: "on"
+        then:
+          - service: script.normal_alert
+            data:
+              title: "Still open: pool pad node offline"
+              message: >
+                The pool pad ESP is still not reporting. Heat recovery and flow
+                data are dark.
+              tag: "pool-pad_offline"
+              ack_action: "ACK_PAD_OFFLINE"
+
+      - if:
+          - condition: state
+            entity_id: input_boolean.alert_open_meter_offline
+            state: "on"
+        then:
+          - service: script.normal_alert
+            data:
+              title: "Still open: pump meter offline"
+              message: >
+                The Shelly EM is still not reporting. The sweep will not run
+                and the pump-off alert is blind until it returns.
+              tag: "pool-meter_offline"
+              ack_action: "ACK_METER_OFFLINE"
+
+  # -------------------------------------------------------------------------
   # Acknowledge buttons. trigger.id is the suffix of the matching flag, so one
   # automation serves every alert.
   # -------------------------------------------------------------------------
@@ -381,6 +501,16 @@ automation:
         event_data:
           action: "ACK_BOOSTER_KILL_FAILED"
         id: booster_kill_failed
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "ACK_PAD_OFFLINE"
+        id: pad_offline
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "ACK_METER_OFFLINE"
+        id: meter_offline
     action:
       - service: input_boolean.turn_off
         target:
