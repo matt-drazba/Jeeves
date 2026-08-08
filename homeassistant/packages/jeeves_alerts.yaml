@@ -1,0 +1,163 @@
+# Jeeves — critical alerting
+#
+# Deploy: lives at ~/homelab/homeassistant/packages/jeeves_alerts.yaml on the Pi,
+# arrives via `git pull`. Requires this in configuration.yaml:
+#
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# Alerting is iOS Critical Alerts via the HA Companion app — free, no third-party
+# service. Verified working 2026-08-07: rings at full volume through the silent
+# switch. Reserved for hardware damage and safety only; if everything is
+# critical, nothing is.
+#
+# BUILD ORDER — one piece at a time, each verified before the next is added:
+#   [x] 1. Critical alert reaches the phone
+#   [>] 2. Main pump off when it should be running   <- this file
+#   [ ] 3. Booster dry-run kill (switch.pool_sweep_socket_1)
+#   [ ] 4. Peak-hours cost alert, sensor-offline alerts
+
+# ===========================================================================
+# Helpers
+# ===========================================================================
+input_boolean:
+  pool_maintenance:
+    name: Pool Maintenance Mode
+    icon: mdi:wrench
+    # Turn ON before backwashing or servicing the pad, so routine work does not
+    # fire critical alerts.
+
+  ack_pump_unexpectedly_off:
+    name: Acknowledged - Pump Unexpectedly Off
+    icon: mdi:bell-off
+
+# ===========================================================================
+# Problem detector
+#
+# Main pump schedule is 9pm -> 4pm (19 hours on, off 4pm-9pm). Catches breaker
+# trips, power outages, IntelliComm faults, lost prime.
+#
+# `delay_on` debounces 15 minutes — the pump ramps and Program 4 transitions
+# would false-positive an instantaneous trigger.
+#
+# `has_value` guard means an offline meter does NOT fire this alert. "Pump died"
+# and "meter died" are different problems and get different alerts (piece 4).
+# ===========================================================================
+template:
+  - binary_sensor:
+      - name: "Pool Pump Unexpectedly Off"
+        unique_id: pool_pump_unexpectedly_off
+        device_class: problem
+        delay_on: "00:15:00"
+        state: >
+          {{ has_value('sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power')
+             and (states('sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power')
+                  | float(0)) < 20
+             and (now() >= today_at('21:00') or now() < today_at('16:00'))
+             and is_state('input_boolean.pool_maintenance', 'off') }}
+
+# ===========================================================================
+# Notification script
+# ===========================================================================
+script:
+  critical_alert:
+    alias: "Send Critical Alert"
+    description: >
+      iOS critical alert — overrides the silent switch and Do Not Disturb at
+      full volume. Adds an Acknowledge button that stops the repeat loop.
+    mode: parallel
+    max: 10
+    fields:
+      title:
+        description: Notification title
+      message:
+        description: Notification body
+      tag:
+        description: Collapse key so repeats replace rather than stack
+      ack_action:
+        description: Action id fired when Acknowledge is tapped
+    sequence:
+      - service: notify.mobile_app_matt_drazba_s_iphone
+        data:
+          title: "{{ title }}"
+          message: "{{ message }}"
+          data:
+            push:
+              sound:
+                name: default
+                critical: 1
+                volume: 1.0
+            tag: "{{ tag }}"
+            actions:
+              - action: "{{ ack_action }}"
+                title: "Acknowledge"
+                destructive: true
+
+# ===========================================================================
+# Automations
+# ===========================================================================
+automation:
+  - id: jeeves_pump_unexpectedly_off
+    alias: "Pool: main pump unexpectedly off"
+    description: >
+      Pump drawing under 20 W for 15 minutes inside its 9pm-4pm run window.
+      Repeats every 15 minutes for up to 3 hours until acknowledged.
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.pool_pump_unexpectedly_off
+        to: "on"
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.ack_pump_unexpectedly_off
+
+      - repeat:
+          sequence:
+            - service: script.critical_alert
+              data:
+                title: "POOL PUMP IS OFF"
+                message: >
+                  Main pump has been drawing under 20 W for 15 minutes during
+                  its scheduled run window. No filtration and no heat recovery.
+                tag: "pool-pump-off"
+                ack_action: "ACK_PUMP_UNEXPECTEDLY_OFF"
+            - delay: "00:15:00"
+          while:
+            - condition: state
+              entity_id: binary_sensor.pool_pump_unexpectedly_off
+              state: "on"
+            - condition: state
+              entity_id: input_boolean.ack_pump_unexpectedly_off
+              state: "off"
+            - condition: template
+              value_template: "{{ repeat.index < 12 }}"
+
+  - id: jeeves_pump_off_acknowledged
+    alias: "Pool: pump-off alert acknowledged"
+    description: Acknowledge button tapped on the iPhone notification.
+    mode: single
+    trigger:
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "ACK_PUMP_UNEXPECTEDLY_OFF"
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.ack_pump_unexpectedly_off
+
+  - id: jeeves_pump_off_ack_reset
+    alias: "Pool: reset pump-off acknowledgement on recovery"
+    description: >
+      Clears the acknowledgement once the pump is running again, so the next
+      failure alerts instead of staying permanently muted.
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.pool_pump_unexpectedly_off
+        to: "off"
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.ack_pump_unexpectedly_off

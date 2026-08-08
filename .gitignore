@@ -146,8 +146,12 @@ vite.config.ts.timestamp-*
 local.md
 
 # Home Assistant runtime config (secrets, DB, logs)
+# Everything is ignored by default; version-controlled config is opted in
+# explicitly below so a stray secrets.yaml or database can never slip through.
 homeassistant/*
 !homeassistant/.gitkeep
+!homeassistant/packages/
+homeassistant/packages/secrets.yaml
 
 # ESPHome secrets
 esphome/secrets.yaml
