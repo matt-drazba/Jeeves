@@ -157,11 +157,17 @@ SQLite is the system of record — **ha-poolchem is not being installed** — an
       (quantization steps −0.11/0.00/+0.11, 60 of 102 at exactly zero). The old
       0.3 came from one 2026-08-05 spot reading that no longer reproduces.
       Note this had been masking the HX L3, which fires on ΔT ≤ 0.
-- [ ] **Re-check the offset across a wider water-temp range.** The zeroing used
-      only ~3.5 h in a narrow 79.1–79.6°F band. If the probe gap tracks water
-      temperature rather than staying flat, replace the single offset with a
-      `calibrate_linear` two-point fit. `pool_heat_samples` now logs
-      continuously, so this answers itself over the next few weeks.
+- [ ] **Re-check the offset across a wider water-temp range.** Checked
+      2026-08-08 against 102 heat-off samples spanning 78.5–81.1°F: mean gap
+      **−0.005°F**, confirming the zero. Least-squares slope was **−0.059°F of
+      gap per °F of water**, i.e. −0.15°F across the observed span — about 1.4
+      LSB. Suggestive of mild negative drift but **not conclusive**: only 2.6°F
+      of range, the gap takes just four quantized values (0.19/0.30/0.41/0.53
+      pre-offset), the extreme buckets hold 5–12 samples, and water temp is
+      strongly correlated with time of day, so slow time drift would look
+      identical. Re-run over a season before committing to `calibrate_linear`;
+      if the slope holds at ~−0.06, it is worth roughly 0.5°F across a 70–85°F
+      range, which matters for BTU/hr once the flow meter lands.
 - [ ] **Watch the HX L3 now that it is genuinely armed.** It has never been able
       to fire. If a legitimate low-stage compressor run quantizes to 0.00 or
       −0.11 for 20 minutes it will alert; the fix is a threshold clearly below
