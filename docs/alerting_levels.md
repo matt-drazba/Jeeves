@@ -92,7 +92,7 @@ Status: **live** = built and verified · **planned** = designed, not built ·
 
 | Thing | The physical action | Status |
 |---|---|---|
-| Booster still on after HA tried to kill it | **Kill the breaker for the sweep circuit** | planned — verification step not yet built |
+| Booster still on after HA tried to kill it | **Kill the breaker for the sweep circuit** | **live** |
 | Water leak detected | Shut the main supply valve | planned — no sensors |
 | Freeze risk at the pool pad | Force circulation, or drain | planned — winter |
 | Smoke / CO | Leave the house | planned — no sensors |
@@ -108,14 +108,15 @@ the Tuya app. Unconfirmed kill = still being destroyed = Level 1.
 
 | Thing | Status |
 |---|---|
-| Booster dry run **caught and successfully killed** | **live** (delivery needs adjusting to L2) |
-| Main pump off during its 9pm–4pm window | **live** (delivery needs adjusting to L2) |
+| Booster dry run **caught and successfully killed** | **live** |
+| Main pump off during its 9pm–4pm window | **live** |
 | Heat recovery pump failure | planned |
 | HA / Pi offline seen from outside the house | **blocked** — see blind spot |
 
-Both live alerts currently deliver as Level 1 critical alerts. Under this ladder
-they should not — neither one is worth waking you, because in both cases the
-damage has already stopped.
+Both deliver as a normal push immediately, plus a 7am re-raise if still
+unacknowledged. The open-alert flags clear **only** on Acknowledge, never on
+recovery — so a pump that trips at 2am and self-heals by 4am still surfaces at
+breakfast. A fault that fixed itself is still a fault you should know about.
 
 ### Level 3 — handle it when you get home
 
