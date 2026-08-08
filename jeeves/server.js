@@ -638,6 +638,11 @@ const POOL_EXTRA_ENTITIES = {
   sweepRan:  'input_boolean.sweep_ran_tonight',
 };
 
+// Pump energized but water not moving = running against a closed valve. Normal
+// operation is 45-60 GPM (docs/pool_heat_recovery.md), so this is far below any
+// legitimate reading and only trips on a hard stop, not on "low".
+const FLOW_DEADHEAD_GPM = 10;
+
 async function fetchPoolStatus() {
   if (!HA_TOKEN) return;
   try {
@@ -650,17 +655,42 @@ async function fetchPoolStatus() {
     const deltaF  = !isNaN(hxInF) && !isNaN(hxOutF) ? +(hxOutF - hxInF).toFixed(1) : null;
     const heatActive = s('active') === 'on';
 
+    // "No meter installed" and "meter reading zero" must NEVER be conflated.
+    //
+    // An unconnected pulse counter reports a real 0, not 'unavailable', so they
+    // look identical from here — but they mean opposite things. Once the meter is
+    // in, pump drawing current + zero flow is a DEADHEAD: the pump is running
+    // against a closed valve, which damages the filter. Inferring "must be no
+    // meter" from a zero would mask precisely that fault, so it takes an explicit
+    // flag. Set POOL_FLOW_METER_INSTALLED=true in ~/homelab/.env on install day.
+    const FLOW_METER_INSTALLED = process.env.POOL_FLOW_METER_INSTALLED === 'true';
+    const rawFlow = haNum(s('flow'));
+    const pumpRunning = lastPumpWatts > POOL_PUMP_WATTS_THRESHOLD;
+
+    let flowStatus;   // 'no_meter' | 'deadhead' | 'ok'
+    if (!FLOW_METER_INSTALLED) flowStatus = 'no_meter';
+    else if (isNaN(rawFlow)) flowStatus = 'no_meter';
+    // Conservative: multiply: 0.02201 in pool-pad.yaml is theoretical and
+    // uncalibrated, so this only catches a hard zero-ish reading, not "low".
+    // Recalibrate against the Blue-White gauge before tightening it.
+    else if (pumpRunning && rawFlow < FLOW_DEADHEAD_GPM) flowStatus = 'deadhead';
+    else flowStatus = 'ok';
+
+    const flowLive = FLOW_METER_INSTALLED && !isNaN(rawFlow);
+
     cachedStatus.pool = {
+      flowStatus,
       waterTempF: isNaN(hxInF) ? null : +hxInF.toFixed(1),
       hxInF:      isNaN(hxInF) ? null : +hxInF.toFixed(1),
       hxOutF:     isNaN(hxOutF) ? null : +hxOutF.toFixed(1),
       deltaF,
       heatActive,
-      flowGpm:    isNaN(haNum(s('flow'))) ? null : +haNum(s('flow')).toFixed(1),
-      btuHr:      isNaN(haNum(s('btu')))  ? null : Math.round(haNum(s('btu'))),
+      flowLive,
+      flowGpm:    flowLive ? +rawFlow.toFixed(1) : null,
+      btuHr:      flowLive && !isNaN(haNum(s('btu'))) ? Math.round(haNum(s('btu'))) : null,
       padOnline,
+      pumpRunning,
       pumpWatts:  isNaN(lastPumpWatts) ? null : Math.round(lastPumpWatts),
-      pumpRunning: lastPumpWatts > POOL_PUMP_WATTS_THRESHOLD,
       sweepOn:     s('sweep') === 'on',
       sweepRanTonight: s('sweepRan') === 'on',
     };
