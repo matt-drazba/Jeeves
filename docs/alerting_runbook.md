@@ -49,14 +49,18 @@ those hours, which is the entire reason it means anything.
 
 ### "GARAGE WILL NOT CLOSE"
 
-**Do this: go clear the doorway, then close it by hand or with the wall button.**
-
 HA tried twice to close the garage and could not confirm it reached closed. The
-overwhelmingly likely cause is something breaking the opener's safety beam and
-driving the door back open. The house is open until someone fixes it.
+house is open until someone fixes it.
 
-If the doorway is visibly clear, check the photo-eye alignment at floor level —
-a knocked sensor produces exactly the same symptom.
+**The message tells you which of two different problems this is**, because the
+photo-eye beam sensor is wired and reporting:
+
+- **"THE SAFETY BEAM IS BLOCKED"** → something is in the doorway and the opener
+  keeps reversing. Go clear it, then close the door.
+- **"The safety beam is CLEAR"** → this is *not* something in the way. Look at
+  the opener itself, the door track, or the photo-eye alignment — a knocked
+  sensor reads clear while still refusing to let the door close. Close it by
+  hand or with the wall button.
 
 **Everything else in the house is quiet by design and can wait for morning.**
 

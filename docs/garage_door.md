@@ -22,19 +22,34 @@ it is putting the wall-panel polling bytes `38 / 39 / 3A` on the bus and getting
 `Light state` and `Lock state` back. (An earlier note had it sitting on the bench with
 "looking for security+ 1.0 wall panel" in the log — that is stale.)
 
-### Two entities that are traps
+### Sensor status
 
-The device exposes more than it can actually sense. **Do not build on either of these:**
+| Entity | Status | Used for |
+|---|---|---|
+| `cover.garage_door` | **Verified live** | Everything. The primary signal. |
+| `binary_sensor.garage_obstruction` | **Verified working 2026-08-10** | Explaining *why* a close failed, and not driving the door into an already-blocked beam. |
+| `binary_sensor Motion` | **Expected dead — untested** | Nothing. |
 
-| Entity | Why it lies |
-|---|---|
-| `binary_sensor Motion` | Security+ 1.0 motion comes from a motion-equipped wall panel. ratgdo is *replacing* the panel, not listening to one — so this sits `OFF` forever. Any "door open but nobody's in there" logic built on it would never fire. |
-| `binary_sensor Obstruction` | A separate wire to the opener's obstruction terminal, which may never have been landed. It reads `OFF`, and an always-clear obstruction sensor is a **fake safety condition** — worse than none, because it looks like a real check. |
+**The obstruction sensor works.** Proven on 2026-08-10 by streaming the device's own
+event feed while a hand was waved through the photo-eye beam: `OFF → ON → OFF → ON →
+OFF`, two clean transitions.
 
-Everything is therefore built on `cover.garage_door` alone. An obstruction is detected
-the way it actually manifests: the door starts closing, the opener's own photo-eyes
-reverse it, and it never reaches `closed`. That is visible from the cover state
-regardless of whether the obstruction wire exists.
+An earlier revision of this doc called that wire "possibly never landed" and refused to
+use the sensor. **That was wrong, and the mistake is worth keeping written down:** a
+static read of `OFF` is exactly what a correctly wired, unobstructed sensor reports.
+*"Working"* and *"disconnected"* are indistinguishable at rest. The only way to tell is
+to make the thing it measures actually happen and watch the value change — which costs
+about ten seconds.
+
+**Motion is expected not to work**, because Security+ 1.0 motion comes from a
+motion-equipped wall panel and ratgdo is *replacing* the panel rather than listening to
+one. That is an **expectation, not a measurement** — it has not been tested the way
+obstruction was. If it ever reports `ON`, revisit it. To test: stream
+`http://192.168.0.230/events`, walk under the opener, watch `binary_sensor-motion`.
+
+The door state stays the primary signal regardless. A reversal shows up as the door
+starting to close and never reaching `closed`, which is true whether or not the beam
+sensor agrees.
 
 ### Safety note
 
@@ -173,7 +188,7 @@ overnight watchdogs still catch it.
 | Alert | What it means | What to do |
 |---|---|---|
 | **GARAGE OPENED AT hh:mm** | The door left `closed` overnight and HA did not command it | Do not walk out blind. Account for everyone in the house; call 911 if you cannot. Close it from your phone once clear. If it was a legitimate remote or keypad use, acknowledge and consider narrowing the window. |
-| **GARAGE WILL NOT CLOSE** | Two close commands sent, neither confirmed | Almost always something breaking the safety beam. Clear the doorway, close it by hand or with the wall button. If the doorway is clear, check the photo-eye alignment — a knocked sensor gives the same symptom. |
+| **GARAGE WILL NOT CLOSE** | Two close commands sent, neither confirmed | **Read the message — it tells you which problem it is.** "THE SAFETY BEAM IS BLOCKED" → go clear the doorway. "The safety beam is CLEAR" → it is not something in the way; look at the opener, the door track, or the photo-eye alignment. Either way the house is open until you close it by hand. |
 | **Garage has been open N minutes** | Open >15 min during the day | Close it, or confirm someone is out there. Acknowledge to stop the repeats. |
 | **Garage controller offline** | ratgdo silent 30 min | `http://192.168.0.230`. If unreachable, power-cycle it. Red LED is a hardwired power indicator, not an error — blue is status. Nothing is watching the garage until it returns, including the overnight close. |
 

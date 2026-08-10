@@ -12,21 +12,25 @@
 # event stream (polling bytes 38/39/3A on the bus, Light and Lock state coming
 # back).
 #
-# TWO ENTITIES ON THAT DEVICE ARE TRAPS. Do not build on either:
+# binary_sensor Obstruction IS REAL AND WORKS. Verified 2026-08-10 by streaming
+# the device's events while a hand was waved through the photo-eye beam:
+# OFF -> ON -> OFF -> ON -> OFF, two clean transitions. An earlier revision of
+# this file called it a possibly-unlanded wire and refused to use it. That was
+# wrong, and the reasoning is worth remembering: a static read of OFF is exactly
+# what a correctly wired, unobstructed sensor reports. "Sensor works" and "sensor
+# is disconnected" are indistinguishable at rest — the only way to tell is to
+# make the thing it measures actually happen and watch it change.
 #
-#   binary_sensor Motion      — exists, will never fire. Security+ 1.0 motion
-#                               comes from a motion-equipped wall panel, and
-#                               ratgdo is REPLACING the panel, not listening to
-#                               one. It sits OFF forever.
-#   binary_sensor Obstruction — a separate wire to the opener's obstruction
-#                               terminal, which may not be landed. It reads OFF,
-#                               and an always-clear obstruction sensor is a fake
-#                               safety condition.
+# binary_sensor Motion is a different story and is NOT used below. Security+ 1.0
+# motion comes from a motion-equipped wall panel, and ratgdo is REPLACING the
+# panel rather than listening to one, so there is nothing to source it. Note
+# this is an EXPECTATION, not a measurement — it has not been tested the way the
+# obstruction sensor was. If it ever reports ON, revisit it.
 #
-# So everything below is built on `cover.garage_door` alone, and an obstruction
-# is detected the way it actually shows up: the door starts closing, the
-# opener's own photo-eyes reverse it, and it never reaches `closed`. That is
-# observable regardless of whether the obstruction wire exists.
+# The door state itself remains the primary signal: a reversal shows up as the
+# door starting to close and never reaching `closed`, which is true whether or
+# not the beam sensor agrees. Obstruction is used to explain WHY, and to avoid
+# driving the door into a beam that is already blocked.
 #
 # Levels per docs/alerting_levels.md — the level is WHEN YOU MUST ACT:
 #
@@ -186,6 +190,19 @@ script:
       - variables:
           attempted_at: "{{ now().strftime('%-I:%M %p') }}"
 
+      # Beam already broken? Almost always transient — someone walking out, a
+      # cat, a bin in the way that is about to move. Give it two minutes to
+      # clear rather than driving the door straight into a reversal.
+      - if:
+          - condition: state
+            entity_id: binary_sensor.garage_obstruction
+            state: "on"
+        then:
+          - wait_template: >
+              {{ is_state('binary_sensor.garage_obstruction', 'off') }}
+            timeout: "00:02:00"
+            continue_on_timeout: true
+
       - service: cover.close_cover
         target:
           entity_id: cover.garage_door
@@ -240,14 +257,25 @@ script:
               entity_id: input_boolean.alert_open_garage_close_failed
           - repeat:
               sequence:
+                # The beam sensor is what makes this message worth reading at
+                # 3am: it says whether to go look at the DOORWAY or at the
+                # OPENER. Without it the alert could only guess, and the two
+                # have completely different responses.
                 - service: script.critical_alert
                   data:
                     title: "GARAGE WILL NOT CLOSE"
                     message: >
                       Tried twice starting at {{ attempted_at }} and the door is
-                      still {{ states('cover.garage_door') }}. Most likely
-                      something is breaking the safety beam and driving it back
-                      open. GO OUT, CLEAR THE DOORWAY, AND CLOSE IT BY HAND.
+                      still {{ states('cover.garage_door') }}.
+                      {% if is_state('binary_sensor.garage_obstruction', 'on') %}
+                      THE SAFETY BEAM IS BLOCKED — something is in the doorway
+                      and the opener keeps reversing. GO CLEAR THE DOORWAY, then
+                      close it.
+                      {% else %}
+                      The safety beam is CLEAR, so this is not something in the
+                      way — look at the opener itself, the door track, or the
+                      photo-eye alignment. CLOSE IT BY HAND.
+                      {% endif %}
                       The house is open until you do.
                     tag: "garage-close-failed"
                     ack_action: "ACK_GARAGE_CLOSE_FAILED"
