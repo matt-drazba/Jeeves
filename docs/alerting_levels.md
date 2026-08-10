@@ -98,11 +98,20 @@ Status: **live** = built and verified · **planned** = designed, not built ·
 | Thing | The physical action | Status |
 |---|---|---|
 | Booster still on after HA tried to kill it | **Kill the breaker for the sweep circuit** | **live** |
+| Garage opened 10pm–6am with no command from HA | **Account for everyone in the house; call 911 if you can't. Close it from your phone once clear** | **live** |
+| Garage auto-close could not be confirmed | **Clear the doorway and close it by hand** | **live** |
 | Water leak detected | Shut the main supply valve | planned — no sensors |
 | Smoke / CO | Leave the house | planned — no sensors |
 
 **Freeze protection is deliberately absent.** This location does not get cold
 enough to threaten the pad or the plumbing. Do not propose it.
+
+The two garage entries widen Level 1 beyond destruction, and that was a
+deliberate ruling (2026-08-10): **"the house is not protected" belongs here.**
+Nothing is being destroyed, but an open house at 3am does not improve on its
+own and only a person can fix it — which is the same shape as the booster. Both
+messages name the physical action, which is the actual bar. See
+[garage_door.md](garage_door.md).
 
 The booster is the archetype and shows why verification matters. A dry PB4-60
 destroys its seal and impeller within minutes, and a dry centrifugal pump draws
@@ -117,6 +126,7 @@ the Tuya app. Unconfirmed kill = still being destroyed = Level 1.
 |---|---|
 | Booster dry run **caught and successfully killed** | **live** |
 | Main pump off during its 9pm–4pm window | **live** |
+| Garage door open >15 min between 6am and 9:15pm | **live** |
 | Heat recovery pump failure | planned |
 | HA / Pi offline seen from outside the house | **not building** — see blind spot |
 
@@ -131,6 +141,7 @@ breakfast. A fault that fixed itself is still a fault you should know about.
 |---|---|
 | Pool pad ESP node offline >30 min | **live** |
 | Shelly EM pump meter offline >30 min | **live** |
+| Garage controller (ratgdo) offline >30 min | **live** |
 | Sweep did not run tonight | **live** |
 | Heat exchanger calling but ΔT ≤ 0 | **live** |
 | Filter pressure above clean baseline → backwash due | blocked — transducer |

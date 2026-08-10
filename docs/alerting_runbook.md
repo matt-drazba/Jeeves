@@ -1,8 +1,10 @@
 # Alerting Runbook — what to do when your phone goes off
 
-Last updated: 2026-08-08. This is the **operator manual**. For *why* the levels
+Last updated: 2026-08-10. This is the **operator manual**. For *why* the levels
 are what they are, see [alerting_levels.md](alerting_levels.md). Implementation
-is `homeassistant/packages/jeeves_alerts.yaml`.
+is `homeassistant/packages/jeeves_alerts.yaml` and
+`homeassistant/packages/jeeves_garage.yaml`. Garage specifics:
+[garage_door.md](garage_door.md).
 
 Every command below runs **on the Pi**, from `~/homelab`.
 
@@ -10,8 +12,8 @@ Every command below runs **on the Pi**, from `~/homelab`.
 
 ## If your phone is alarming right now
 
-**Full volume, through silent mode, repeating every 5 minutes** — that is the
-only Level 1 alert in the house:
+**Full volume, through silent mode, repeating every 5 minutes.** There are three
+Level 1 alerts in the house. Read the title:
 
 ### "POOL BOOSTER RUNNING DRY"
 
@@ -30,7 +32,33 @@ Then, once the breaker is off:
 2. Fix that before restoring the sweep breaker.
 3. Acknowledge the alert to stop the repeats.
 
-Everything else in the house is quiet by design and can wait for morning.
+### "GARAGE OPENED AT hh:mm"
+
+**Do this: do not walk out there blind.** The garage door opened between 10pm and
+6am and HA did not command it — not Siri, not the app, not the dashboard.
+
+1. Account for everyone in the house first.
+2. If you cannot, call 911. Do not go and look.
+3. Once you know it's clear, close it from your phone.
+4. Acknowledge to stop the repeats.
+
+A car remote and a keypad are invisible to HA and look identical to a stranger
+from here. If it was one of yours, acknowledge and consider narrowing the window
+— but do **not** demote this alert. Nobody in this house opens the garage in
+those hours, which is the entire reason it means anything.
+
+### "GARAGE WILL NOT CLOSE"
+
+**Do this: go clear the doorway, then close it by hand or with the wall button.**
+
+HA tried twice to close the garage and could not confirm it reached closed. The
+overwhelmingly likely cause is something breaking the opener's safety beam and
+driving the door back open. The house is open until someone fixes it.
+
+If the doorway is visibly clear, check the photo-eye alignment at floor level —
+a knocked sensor produces exactly the same symptom.
+
+**Everything else in the house is quiet by design and can wait for morning.**
 
 ---
 
@@ -44,6 +72,7 @@ Arrives as a normal push, re-raised at **7:00am** until acknowledged.
 |---|---|---|
 | **"Pool sweep shut off — booster was running dry"** | Booster was on with no pump; HA killed the switch and confirmed it. The pump is safe. | Find out why the main pump wasn't running before sweeping again. |
 | **"Pool pump is off"** | Under 20 W for 15 min during the 9pm–4pm run window. | Check the breaker and the pump. No filtration or heat recovery until it's back. |
+| **"Garage has been open N minutes"** | Open >15 min between 6am and 9:15pm. Repeats every 15 min, four times. | Close it, or confirm someone is out there using it. HA will never close it during the day on purpose. |
 
 ### Level 3 — handle it when you get home
 
@@ -55,6 +84,7 @@ Arrives as a normal push, re-raised at **9:15pm** until acknowledged.
 | **"Pool pad node offline"** | The ESP hasn't reported in 30 min. | Power-cycle it. HX temps, flow and BTU are dark until it's back. |
 | **"Pool pump meter offline"** | The Shelly EM hasn't reported in 30 min. | Power-cycle it. **The sweep will not run** while it's down — the booster kill fails closed. |
 | **"Heat exchanger is not transferring heat"** | Heat recovery is calling but the outlet is no warmer than the inlet. | Check the FPH pump and the pad valves. |
+| **"Garage controller offline"** | The ratgdo hasn't reported in 30 min. | `http://192.168.0.230`, then power-cycle. **Nothing is watching the garage** until it's back — no overnight close, no left-open warning, no intrusion alert. Red LED is a power indicator, not an error. |
 
 ---
 
@@ -85,6 +115,10 @@ The flags, one per alert:
 | Pad node offline (L3) | `input_boolean.alert_open_pad_offline` |
 | Pump meter offline (L3) | `input_boolean.alert_open_meter_offline` |
 | HX not transferring (L3) | `input_boolean.alert_open_hx_no_transfer` |
+| Garage opened overnight (L1) | `input_boolean.alert_open_garage_night_open` |
+| Garage would not close (L1) | `input_boolean.alert_open_garage_close_failed` |
+| Garage left open (L2) | `input_boolean.alert_open_garage_open_daytime` |
+| Garage controller offline (L3) | `input_boolean.alert_open_garage_node_offline` |
 
 See everything currently open:
 
@@ -152,7 +186,14 @@ cd ~/homelab && git pull && docker exec homeassistant python -m homeassistant --
 **`check_config` passing does not mean it works.** It validates syntax, not
 whether entities were created or an automation can fire. `verify-alerts.py` is
 the real gate — it checks every entity, automation id, and notify service the
-package references against what HA actually has. Want `PASS`.
+packages reference against what HA actually has. Want `PASS`.
+
+As of 2026-08-10 it scans **every** `.yaml` under `homeassistant/packages/`, not
+just `jeeves_alerts.yaml`. Scanning one hardcoded file was itself an instance of
+the blind spot the script exists to close — a second package could have shipped
+pointing at an entity that was never registered and this would still have printed
+`PASS`. Full-line comments are stripped before scanning, so prose is free to name
+entities that were deliberately deleted.
 
 Changes under `jeeves/` need a rebuild instead — `docker restart` will not pick
 them up:
@@ -212,3 +253,35 @@ cd ~/homelab && docker exec jeeves node -e "const db=require('better-sqlite3')('
 Testing the booster kill for real means stopping the main pump with the sweep on,
 which is the exact damage scenario. Don't. The kill path was verified by
 triggering the automation directly on 2026-08-07.
+
+### Garage
+
+Most of it tests for real, cheaply — just open the door and wait.
+
+| Test | How | Expect |
+|---|---|---|
+| Daytime watchdog | Open it at midday, leave it | Push at 15 min, again at 30/45/60 |
+| Night warning + snooze | Open it at ~9:20pm, wait 5 min | Warning push; tap **Leave it open 1 hour**; nothing moves; warning returns ~60 min later |
+| Night auto-close | Same, but ignore the push | Door closes at +10 min, confirmation push naming the time |
+| Closed by hand mid-warning | Same, but close it yourself | Silence — no confirmation, no alert |
+| Controller offline | Unplug the ratgdo, wait 35 min | L3 push |
+
+**The overnight intrusion L1 is the one to test carefully.** Do not open the door
+with a remote at 11pm just to see it fire, unless you want the critical alert.
+Test the *plumbing* instead by firing the script directly, as with the pool L1
+above, using `ack_action` of `ACK_GARAGE_NIGHT_OPEN`.
+
+To confirm the suppression works, open the door via Siri or the Home app during
+the window and check the latch caught it:
+
+```bash
+cd ~/homelab && curl -s -H "Authorization: Bearer $(grep '^HA_TOKEN=' .env | cut -d= -f2-)" http://localhost:8123/api/states/timer.garage_expected_open | python3 -c "import sys,json; print(json.load(sys.stdin)['state'])"
+```
+
+`active` right after the command means an HA-initiated open will not alert.
+`idle` means it will — check that the service call carried `entity_id` rather
+than an area or device target.
+
+**"Garage will not close" cannot be tested without jamming the door.** Its
+command → verify → retry → escalate structure is copied from the booster kill,
+which has been exercised. That is the honest extent of the assurance.

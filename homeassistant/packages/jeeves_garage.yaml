@@ -1,0 +1,682 @@
+# Jeeves — garage door
+#
+# Deploy: lives at ~/homelab/homeassistant/packages/jeeves_garage.yaml on the Pi,
+# arrives via `git pull`. configuration.yaml has:
+#
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# Hardware: ratgdo32 (ESP32) at 192.168.0.230, ESPHome firmware, ESPHome API on
+# 6053 with no noise key, auto-discovered by HA. Talks Security+ 1.0 to the
+# opener by EMULATING the wall panel — verified 2026-08-10 from the device's own
+# event stream (polling bytes 38/39/3A on the bus, Light and Lock state coming
+# back).
+#
+# TWO ENTITIES ON THAT DEVICE ARE TRAPS. Do not build on either:
+#
+#   binary_sensor Motion      — exists, will never fire. Security+ 1.0 motion
+#                               comes from a motion-equipped wall panel, and
+#                               ratgdo is REPLACING the panel, not listening to
+#                               one. It sits OFF forever.
+#   binary_sensor Obstruction — a separate wire to the opener's obstruction
+#                               terminal, which may not be landed. It reads OFF,
+#                               and an always-clear obstruction sensor is a fake
+#                               safety condition.
+#
+# So everything below is built on `cover.garage_door` alone, and an obstruction
+# is detected the way it actually shows up: the door starts closing, the
+# opener's own photo-eyes reverse it, and it never reaches `closed`. That is
+# observable regardless of whether the obstruction wire exists.
+#
+# Levels per docs/alerting_levels.md — the level is WHEN YOU MUST ACT:
+#
+#   L1 unexplained opening 10pm-6am     -> the house is open and nobody let them in
+#   L1 auto-close failed                -> the house is open and HA cannot shut it
+#   L2 open >15 min during the day      -> you probably drove off and left it up
+#   L3 controller offline >30 min       -> none of the above is protecting anything
+#
+# Both L1s are "the house is not protected" — the owner's ruling, 2026-08-10.
+# Neither is destruction in the pool-booster sense, but an open house at 3am is
+# the same shape of problem: it does not improve on its own, and only a person
+# can fix it. Both name the physical action, which is the L1 bar.
+#
+# SAFETY NOTE, stated plainly: there is NO AUDIBLE WARNING before the door moves
+# on auto-close. Security+ 1.0 through ratgdo does not trigger the opener's
+# beeper. The opener's floor-level photo-eyes still reverse the door on anything
+# in the way — those are code-required and independent of ratgdo — but the only
+# warning a person gets is the push notification 10 minutes earlier.
+
+# ===========================================================================
+# Helpers
+# ===========================================================================
+input_boolean:
+  # "Open" = this alert fired and has not been acknowledged. Cleared only by
+  # tapping Acknowledge, same convention as the pool alerts, so a garage that
+  # was open at 2am and closed by 3am still surfaces at breakfast.
+  alert_open_garage_night_open:
+    name: Open Alert - Garage Opened Overnight
+    icon: mdi:garage-alert-variant
+
+  alert_open_garage_close_failed:
+    name: Open Alert - Garage Would Not Close
+    icon: mdi:garage-alert
+
+  alert_open_garage_open_daytime:
+    name: Open Alert - Garage Left Open
+    icon: mdi:garage-open-variant
+
+  alert_open_garage_node_offline:
+    name: Open Alert - Garage Controller Offline
+    icon: mdi:lan-disconnect
+
+timer:
+  # Snooze for the overnight auto-close. A TIMER, deliberately, not an
+  # input_boolean: it expires on its own. input_boolean.pool_maintenance was
+  # deleted 2026-08-08 for exactly the failure an input_boolean would reproduce
+  # here — a mute that waits to be remembered and silently disables the thing
+  # protecting you. docs/alerting_levels.md: "any future mute must expire on
+  # its own."
+  garage_autoclose_snooze:
+    name: Garage Auto-Close Snoozed
+    duration: "01:00:00"
+    restore: true
+
+  # Set whenever HA/Siri/HomeKit/the dashboard commands the door open, so the
+  # overnight intrusion alert can tell "I opened this" from "something opened
+  # this". 3 minutes covers the service call, the ESPHome round trip, and the
+  # door's travel time.
+  #
+  # This is the ONLY suppression. A car remote or a keypad is invisible to HA
+  # and will trip the L1 — accepted deliberately 2026-08-10, because nobody in
+  # this house opens the garage between 10pm and 6am.
+  garage_expected_open:
+    name: Garage Open Was Expected
+    duration: "00:03:00"
+    restore: true
+
+# ===========================================================================
+# Problem detectors
+# ===========================================================================
+template:
+  - binary_sensor:
+      # ---------------------------------------------------------------------
+      # The one primitive everything else is built on.
+      #
+      # has_value guard first, and NOT "state == open": an unavailable cover
+      # must read as "not open" here so a rebooting ESP routes to the OFFLINE
+      # alert instead of the open ones. Getting this backwards would command a
+      # close against a dead device, fail to verify it, and fire an L1 critical
+      # alert at 3am because the Wi-Fi blipped. "Door open" and "controller
+      # dead" are different problems with different fixes.
+      #
+      # Compares against 'closed' rather than 'open' so a door stuck mid-travel
+      # (opening/closing) still counts as open, which is the honest reading.
+      # ---------------------------------------------------------------------
+      - name: "Garage Door Open"
+        unique_id: garage_door_open
+        device_class: garage_door
+        state: >
+          {{ has_value('cover.garage_door')
+             and not is_state('cover.garage_door', 'closed') }}
+
+      # ---------------------------------------------------------------------
+      # L1 path, night window. Open past 9:15pm and still open 5 minutes later.
+      #
+      # 9:15pm matches the existing L3 re-raise and the dishwasher nudge — the
+      # hour the house is already answering questions.
+      # ---------------------------------------------------------------------
+      - name: "Garage Open Late"
+        unique_id: garage_open_late
+        device_class: problem
+        delay_on: "00:05:00"
+        state: >
+          {{ is_state('binary_sensor.garage_door_open', 'on')
+             and (now() >= today_at('21:15') or now() < today_at('06:00')) }}
+
+      # ---------------------------------------------------------------------
+      # L2 path, day window. Deliberately disjoint from the night window above
+      # so the two rules can never both fire on the same open door.
+      #
+      # 15 minutes is high-signal here specifically because of how this garage
+      # is used — the door is only open while a car is coming or going (owner,
+      # 2026-08-10). In a house where the door gets propped open for yard work
+      # this threshold would be pure nuisance.
+      # ---------------------------------------------------------------------
+      - name: "Garage Open Too Long"
+        unique_id: garage_open_too_long
+        device_class: problem
+        delay_on: "00:15:00"
+        state: >
+          {{ is_state('binary_sensor.garage_door_open', 'on')
+             and today_at('06:00') <= now() < today_at('21:15') }}
+
+      # ---------------------------------------------------------------------
+      # L3 — liveness. Every rule above stops protecting anything the moment
+      # this entity goes unavailable, and a dead ratgdo looks exactly like a
+      # closed garage: silent, and indistinguishable from everything being fine.
+      #
+      # 30-minute debounce rides out a Wi-Fi blip or an HA restart.
+      # ---------------------------------------------------------------------
+      - name: "Garage Node Offline"
+        unique_id: garage_node_offline
+        device_class: problem
+        delay_on: "00:30:00"
+        state: "{{ not has_value('cover.garage_door') }}"
+
+# ===========================================================================
+# Scripts
+# ===========================================================================
+script:
+  # -------------------------------------------------------------------------
+  # Close the door and PROVE it closed. Same shape as the pool booster kill:
+  # command, verify, retry, and escalate when the result cannot be confirmed.
+  #
+  # The retry is what catches an obstruction. A door that reverses on the
+  # safety photo-eyes goes open -> closing -> open and simply never reaches
+  # `closed`, which is visible here whether or not the obstruction wire was
+  # ever landed on the ratgdo.
+  # -------------------------------------------------------------------------
+  garage_close_verified:
+    alias: "Garage: close and verify"
+    description: >
+      Closes the garage, confirms it reached CLOSED, retries once, and raises
+      an L1 if it still cannot be confirmed. Called by the overnight auto-close.
+    mode: single
+    sequence:
+      - variables:
+          attempted_at: "{{ now().strftime('%-I:%M %p') }}"
+
+      - service: cover.close_cover
+        target:
+          entity_id: cover.garage_door
+      - wait_template: "{{ is_state('cover.garage_door', 'closed') }}"
+        timeout: "00:01:00"
+        continue_on_timeout: true
+
+      - if:
+          - condition: template
+            value_template: "{{ not is_state('cover.garage_door', 'closed') }}"
+        then:
+          # Long enough for a reversal to finish travelling back up, so the
+          # second command is not swallowed mid-motion.
+          - delay: "00:00:20"
+          - service: cover.close_cover
+            target:
+              entity_id: cover.garage_door
+          - wait_template: "{{ is_state('cover.garage_door', 'closed') }}"
+            timeout: "00:01:00"
+            continue_on_timeout: true
+
+      - choose:
+          # -----------------------------------------------------------------
+          # Confirmed closed. Informational push, no open-alert flag — the
+          # automation fixed the problem and there is nothing left to do. A
+          # flag here would make the dashboard's alert count lie.
+          # -----------------------------------------------------------------
+          - conditions:
+              - condition: template
+                value_template: "{{ is_state('cover.garage_door', 'closed') }}"
+            sequence:
+              - service: notify.mobile_app_matt_drazba_s_iphone
+                data:
+                  title: "Garage closed"
+                  message: >
+                    It was still open at {{ attempted_at }}. Closed and
+                    confirmed.
+                  data:
+                    tag: garage-autoclose
+
+        # -------------------------------------------------------------------
+        # L1 — two commands sent, neither confirmed, and the house is open.
+        # HA has run out of ways to fix this and only a person can.
+        #
+        # The repeat stops when the door reaches closed (the house is secure,
+        # stop screaming) but the FLAG stays open until Acknowledge, so it is
+        # still there in the morning. Those are two different questions.
+        # -------------------------------------------------------------------
+        default:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.alert_open_garage_close_failed
+          - repeat:
+              sequence:
+                - service: script.critical_alert
+                  data:
+                    title: "GARAGE WILL NOT CLOSE"
+                    message: >
+                      Tried twice starting at {{ attempted_at }} and the door is
+                      still {{ states('cover.garage_door') }}. Most likely
+                      something is breaking the safety beam and driving it back
+                      open. GO OUT, CLEAR THE DOORWAY, AND CLOSE IT BY HAND.
+                      The house is open until you do.
+                    tag: "garage-close-failed"
+                    ack_action: "ACK_GARAGE_CLOSE_FAILED"
+                - delay: "00:05:00"
+              while:
+                - condition: state
+                  entity_id: input_boolean.alert_open_garage_close_failed
+                  state: "on"
+                - condition: template
+                  value_template: >
+                    {{ not is_state('cover.garage_door', 'closed') }}
+                - condition: template
+                  value_template: "{{ repeat.index < 12 }}"
+
+  # -------------------------------------------------------------------------
+  # Target of the "Hey Siri, garage down" iOS Shortcut. See docs/garage_door.md.
+  #
+  # Plain close, NOT garage_close_verified. Saying this out loud means you are
+  # standing there watching it, so a reversal is something you can see; routing
+  # it through the verified path would fire a critical alert while you are
+  # looking straight at the problem. If it fails and you drive away anyway, the
+  # daytime and overnight watchdogs still catch it.
+  # -------------------------------------------------------------------------
+  garage_close:
+    alias: "Garage: close"
+    description: >
+      One-shot close for the iOS Shortcut. Deliberately unverified — see the
+      comment above.
+    mode: single
+    sequence:
+      - service: cover.close_cover
+        target:
+          entity_id: cover.garage_door
+
+# ===========================================================================
+# Automations
+# ===========================================================================
+automation:
+  # -------------------------------------------------------------------------
+  # Records that HA itself asked for the door to open, so the overnight
+  # intrusion alert below can stay quiet for Siri, the Home app, CarPlay, and
+  # the dashboard.
+  #
+  # Listens for the SERVICE CALL rather than the state change, because the call
+  # event fires the moment the command is issued — before the ESPHome round
+  # trip and well before the door starts moving. Doing it the other way round
+  # is a race that loses.
+  #
+  # entity_id in service_data can be a bare string or a list depending on the
+  # caller (HomeKit Bridge sends a string, the UI sends a list), so it is
+  # normalised before the membership test.
+  # -------------------------------------------------------------------------
+  - id: jeeves_garage_expected_open_latch
+    alias: "Garage: mark an HA-commanded open as expected"
+    mode: single
+    trigger:
+      - platform: event
+        event_type: call_service
+        event_data:
+          domain: cover
+          service: open_cover
+      - platform: event
+        event_type: call_service
+        event_data:
+          domain: cover
+          service: toggle
+      - platform: event
+        event_type: call_service
+        event_data:
+          domain: cover
+          service: set_cover_position
+    condition:
+      - condition: template
+        value_template: >
+          {% set sd = trigger.event.data.service_data | default({}, true) %}
+          {% set ents = sd.entity_id | default([], true) %}
+          {% set ents = [ents] if ents is string else ents %}
+          {{ 'cover.garage_door' in ents }}
+    action:
+      - service: timer.start
+        target:
+          entity_id: timer.garage_expected_open
+
+  # -------------------------------------------------------------------------
+  # L1 — the garage opened overnight and Home Assistant did not do it.
+  #
+  # Window is 10pm-6am (owner, 2026-08-10), deliberately narrower than the
+  # 9:15pm auto-close window: 9:15-10pm is still ordinary evening activity, and
+  # this is the alert that is allowed to wake the house.
+  #
+  # `from: closed` fires once on the closed -> opening edge. not_to excludes
+  # closed -> unavailable, which is the controller dying, not the door opening.
+  #
+  # L1 BUDGET: this should fire zero times a year. Nobody here opens the garage
+  # in that window. If it starts firing for legitimate arrivals, the fix is to
+  # narrow the window or add a suppression — NOT to demote it, and not to learn
+  # to ignore it. A noisy L1 is a bug in docs/alerting_levels.md.
+  # -------------------------------------------------------------------------
+  - id: jeeves_garage_night_open
+    alias: "Garage: unexplained opening overnight"
+    description: >
+      The door left CLOSED between 10pm and 6am without HA commanding it. A car
+      remote and a keypad look identical to a stranger from here, which is why
+      this is only armed in hours when nobody uses either.
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: cover.garage_door
+        from: "closed"
+        not_to:
+          - "unavailable"
+          - "unknown"
+    condition:
+      - condition: template
+        value_template: >
+          {{ now() >= today_at('22:00') or now() < today_at('06:00') }}
+      - condition: state
+        entity_id: timer.garage_expected_open
+        state: "idle"
+    action:
+      # Captured now, because the repeat loop below runs for up to an hour and
+      # now() inside it would report the wrong time.
+      - variables:
+          opened_at: "{{ now().strftime('%-I:%M %p') }}"
+
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.alert_open_garage_night_open
+
+      - repeat:
+          sequence:
+            - service: script.critical_alert
+              data:
+                title: "GARAGE OPENED AT {{ opened_at }}"
+                message: >
+                  The garage door opened at {{ opened_at }} and Home Assistant
+                  did not command it — not Siri, not the app. DO NOT WALK OUT
+                  THERE BLIND. Account for everyone in the house, and call 911
+                  if you cannot. Close it from your phone once you know it is
+                  clear.
+                tag: "garage-night-open"
+                ack_action: "ACK_GARAGE_NIGHT_OPEN"
+            - delay: "00:05:00"
+          while:
+            - condition: state
+              entity_id: input_boolean.alert_open_garage_night_open
+              state: "on"
+            - condition: template
+              value_template: "{{ repeat.index < 12 }}"
+
+  # -------------------------------------------------------------------------
+  # Overnight: warn, offer a snooze, then close it.
+  #
+  # The warning is a plain notify rather than script.normal_alert because there
+  # is nothing to acknowledge yet — same reasoning as jeeves_sweep_max_runtime:
+  # an Acknowledge button that clears nothing is a lie.
+  #
+  # Retriggering on timer.finished is what makes the snooze safe. A snooze that
+  # expires re-runs this whole sequence rather than quietly ending monitoring.
+  # -------------------------------------------------------------------------
+  - id: jeeves_garage_late_autoclose
+    alias: "Garage: warn, then close after 9:15pm"
+    description: >
+      Door open 5 minutes past 9:15pm. Pushes a 10-minute warning with Snooze
+      and Close Now buttons, then closes and verifies.
+    mode: single
+    max_exceeded: silent
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.garage_open_late
+        to: "on"
+      - platform: event
+        event_type: timer.finished
+        event_data:
+          entity_id: timer.garage_autoclose_snooze
+    condition:
+      # Re-checked because the timer.finished trigger can arrive long after the
+      # door was dealt with by hand.
+      - condition: state
+        entity_id: binary_sensor.garage_open_late
+        state: "on"
+      - condition: state
+        entity_id: timer.garage_autoclose_snooze
+        state: "idle"
+    action:
+      - service: notify.mobile_app_matt_drazba_s_iphone
+        data:
+          title: "Garage is still open"
+          message: >
+            {% set s = states.cover.garage_door %}
+            Open since
+            {{ (s.last_changed | as_local).strftime('%-I:%M %p')
+               if s else 'a while ago' }}. Closing it in 10 minutes.
+          data:
+            tag: garage-autoclose
+            actions:
+              - action: "GARAGE_SNOOZE"
+                title: "Leave it open 1 hour"
+              - action: "GARAGE_CLOSE_NOW"
+                title: "Close it now"
+
+      - wait_for_trigger:
+          - platform: state
+            entity_id: cover.garage_door
+            to: "closed"
+            id: closed_itself
+          - platform: event
+            event_type: mobile_app_notification_action
+            event_data:
+              action: "GARAGE_SNOOZE"
+            id: snoozed
+          - platform: event
+            event_type: mobile_app_notification_action
+            event_data:
+              action: "GARAGE_CLOSE_NOW"
+            id: close_now
+        timeout: "00:10:00"
+        continue_on_timeout: true
+
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >
+                  {{ wait.trigger is not none
+                     and wait.trigger.id == 'closed_itself' }}
+            sequence:
+              - stop: "Closed by hand while the warning was up. Nothing to say."
+
+          - conditions:
+              - condition: template
+                value_template: >
+                  {{ wait.trigger is not none
+                     and wait.trigger.id == 'snoozed' }}
+            sequence:
+              - service: timer.start
+                target:
+                  entity_id: timer.garage_autoclose_snooze
+              - stop: "Snoozed. Re-arms when the timer finishes."
+
+      # Timed out, or Close Now was tapped. Last look before commanding it —
+      # the door may have closed in the seconds since the wait ended.
+      - condition: template
+        value_template: "{{ not is_state('cover.garage_door', 'closed') }}"
+
+      - service: script.garage_close_verified
+
+  # -------------------------------------------------------------------------
+  # L2 — open too long during the day. ALERT ONLY; this never moves the door.
+  #
+  # Closing a door on someone unloading a truck is the "manual control is not a
+  # fault" trap. The overnight rule gets to act because at 11pm the door being
+  # open is almost certainly a mistake; at 2pm it is almost certainly a person.
+  # -------------------------------------------------------------------------
+  - id: jeeves_garage_open_daytime
+    alias: "Garage: left open during the day"
+    description: >
+      Open for 15 minutes between 6am and 9:15pm. Repeats every 15 minutes for
+      an hour, then leaves it to the 7am re-raise.
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.garage_open_too_long
+        to: "on"
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.alert_open_garage_open_daytime
+      - repeat:
+          sequence:
+            - service: script.normal_alert
+              data:
+                title: >
+                  Garage has been open {{ 15 * repeat.index }} minutes
+                message: >
+                  The garage door is still open. If you have left the house,
+                  nobody is going to close it.
+                tag: "garage-open-daytime"
+                ack_action: "ACK_GARAGE_OPEN_DAYTIME"
+            - delay: "00:15:00"
+          while:
+            - condition: state
+              entity_id: input_boolean.alert_open_garage_open_daytime
+              state: "on"
+            - condition: state
+              entity_id: binary_sensor.garage_open_too_long
+              state: "on"
+            - condition: template
+              value_template: "{{ repeat.index < 4 }}"
+
+  # -------------------------------------------------------------------------
+  # L3 — the controller went dark. Nothing is being damaged; the house has just
+  # gone blind on the garage. Structurally identical to jeeves_pool_sensor_offline.
+  # -------------------------------------------------------------------------
+  - id: jeeves_garage_node_offline
+    alias: "Garage: controller offline"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.garage_node_offline
+        to: "on"
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.alert_open_garage_node_offline
+      - service: script.normal_alert
+        data:
+          title: "Garage controller offline"
+          message: >
+            The ratgdo has not reported for 30 minutes. Nothing is watching the
+            garage — no overnight close, no left-open warning, and no alert if
+            it opens by itself. Check http://192.168.0.230 and power-cycle it.
+          tag: "garage-node-offline"
+          ack_action: "ACK_GARAGE_NODE_OFFLINE"
+
+  # -------------------------------------------------------------------------
+  # Acknowledge buttons for the garage alerts. Same one-automation-serves-all
+  # shape as jeeves_alert_acknowledged: trigger.id is the flag suffix.
+  # -------------------------------------------------------------------------
+  - id: jeeves_garage_alert_acknowledged
+    alias: "Garage: acknowledge button tapped"
+    mode: parallel
+    trigger:
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "ACK_GARAGE_NIGHT_OPEN"
+        id: garage_night_open
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "ACK_GARAGE_CLOSE_FAILED"
+        id: garage_close_failed
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "ACK_GARAGE_OPEN_DAYTIME"
+        id: garage_open_daytime
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "ACK_GARAGE_NODE_OFFLINE"
+        id: garage_node_offline
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: "input_boolean.alert_open_{{ trigger.id }}"
+
+  # -------------------------------------------------------------------------
+  # Safety net under both L1s. The critical-alert loops give up after an hour
+  # (12 repeats at 5 minutes); this makes sure an alert slept through is still
+  # in front of you at breakfast.
+  #
+  # Deliberately its own automation rather than more branches inside
+  # jeeves_l2_morning_renotify: that one is the pool's, and it fires at 7am for
+  # L2s. This is the L1 backstop.
+  # -------------------------------------------------------------------------
+  - id: jeeves_garage_morning_renotify
+    alias: "Garage: 7am re-raise of unacknowledged alerts"
+    mode: single
+    trigger:
+      - platform: time
+        at: "07:00:00"
+    action:
+      - if:
+          - condition: state
+            entity_id: input_boolean.alert_open_garage_night_open
+            state: "on"
+        then:
+          - service: script.normal_alert
+            data:
+              title: "Still open: garage opened overnight"
+              message: >
+                The garage opened overnight with no command from HA and the
+                alert was never acknowledged. Door is currently
+                {{ states('cover.garage_door') }}. Check the house and the
+                garage before you leave.
+              tag: "garage-night-open"
+              ack_action: "ACK_GARAGE_NIGHT_OPEN"
+
+      - if:
+          - condition: state
+            entity_id: input_boolean.alert_open_garage_close_failed
+            state: "on"
+        then:
+          - service: script.normal_alert
+            data:
+              title: "Still open: garage would not close"
+              message: >
+                HA could not confirm the garage closed and the alert was never
+                acknowledged. Door is currently
+                {{ states('cover.garage_door') }}. Check for anything breaking
+                the safety beam.
+              tag: "garage-close-failed"
+              ack_action: "ACK_GARAGE_CLOSE_FAILED"
+
+      - if:
+          - condition: state
+            entity_id: input_boolean.alert_open_garage_open_daytime
+            state: "on"
+        then:
+          - service: script.normal_alert
+            data:
+              title: "Still open: garage was left open"
+              message: >
+                Yesterday's left-open alert was never acknowledged. Door is
+                currently {{ states('cover.garage_door') }}.
+              tag: "garage-open-daytime"
+              ack_action: "ACK_GARAGE_OPEN_DAYTIME"
+
+  # -------------------------------------------------------------------------
+  # L3 delivery. 9:15pm, matching the pool's L3 re-raise.
+  # -------------------------------------------------------------------------
+  - id: jeeves_garage_evening_renotify
+    alias: "Garage: 9:15pm re-raise of unacknowledged L3"
+    mode: single
+    trigger:
+      - platform: time
+        at: "21:15:00"
+    action:
+      - if:
+          - condition: state
+            entity_id: input_boolean.alert_open_garage_node_offline
+            state: "on"
+        then:
+          - service: script.normal_alert
+            data:
+              title: "Still open: garage controller offline"
+              message: >
+                The ratgdo is still not reporting. The garage is unmonitored and
+                the overnight auto-close will not run tonight.
+              tag: "garage-node-offline"
+              ack_action: "ACK_GARAGE_NODE_OFFLINE"

@@ -821,6 +821,34 @@ const ALERT_REGISTRY = {
     detector: null, // nightly 11:45pm check, no live detector to re-read
     action: 'Check whether the pump ran ≥30 min before 9:45pm.',
   },
+
+  // Garage — homeassistant/packages/jeeves_garage.yaml. No garage tile by
+  // decision; these surface only through the alerts tile and the overlay.
+  // The two L1s are both "the house is open and only a person can close it".
+  garage_night_open: {
+    level: 1,
+    title: 'Garage opened overnight',
+    detector: 'binary_sensor.garage_door_open',
+    action: 'Account for everyone before going out. Close it from your phone.',
+  },
+  garage_close_failed: {
+    level: 1,
+    title: 'Garage would not close',
+    detector: 'binary_sensor.garage_door_open',
+    action: 'Clear the doorway — the safety beam is reversing it — then close it by hand.',
+  },
+  garage_open_daytime: {
+    level: 2,
+    title: 'Garage left open',
+    detector: 'binary_sensor.garage_open_too_long',
+    action: 'Close it, or confirm someone is out there using it.',
+  },
+  garage_node_offline: {
+    level: 3,
+    title: 'Garage controller offline',
+    detector: 'binary_sensor.garage_node_offline',
+    action: 'Check the ratgdo at http://192.168.0.230 and power-cycle it.',
+  },
 };
 
 function _ageText(sinceMs) {

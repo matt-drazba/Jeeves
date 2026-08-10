@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Verify that everything the alerting package references actually exists in HA.
+"""Verify that everything the HA packages reference actually exists in HA.
 
 Run on the Pi:   cd ~/homelab && python3 scripts/verify-alerts.py
 
 Why this exists: on 2026-08-07 an alert shipped pointing at an entity_id that was
 never created, and `check_config` passed the whole time. Config validating and
 YAML parsing prove nothing about whether entities were registered or whether an
-automation can fire. This reads the package, extracts every entity and automation
-it depends on, and asks HA directly.
+automation can fire. This reads every package under homeassistant/packages/,
+extracts every entity and automation they depend on, and asks HA directly.
 
 Exit code 0 = everything resolves, 1 = something is missing.
 """
 
+import glob
 import json
 import os
 import re
@@ -20,20 +21,35 @@ import urllib.error
 import urllib.request
 
 HA = os.environ.get("HA_URL", "http://localhost:8123")
-PACKAGE = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "..", "homeassistant", "packages", "jeeves_alerts.yaml",
+
+# EVERY package, not just jeeves_alerts.yaml. Scanning a single hardcoded file
+# recreated the exact blind spot this script exists to close: jeeves_garage.yaml
+# could ship pointing at an entity that was never registered and this would have
+# printed PASS. secrets.yaml is excluded — it is gitignored and holds no
+# entity references.
+PACKAGE_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "homeassistant", "packages",
+)
+PACKAGES = sorted(
+    p for p in glob.glob(os.path.join(PACKAGE_DIR, "*.yaml"))
+    if os.path.basename(p) != "secrets.yaml"
 )
 
 # Domains worth checking. `notify.*` is a service, not an entity, so it is
 # excluded here and checked against the services API instead.
-ENTITY_DOMAINS = ("binary_sensor", "sensor", "switch", "input_boolean", "script")
+ENTITY_DOMAINS = (
+    "binary_sensor", "sensor", "switch", "input_boolean", "script",
+    "cover", "timer",
+)
 
 # `switch.turn_on` and friends are service calls that look exactly like entity
-# ids. Without this the checker reports them as missing entities.
+# ids. Without this the checker reports them as missing entities. `finished` is
+# here for the `timer.finished` EVENT TYPE, which has the same shape again.
 SERVICE_VERBS = {
     "turn_on", "turn_off", "toggle", "reload", "trigger",
     "select_option", "set_value", "set_datetime", "increment", "decrement",
+    "open_cover", "close_cover", "stop_cover", "set_cover_position",
+    "start", "cancel", "pause", "finish", "finished",
 }
 
 
@@ -68,8 +84,22 @@ def get(path, tok):
 
 def main():
     tok = token()
-    with open(PACKAGE) as fh:
-        blob = fh.read()
+    if not PACKAGES:
+        sys.exit(f"no package files found in {PACKAGE_DIR}")
+    # Full-line comments are dropped before scanning. These packages document
+    # entities that were deliberately DELETED (input_boolean.pool_maintenance,
+    # removed 2026-08-08) and explain why, and prose naming a dead entity must
+    # not be reported as a broken reference — that would punish the comments
+    # that make the config readable. Only whole comment lines go: a trailing
+    # `#` is left alone so nothing inside a Jinja template can be truncated.
+    blob = ""
+    for path in PACKAGES:
+        with open(path) as fh:
+            blob += "\n".join(
+                line for line in fh.read().splitlines()
+                if not line.lstrip().startswith("#")
+            ) + "\n"
+    names = ", ".join(os.path.basename(p) for p in PACKAGES)
 
     # Two things must not be collected here:
     #   1. Service calls (switch.turn_on) — identical in shape to an entity id.
@@ -87,7 +117,8 @@ def main():
     present = {s["entity_id"] for s in states}
 
     failures = []
-    print("entities referenced by jeeves_alerts.yaml:")
+    print(f"scanning: {names}\n")
+    print("entities referenced by the packages:")
     for ref in sorted(refs):
         ok = ref in present
         print(f"  {'OK ' if ok else 'MISSING'}  {ref}")
@@ -102,7 +133,7 @@ def main():
         for s in states
         if s["entity_id"].startswith("automation.")
     }
-    print("\nautomations declared in the package:")
+    print("\nautomations declared in the packages:")
     for aid in sorted(declared):
         ok = aid in loaded
         print(f"  {'OK ' if ok else 'NOT LOADED'}  {aid}")
