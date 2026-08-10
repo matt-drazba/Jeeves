@@ -88,9 +88,13 @@ That off-window is exactly the PG&E peak period, and it is the *unique* optimum:
 |---|---|---|
 | Duration | 90 min/day | Industry guidance clusters at 1–2 hrs/day; 3–4 hrs only for heavy debris. Polaris 280 is specced to clean a typical pool in ~3 hrs or less. |
 | Frequency | **Once daily** | Cleaner consumables (tires, backup valve, belts, bearings) wear by runtime; motor starts are the hardest duty on a motor. Splitting into two runs doubles start cycles for no cleaning benefit. |
-| Main pump RPM during window | Normal baseline (1750 RPM / 45–50 GPM) | No target to hit. Booster draws ~24 GPM against 140 ft head, and Polaris specs it to run on a VS pump's low-speed setting. Ample margin. |
+| Main pump RPM during window | **2000 RPM** — the schedule bumps up from its 1750 RPM baseline for the sweep window | No target to hit. Booster draws ~24 GPM against 140 ft head, and Polaris specs it to run on a VS pump's low-speed setting. Ample margin. |
 
-**Tune downward, not up.** If the pool is clean at 90 min, try 75, then 60. Runtime is wear. Increase only if debris actually accumulates. Expect seasonal variation — more in spring/fall for pollen and leaves, less in winter.
+**⚠ 90 minutes is the summer floor. Do not trim it.** An earlier version of this line said "if the pool is clean at 90 min, try 75, then 60." That is wrong for this pool: **owner-confirmed 2026-08-10, shorter summer runs let algae form on the walls quickly.** Runtime is wear, but algae is worse, and 90 min is already at the bottom of the industry 1–2 hr range.
+
+**Winter is where trimming belongs.** The pool is under a solar blanket 100% of the time Nov 1 – Mar 31 and unused, so debris load and algae pressure both collapse. Cutting the winter run is an open candidate, not a decision — see [pool_system_checks.md](pool_system_checks.md) Part 2.
+
+**⚠ Wall algae is a chemistry signal before it is a cleaning signal.** Copper is the algaecide here; at 0.15–0.20 ppm with pH ≤ 7.6 the R-40 should be suppressing algae on its own. Above pH 7.6 the ions fall out of solution, which the R-40 manual calls the usual cause of a low ion level. **If algae returns at 90 min, check pH before adding runtime** — more cleaner hours treat the symptom of a sanitizer that has stopped working. Note that no copper or pH test kit is in hand yet (Group A, [pool_todo.md](pool_todo.md)), so **the algae itself is currently the only sanitizer feedback available.** That is an argument for closing the test-kit gap, not for running the cleaner longer.
 
 ### TOU placement — the booster already avoids peak, but may sit in part-peak
 

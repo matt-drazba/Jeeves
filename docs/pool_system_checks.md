@@ -10,7 +10,9 @@ Last updated: 2026-08-10. Companion docs: [pool_wiring_manual.md](pool_wiring_ma
 
 ## ⚠ Read this before assuming a pool season
 
-**The pool runs 12 months a year.** It is never closed, drained, blown out, plugged, or covered — there is no freeze risk at this location. The pump keeps its 19-hour window year-round and the Polaris stays in the water.
+**The pool runs 12 months a year.** It is never closed, drained, blown out, or plugged — there is no freeze risk at this location. The pump keeps its 19-hour window year-round and the Polaris stays in the water.
+
+**It is covered, though.** A **manual solar blanket**, on whenever nobody is swimming and **continuously Nov 1 – Mar 31**. No motor, no reel automation, no HA integration — nothing to monitor and nothing that can fail electrically. But it is not incidental to how this pool behaves: it drives heat retention, cuts UV loss of chlorine, slows pH rise by reducing aeration, and keeps debris out. **Evaporation is dramatic whenever it comes off.** Several checks below only make sense in light of it.
 
 **The only thing that shuts down is the FPH free-heat unit**, and it shuts down because the heat pump gets switched from A/C to heat mode around Nov 1. Heat recovery only harvests on a *cooling* call, so from that point until spring there is nothing for it to do.
 
@@ -111,7 +113,11 @@ Targets are R-40 ionizer numbers, not conventional-pool numbers. Full table and 
 
 **Targets do not change in winter.** FC ≥ 0.4 is a label floor and pH ≤ 7.6 is what keeps copper in solution; neither relaxes because nobody is swimming. What changes is **demand** — with cold water, no bathers, and less UV it collapses, so you add far less while aiming at the same numbers.
 
+**The solar blanket is doing a lot of this work.** It blocks the UV that destroys chlorine and suppresses the surface aeration that drives pH up, so demand is lower than an uncovered pool of this size would suggest — and lower again Nov–Mar when it never comes off. Evaporation is large whenever it is off, but **evaporation plus top-up is net-neutral for copper** (evaporation concentrates, top-up dilutes back) — do not model top-ups as dilution.
+
 **Copper drifting low is usually a pH problem, not a dosing problem.** Check pH before adding anything.
+
+⚠ **Right now there is no copper or pH test kit** (Group A in [pool_todo.md](pool_todo.md)), so the pH and copper alerts in `alerting_levels.md` are both blocked and none of the numbers above can actually be measured. Until that kit arrives, **algae on the walls is the only sanitizer feedback this pool produces** — which is why check 7 treats it as a chemistry symptom rather than a cleaning one.
 
 ⚠ **On test frequency — the fixed intervals are a placeholder, not a rule.** The 3-day / 7-day / 30-day cadences currently in the `tasks` table exist only because there is no forecasting model yet. Cadence is meant to be *predicted* from logged history — when will FC actually reach the floor — not set by calendar. **Do not add seasonal intervals** or winter logic to `jeeves/db.js`; that entrenches the placeholder the model is meant to replace.
 
@@ -123,7 +129,13 @@ Targets are R-40 ionizer numbers, not conventional-pool numbers. Full table and 
 - [ ] Polaris 280 is moving the whole pool, not parked in a corner
 - [ ] **Wheel RPM 28–32**, if it is covering poorly. Measure with the pump running and the cleaner held below water, counting revolutions for one minute. Tune by wheel RPM, never by GPM. Under 28: pull the blue restrictor disc, then check the quick-disconnect filter screen, hoses, swivels, gate valve, and baskets. Full procedure in [pool_booster_interlock.md](pool_booster_interlock.md)
 
-Expect seasonal variation in how dirty it gets — more in spring and fall for pollen and leaves, less in winter. That is a reason to tune runtime down, not a fault.
+The Polaris runs **under the solar blanket** — the blanket stays on during the 21:45–23:15 window, and the cleaner works fine beneath it.
+
+⚠ **90 minutes is the summer floor. Do not trim it.** Shorter summer runs let **algae form on the walls quickly** (owner-confirmed 2026-08-10). `pool_booster_interlock.md` previously suggested trying 75 then 60 minutes if the pool looked clean; that has been corrected. Runtime is wear, but algae is worse.
+
+⚠ **If algae returns at 90 minutes, that is a chemistry finding, not a cleaning one.** Copper is the algaecide here — at 0.15–0.20 ppm with pH ≤ 7.6 the R-40 should be suppressing algae by itself, and above pH 7.6 the ions fall out of solution. **Check pH before adding cleaner runtime.** Adding hours treats the symptom of a sanitizer that has stopped working.
+
+Winter is different: blanket on continuously, pool unused, debris load and algae pressure both collapse. **Cutting the winter run is an open candidate** — see Part 2. It has not been decided or measured.
 
 ### 8. Sensors are alive and honest
 
@@ -143,6 +155,8 @@ One event, twice a year, triggered by switching the heat pump between cool and h
 - [ ] **Disable the FPH at its controller.** ⚠ *Record the exact control the first time you do this* — which button, menu, or switch — and replace this line with its real name. Guessing at it in advance would be worse than leaving it blank
 - [ ] **Verify the disable took.** `binary_sensor.pool_pad_pool_heat_active` stays false, and the pump no longer self-starts to Program 4 when the compressor runs. This is the whole point of the step; a disable that did not take is invisible otherwise
 - [ ] Lower the pump speeds — see the RPM table below
+- [ ] The solar blanket now stays on continuously until spring. Nothing to switch; noted because it is what makes the reduced winter demand below reasonable
+- [ ] *Optional, undecided:* consider shortening the sweep run. Blanket on 24/7 plus no swimmers means far less debris and algae pressure — but **90 min is the summer floor for a reason** (check 7), so treat any winter reduction as an experiment to watch, not a setting to trust
 - [ ] Record a baseline snapshot while it is fresh: filter pressure at clean (and at which speed), pump watts at each speed, current chemistry, and the FPH setpoint as you found it
 - [ ] Confirm no open alert flags are being carried into the winter
 - [ ] Log anything that misbehaved over the summer while you still remember it
@@ -245,9 +259,14 @@ The permanent fix — a healthcheck-gated `depends_on` so HA does not launch unt
 | 2026-08-08 | Document created. Monthly / seasonal / power-cycle checks, scoped to pool + heat recovery. |
 | 2026-08-10 | **Seasonal model rewritten — the original was wrong.** It described a pool season with a shutdown and a startup. The pool runs **12 months a year**; the **FPH is the only thing that shuts down**, via a **disable on its own controller**, triggered by switching the heat pump to heat mode ~Nov 1. Part 2 restructured as one changeover run twice a year. Pump speeds recorded as **two-speed** (2000 RPM sweep window / 1750 RPM otherwise) — a fact that appeared in no document until now — with winter figures marked as uncalibrated guesses and **no RPM legislated** pending the flow meter. Monthly check 4 split into summer and winter forms, the winter one inverting to "`pool_heat_active` must never be true." Noted that the ΔT ≤ 0 L3 is **dormant, not broken**, Nov–Mar. Chemistry reframed: targets unchanged year-round, demand collapses, and the fixed test intervals flagged as a **placeholder pending the forecasting model** rather than a rule to build seasonal logic on. |
 
+| 2026-08-10 | **Solar blanket recorded — it was missing from every document.** The pool is covered by a **manual** solar blanket whenever nobody is swimming, and **continuously Nov 1 – Mar 31**. The intro previously claimed the pool is "never covered," which was wrong. No motor and no HA integration, so nothing to monitor and no maintenance check earned. Its real effects are recorded where they bite: heat retention, reduced UV loss of chlorine and slower pH rise (check 6), large evaporation whenever it is off, and the cleaner running beneath it (check 7). Also recorded: **the FPH still calls regularly** despite the blanket, so monthly check 4 stays runnable as written. |
+| 2026-08-10 | **90-minute sweep runtime confirmed as a floor, not a starting point.** Shorter summer runs let algae form on the walls quickly. `pool_booster_interlock.md` had explicitly advised trying 75 then 60 minutes — corrected there too. Added the corollary that **wall algae is a chemistry signal before a cleaning one** (copper is the algaecide; above pH 7.6 the ions drop out of solution), and that with no test kit in hand the algae is currently the *only* sanitizer feedback this pool produces. |
+
 ### Open questions
 
 - [ ] **Name the FPH controller's disable** the first time it is used, and replace the placeholder line in Part 2.
+- [ ] **Winter sweep runtime** — the blanket stays on 24/7 and the pool is unused, so a shorter run is plausible. Undecided and unmeasured. Watch the walls if it is tried.
+- [ ] **Get the Group A test kit.** Until then pH and copper cannot be measured, both alerts stay blocked, and algae is the only sanitizer signal available.
 - [ ] Filter clean baseline is stated as ~10–15 psi from the TA100D spec, **not measured on this filter.** Record the real number at the next backwash, along with the pump speed it was read at.
 - [ ] Winter pump speeds are guesses. Set them from measured flow once the meter is installed and calibrated.
 - [ ] Winter chemistry behaviour is unknown — first documented winter. Log it rather than predicting it.
