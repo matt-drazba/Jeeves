@@ -170,26 +170,61 @@ SQLite is the system of record — **ha-poolchem is not being installed** — an
 
 → [pool_heat_recovery.md](pool_heat_recovery.md)
 
-- [x] **Retune `out_temp_offset_f`** — zeroed 0.3 → 0.0 and flashed 2026-08-08.
-      102 pump-running/heat-off samples put the raw probes a median 0.00°F apart
-      (quantization steps −0.11/0.00/+0.11, 60 of 102 at exactly zero). The old
-      0.3 came from one 2026-08-05 spot reading that no longer reproduces.
-      Note this had been masking the HX L3, which fires on ΔT ≤ 0.
-- [ ] **Re-check the offset across a wider water-temp range.** Checked
-      2026-08-08 against 102 heat-off samples spanning 78.5–81.1°F: mean gap
-      **−0.005°F**, confirming the zero. Least-squares slope was **−0.059°F of
-      gap per °F of water**, i.e. −0.15°F across the observed span — about 1.4
-      LSB. Suggestive of mild negative drift but **not conclusive**: only 2.6°F
-      of range, the gap takes just four quantized values (0.19/0.30/0.41/0.53
-      pre-offset), the extreme buckets hold 5–12 samples, and water temp is
-      strongly correlated with time of day, so slow time drift would look
-      identical. Re-run over a season before committing to `calibrate_linear`;
-      if the slope holds at ~−0.06, it is worth roughly 0.5°F across a 70–85°F
-      range, which matters for BTU/hr once the flow meter lands.
-- [ ] **Watch the HX L3 now that it is genuinely armed.** It has never been able
-      to fire. If a legitimate low-stage compressor run quantizes to 0.00 or
-      −0.11 for 20 minutes it will alert; the fix is a threshold clearly below
-      zero, not at it. Do not pre-emptively widen it — wait for a real firing.
+- [x] ~~**Retune `out_temp_offset_f`**~~ — **the 2026-08-08 conclusion was
+      wrong, see §7c.** The probes do not agree; they differ by +0.3°F. The
+      offset is genuinely 0.0 on the device and the HX L3 is still disarmed.
+- [ ] Pool-return probe — third DS18B20, add a `dallas_temp` block.
+- [ ] **Breaker-kill acceptance test — only after the flow switch is wired and
+      calibrated.** Before that it creates the dangerous state with nothing to
+      catch it.
+- [ ] Tune Program 4 stop delay to max available on the pump UI.
+
+## 7c. HX probe calibration + solar shielding — OPEN, alert is disarmed
+
+→ **[pool_probe_calibration.md](pool_probe_calibration.md)** — full evidence,
+procedure, and product list. Do these **in order**; shielding changes the
+offset, so calibrating first means doing it twice.
+
+- [ ] **Step 1 — shield both legs identically.** Closed-cell only, reflective
+      outer jacket, cover the thermowell and fitting, not just the pipe. **Same
+      material and length on inlet and outlet** — ΔT is a difference, so a
+      symmetric load cancels and an asymmetric one is the whole problem.
+      **Never a towel or any woven fabric**: it wicks, stays wet on a pool pad,
+      and becomes an evaporative cooler. Buy: [PexUniverse 2" self-seal
+      foam](https://pexuniverse.com/2-id-x-1-2-wall-self-seal-pipe-insulation)
+      (~$8) + a PVC jacket or foil tape. ~$20 total.
+- [ ] **Step 2 — verify the shield worked.** No instruments needed. On the next
+      sunny afternoon watch the no-flow excursion after the pump stops: it hit
+      **+5.51°F at 08-08 16:58 with heat recovery off**. If it collapses toward
+      the ~0.3°F probe offset, solar radiation was the driver. Large effect —
+      one afternoon answers it.
+- [ ] **Step 3 — two-point calibration, ice bath + boiling.** Only after Step 2,
+      probes shielded and in final position. Three points, full procedure in the
+      doc:
+      - **Ice point (0.00°C / 32.0°F)** — crushed-ice slush in distilled water,
+        *not* cubes floating in water. Stir, probe mid-depth, 2 cm clear of the
+        walls, log 20+ readings and take the median (12-bit LSB is 0.1125°F).
+      - **Steam point — altitude-corrected, NOT 100°C.** Look up the pad's
+        elevation and the day's barometric pressure; roughly −1°C per 935 ft.
+        Measure in the steam above the boil, not in the liquid. **Check the
+        probe's cable junction rating first** — the DS18B20 die is good to
+        125°C but the heat-shrink joint on cheap waterproof probes often is
+        not, and boiling is a common way to kill one. Skippable.
+      - **~80°F stirred bath — the one that actually matters.** Both probes in
+        the same bucket, stirred continuously (unstirred water stratifies by
+        tenths and you measure the stratification). The median of `out − in`
+        **is** the offset. For ΔT the probes only need to agree with each
+        other, not with SI — a shared absolute error cancels — and ice/steam
+        bracket a 75–90°F operating range so asymmetrically that a two-point
+        fit extrapolated to the middle can be worse than a single-point offset
+        taken at 80°F. Take all three; weight this one.
+- [ ] **Step 4 — apply it and confirm the alert is armed.** `offset:` is added
+      to the outlet in °F, so outlet reading high by 0.3 → `"-0.3"`. If the gap
+      tracks temperature instead of staying flat, switch to `calibrate_linear`.
+      Then verify ΔT reads 0.00 ± one LSB pump-running/heat-off, consider moving
+      the HX L3 threshold to ≈ −0.15°F so quantization noise on a legitimate
+      low-stage run cannot trip it, and run `verify-alerts.py`.
+      `check_config` passing proves none of this.
 - [ ] Pool-return probe — third DS18B20, add a `dallas_temp` block.
 - [ ] **Breaker-kill acceptance test — only after the flow switch is wired and
       calibrated.** Before that it creates the dangerous state with nothing to
@@ -201,6 +236,13 @@ SQLite is the system of record — **ha-poolchem is not being installed** — an
       optocouplers** — CLAUDE.md corrected.
 - [ ] Open question: is the IntelliFlo accessory output line-voltage or
       low-voltage? Check next time the drive cover is off.
+- [ ] **Re-derive HX output once calibrated.** Current best estimate from
+      2026-08-09, the only two logged heat-recovery runs (280 min + 26 min):
+      true HX gain **+0.49°F** (0.79 active − 0.30 baseline) = **13,500–14,700
+      BTU/hr** at 55–60 GPM, contributing **~10%** of that day's pool rise; the
+      rest is sun and the solar blanket. Consistent with stage-1 compressor
+      operation. Both the baseline and the flow figure are provisional — recheck
+      after §7c and after the flow meter lands.
 
 ## 7b. Dashboard + alerting — shipped 2026-08-08
 
