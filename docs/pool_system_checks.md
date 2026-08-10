@@ -1,10 +1,23 @@
-# Pool System Checks — monthly, seasonal, and power-cycle
+# Pool System Checks — monthly, changeover, and power-cycle
 
 **What this is:** the recurring verification list for the pool and heat recovery system. Not a build list — [pool_todo.md](pool_todo.md) is the build list, and every item here assumes the thing being checked is already installed.
 
-**Why it exists:** most of this system's failure modes are silent. The booster destroys its seal in minutes while drawing *less* current than normal. A flow switch that fails closed looks identical to one working correctly. A probe offset of 0.3 °F disarmed a safety alert for a day without changing a single reading anyone looked at. **None of those announce themselves**, and several of them have no alert behind them at all (see the gaps table below). Periodically going and looking is the compensating control.
+**Why it exists:** most of this system's failure modes are silent. The booster destroys its seal in minutes while drawing *less* current than normal. A flow switch that fails closed looks identical to one working correctly. A probe offset of 0.3 °F disarmed a safety alert for a day without changing a single reading anyone looked at. **None of those announce themselves**, and several have no alert behind them at all (see the gaps table below). Periodically going and looking is the compensating control.
 
-Last updated: 2026-08-08. Companion docs: [pool_wiring_manual.md](pool_wiring_manual.md) (as-built wiring) · [pool_booster_interlock.md](pool_booster_interlock.md) · [pool_heat_recovery.md](pool_heat_recovery.md) · [pool_data_addendum.md](pool_data_addendum.md) (chemistry targets and sources) · [alerting_runbook.md](alerting_runbook.md).
+Last updated: 2026-08-10. Companion docs: [pool_wiring_manual.md](pool_wiring_manual.md) (as-built wiring) · [pool_booster_interlock.md](pool_booster_interlock.md) · [pool_heat_recovery.md](pool_heat_recovery.md) · [pool_data_addendum.md](pool_data_addendum.md) (chemistry targets and sources) · [alerting_runbook.md](alerting_runbook.md).
+
+---
+
+## ⚠ Read this before assuming a pool season
+
+**The pool runs 12 months a year.** It is never closed, drained, blown out, plugged, or covered — there is no freeze risk at this location. The pump keeps its 19-hour window year-round and the Polaris stays in the water.
+
+**The only thing that shuts down is the FPH free-heat unit**, and it shuts down because the heat pump gets switched from A/C to heat mode around Nov 1. Heat recovery only harvests on a *cooling* call, so from that point until spring there is nothing for it to do.
+
+Two consequences worth stating up front, because both look like faults and neither is:
+
+- The heat exchanger sits in the **circulating return line**, so pool water moves through it every day the pump runs whether or not refrigerant is being diverted. **It does not stagnate over the winter.** Do not invent a task to prevent that.
+- Pool *use* stops about Nov 1 – Mar 31 even though the pool keeps running. That changes chemistry demand, not the pool's operation. See check 6.
 
 ---
 
@@ -14,9 +27,10 @@ Automation covers a lot of this system. It does not cover these, and a check is 
 
 | Gap | Why nothing catches it | Covered by |
 |---|---|---|
-| **Heat-recovery interlock** — FPH diverting while the main pump is unpowered | The alert is **not built**. Both signals report into HA; nothing consumes them together. See `pool_wiring_manual.md` 3.1 and 4.5 | Monthly check 4, Startup check 5 |
+| **Heat-recovery interlock** — FPH diverting while the main pump is unpowered | The alert is **not built**. Both signals report into HA; nothing consumes them together. See `pool_wiring_manual.md` 3.1 and 4.5 | Monthly check 4 (summer only), and the spring changeover |
 | **Deadhead** — pump running against a closed valve | No flow meter installed, so no signal exists | Monthly check 3 (filter pressure, by eye) |
-| **Flow switch drift** — trip point wanders below the FPH5 floor | Nothing measures actual flow to compare against | Seasonal startup check 5 |
+| **Flow switch drift** — trip point wanders below the FPH5 floor | Nothing measures actual flow to compare against | Spring changeover |
+| **`pool_heat_active` true while the FPH is disabled** | Nothing watches for it; in winter it is an anomaly rather than a normal state | Monthly check 4, winter form |
 | **A Tuya app schedule reappearing** | HA cannot see schedules living in Tuya's cloud | Monthly check 5 |
 | **HA itself being down** | The outage kills the pump, the meter, and the messenger together | Nothing. Known blind spot, unresolved |
 
@@ -43,9 +57,11 @@ Open the alert overlay on the dashboard (tap the alert strip or the `alerts` til
 - [ ] Any open flag older than a week means an alert fired and was never acknowledged — flags clear **only** on Acknowledge, never on recovery, so a fault that self-healed at 2 a.m. still shows here. That is the design; go find out what happened.
 - [ ] Zero alerts all month is a result worth noticing, not a pass to skim past. **L1 budget is under ~6/year.** Steady L2/L3 noise means the levels are wrong, which is a bug in [alerting_levels.md](alerting_levels.md), not a fact about the pool.
 
+⚠ **The ΔT ≤ 0 L3 cannot fire Nov–Mar.** It is gated on `pool_heat_active`, and with the FPH disabled that is never true. It is **dormant, not disarmed and not broken** — worth knowing, since "an alert that never fires" is exactly what a silently broken one looks like.
+
 ### 3. Filter pressure, by eye
 
-Read the gauge on the Tagelus TA100D with the pump at its normal RPM.
+Read the gauge on the Tagelus TA100D with the pump at its normal speed.
 
 | Reading | Meaning |
 |---|---|
@@ -56,41 +72,50 @@ Read the gauge on the Tagelus TA100D with the pump at its normal RPM.
 
 There is no pressure sensor, so **this reading is the only deadhead detection this system has.** Write the number down; the trend is what tells you anything, and backwash is deliberately not on a calendar.
 
-### 4. Heat recovery actually diverts ⚠
+Note the reading moves with pump speed, so record which speed you read it at — comparing a 1750 RPM reading against a 2000 RPM one will invent a trend that isn't there.
 
-**This is the check that stands in for the alert that does not exist.** Do it on a day the A/C is running in cooling with the pool below 92 °F.
+### 4. Heat recovery — and the winter version of the same check
 
-- [ ] Confirm the pump spins up to ~2200 RPM shortly after the compressor starts (terminal 3, not flow-gated)
+**Summer (FPH enabled).** This is the check that stands in for the interlock alert that does not exist. Do it on a day the A/C is running in cooling with the pool below 92 °F.
+
+- [ ] Pump spins up to ~2200 RPM shortly after the compressor starts (terminal 3, not flow-gated)
 - [ ] **Wait ~2 minutes** for the purge delay to expire — judging sooner is judging wrong
-- [ ] Confirm the **condenser fan stops.** That, not the pump, is the only proof heat is being recovered
-- [ ] Confirm `binary_sensor.pool_pad_pool_heat_active` follows within a couple of seconds
-- [ ] Confirm HX outlet temp climbs above inlet within a few minutes
+- [ ] **The condenser fan stops.** That, not the pump, is the only proof heat is being recovered
+- [ ] `binary_sensor.pool_pad_pool_heat_active` follows within a couple of seconds
+- [ ] HX outlet temp climbs above inlet within a few minutes
 
-A small ΔT is probably a stage-1 compressor run, not a fault. **ΔT at or below zero while heat-active is on is a real fault** and should have raised an L3 — if it did not, suspect the probe offset before believing the exchanger is fine.
+A small ΔT is probably a stage-1 compressor run, not a fault. **ΔT at or below zero while heat-active is on is a real fault** and should have raised an L3 — if it did not, suspect the probe offset before believing the exchanger is fine. If the fan keeps spinning, go to `pool_wiring_manual.md` 6.1.
 
-If the fan keeps spinning, go to `pool_wiring_manual.md` 6.1.
+**Winter (FPH disabled), Nov–Mar.** The summer check is impossible — no cooling call comes, so there is nothing to observe. Nothing covers the gap and nothing needs to: the FPH is inert. The check inverts instead:
+
+- [ ] ⚠ **`pool_heat_active` must be false, always.** With the FPH disabled at its controller it should never go true. If it does, the disable did not take or something is calling the diversion circuit anyway — investigate before the next cooling call
+- [ ] The pump should never self-start to Program 4. If it spins up to 2200 RPM without you asking, the FPH is still calling
 
 ### 5. The Tuya app has no schedule ⚠
 
 Open the Tuya/Smart Life app, find the pool sweep timer, and confirm **there is no schedule on it.**
 
-**The Tuya schedule was deleted 2026-08-08 and must never be re-added.** HA is the only thing that commands `switch.pool_sweep_socket_1`, and that is precisely what makes the dry-run interlock safe: every failure mode — HA down, network down, Tuya cloud down — degrades to "the booster never runs." A schedule living in Tuya's cloud can start the PB4-60 with no idea whether the main pump is running, and HA cannot see it to stop it. Check it monthly because app updates and shared accounts can put one back.
+**The Tuya schedule was deleted 2026-08-08 and must never be re-added.** HA is the only thing that commands `switch.pool_sweep_socket_1`, and that is precisely what makes the dry-run interlock safe: every failure mode — HA down, network down, Tuya cloud down — degrades to "the booster never runs." A schedule living in Tuya's cloud can start the PB4-60 with no idea whether the main pump is running, and HA cannot see it to stop it. Check monthly, because app updates and shared accounts can put one back.
 
 ### 6. Chemistry
 
 Targets are R-40 ionizer numbers, not conventional-pool numbers. Full table and sources in [pool_data_addendum.md](pool_data_addendum.md).
 
-| Test | Target | Cadence | Note |
-|---|---|---|---|
-| Free chlorine | **≥ 0.4 ppm** floor | 3 days | EPA label requirement, not a comfort setting |
-| **pH** | **7.2–7.6** | 7 days | ⚠ Above 7.6 the copper ions fall out of solution and the ionizer stops working. This is a sanitizer-efficacy parameter |
-| Copper | **0.15–0.20 ppm** | 7 days | Per the R-40 manual p.14 |
-| TA / calcium | TA 80–140 · CH 150–350 | 30 days | The monthly one |
-| **TDS** | **500–3000 ppm** | 365 days | ⚠ Hard floor — below 500 the R-40 cannot produce ions at all |
+| Test | Target | Note |
+|---|---|---|
+| Free chlorine | **≥ 0.4 ppm** floor | EPA label requirement, not a comfort setting |
+| **pH** | **7.2–7.6** | ⚠ Above 7.6 the copper ions fall out of solution and the ionizer stops working. A sanitizer-efficacy parameter, not comfort |
+| Copper | **0.15–0.20 ppm** | R-40 manual p.14 |
+| TA / calcium | TA 80–140 · CH 150–350 | |
+| **TDS** | **500–3000 ppm** | ⚠ Hard floor — below 500 the R-40 cannot produce ions at all |
 
-The 3- and 7-day tests promote themselves onto the dashboard as chore tiles; this monthly pass is for TA/CH and for sanity-checking the trend.
+**Targets do not change in winter.** FC ≥ 0.4 is a label floor and pH ≤ 7.6 is what keeps copper in solution; neither relaxes because nobody is swimming. What changes is **demand** — with cold water, no bathers, and less UV it collapses, so you add far less while aiming at the same numbers.
 
 **Copper drifting low is usually a pH problem, not a dosing problem.** Check pH before adding anything.
+
+⚠ **On test frequency — the fixed intervals are a placeholder, not a rule.** The 3-day / 7-day / 30-day cadences currently in the `tasks` table exist only because there is no forecasting model yet. Cadence is meant to be *predicted* from logged history — when will FC actually reach the floor — not set by calendar. **Do not add seasonal intervals** or winter logic to `jeeves/db.js`; that entrenches the placeholder the model is meant to replace.
+
+**Winter chemistry specifics are an open question.** This is the first documented winter. Log the season and let the model learn it rather than guessing numbers now.
 
 ### 7. Sweep and cleaner
 
@@ -98,42 +123,62 @@ The 3- and 7-day tests promote themselves onto the dashboard as chore tiles; thi
 - [ ] Polaris 280 is moving the whole pool, not parked in a corner
 - [ ] **Wheel RPM 28–32**, if it is covering poorly. Measure with the pump running and the cleaner held below water, counting revolutions for one minute. Tune by wheel RPM, never by GPM. Under 28: pull the blue restrictor disc, then check the quick-disconnect filter screen, hoses, swivels, gate valve, and baskets. Full procedure in [pool_booster_interlock.md](pool_booster_interlock.md)
 
+Expect seasonal variation in how dirty it gets — more in spring and fall for pollen and leaves, less in winter. That is a reason to tune runtime down, not a fault.
+
 ### 8. Sensors are alive and honest
 
 - [ ] Pad node online in HA (a 30-min outage should have raised an L3)
-- [ ] Shelly EM reporting — pump reads roughly **172 W** on one leg while running, **< 20 W** when off
+- [ ] Shelly EM reporting — pump reads roughly **172 W** on one leg at 1750 RPM, **< 20 W** when off
 - [ ] **HX in/out probes agree to within ~0.1 °F with the pump running and heat off.** They quantize in 0.1125 °F steps, so a genuine offset shows as a persistent gap, not noise. If one appears, do **not** paper over it with `out_temp_offset_f` — that field is currently `0.0` and a non-zero value silently disarms the ΔT ≤ 0 alert. Calibrate from logged samples, never a spot reading
 
 ---
 
-## Part 2 — Seasonal (cooling season)
+## Part 2 — The changeover (~Nov 1 and ~Apr 1)
 
-Heat recovery only harvests on a **cooling** call, so the FPH side is dormant all winter while the pump keeps running its normal 19-hour schedule year-round.
+One event, twice a year, triggered by switching the heat pump between cool and heat mode. **This is not opening or closing a pool** — see the note at the top. The pool keeps running throughout; the FPH stops, and the pump speeds come down.
 
-**There is no winterization here.** This location has no freeze risk. Nothing gets drained, blown out, or plugged. And because the exchanger sits in the circulating return line, pool water moves through it every day the pump runs whether or not refrigerant is being diverted — **the HX does not stagnate over the winter.** Do not invent a task to prevent that.
+### To winter mode (~Nov 1)
 
-### Shutdown — last cooling of the season (~October)
+- [ ] Switch the heat pump to **heat mode** at the thermostat
+- [ ] **Disable the FPH at its controller.** ⚠ *Record the exact control the first time you do this* — which button, menu, or switch — and replace this line with its real name. Guessing at it in advance would be worse than leaving it blank
+- [ ] **Verify the disable took.** `binary_sensor.pool_pad_pool_heat_active` stays false, and the pump no longer self-starts to Program 4 when the compressor runs. This is the whole point of the step; a disable that did not take is invisible otherwise
+- [ ] Lower the pump speeds — see the RPM table below
+- [ ] Record a baseline snapshot while it is fresh: filter pressure at clean (and at which speed), pump watts at each speed, current chemistry, and the FPH setpoint as you found it
+- [ ] Confirm no open alert flags are being carried into the winter
+- [ ] Log anything that misbehaved over the summer while you still remember it
 
-The point is to record a known-good state while the system is still fresh in memory, so spring startup has something to compare against.
+### To summer mode (~Apr 1)
 
-- [ ] Record final numbers: filter pressure at clean baseline, pump watts at 2200 RPM, a representative HX ΔT during a real diversion, current chemistry
-- [ ] Note the FPH setpoint (**92 °F** as of this writing) — if anyone changes it over the winter, this is the record of what it was
-- [ ] Note the pump schedule and that Ext. Program 4 is still 2200 RPM
-- [ ] Confirm no open alert flags are being carried into the off-season
-- [ ] Log anything that misbehaved during the season while you still remember it
+**This is the more important of the two.** The first cooling call of the year is the first time in ~5 months that the flow switch, the 90340, the heat reclaim valve, and the bi-directional solenoid have moved. Verify the interlock deliberately, on a day you choose, rather than discovering it broken.
 
-### Startup — first cooling of the season (~April/May) ⚠
+- [ ] Re-enable the FPH at its controller; thermostat back to cool
+- [ ] Restore summer pump speeds
+- [ ] Run monthly checks 3 and 8 first — filter and sensors
+- [ ] Confirm the FPH setpoint and Ext. Program 4 RPM match what the autumn snapshot recorded
+- [ ] **Watch one full cycle end to end:** compressor start → pump to ~2200 RPM → ~2 min purge → **condenser fan stops** → `pool_heat_active` true → outlet temp climbs above inlet
+- [ ] Confirm the pump rides out the ≥10 min stop delay after the call drops, then returns to schedule
+- [ ] **Re-verify the flow switch trip point.** Run the pump at 1500 RPM (~40 GPM, below the FPH5's 45 GPM floor) — the trio must drop out. Return to 2200 RPM — it must hold solidly. **A switch that will not hold a stable trip point gets replaced (~$25). Do not nurse one along, and never jumper it to test**
+- [ ] Confirm nothing fired an L1 or L2 during any of the above
 
-**This is the most important checklist in this document.** The first cooling call of the year is the first time in ~6 months the flow switch, the 90340, the heat reclaim valve, and the bi-directional solenoid have moved. Verify the interlock deliberately, on a day you choose, rather than discovering it broken.
+If the flow meter has been installed since autumn, this is also the day to calibrate it — sequential procedure in `pool_wiring_manual.md` 5.1 — and to set `FLOW_DEADHEAD_GPM` against a real reading rather than the datasheet's theoretical `0.02201`.
 
-1. [ ] Read Part 1 checks 3, 4 and 8 first — filter, sensors, probes
-2. [ ] Confirm the FPH setpoint and pump Ext. Program 4 RPM match what shutdown recorded
-3. [ ] **Watch a full cycle end to end:** compressor start → pump spins up (~2200 RPM) → ~2 min purge → condenser fan stops → `pool_heat_active` true → outlet temp climbs above inlet
-4. [ ] Confirm the pump keeps running through the ≥10 min stop delay after the call drops, then returns to its schedule
-5. [ ] **Verify the flow switch still trips where it should.** Run the pump at 1500 RPM (~40 GPM, below the FPH5's 45 GPM floor) — the trio must drop out. Return to 2200 RPM — it must hold solidly. **A switch that will not hold a stable trip point gets replaced ($25). Do not nurse one along, and never jumper it to test.**
-6. [ ] Confirm no L1/L2 fired during any of the above
+### Pump speeds — recorded, not prescribed
 
-If the flow meter has been installed since last season, this is also the day to calibrate it — sequential procedure in `pool_wiring_manual.md` 5.1, and `FLOW_DEADHEAD_GPM` needs setting against a real reading, not the datasheet's theoretical `0.02201`.
+⚠ **No RPM is being legislated here, and the winter figures are guesses.** They stay guesses until the flow meter is installed and calibrated (blocked on `pool_wiring_manual.md` 5.1), because nothing in this system measures actual water movement today. Change them freely; just update this table when you do.
+
+| | Sweep window (21:45–23:15) | Rest of the 19 h |
+|---|---|---|
+| **Summer — current, actual** | 2000 RPM | 1750 RPM |
+| **Winter — intent, uncalibrated guess** | 2000 RPM | 1500 RPM |
+
+Reasoning, recorded as the owner's rather than derived: colder water and no bathers need less turnover, so the daytime speed comes down while the sweep window stays put.
+
+**Ext. Program 4 is not in this table and is not affected.** The FPH commands Program 4 at 2200 RPM directly, and the highest-numbered active external program wins — so heat recovery gets its own flow regardless of what the daily schedule is set to. Lowering the schedule speed cannot starve the heat exchanger.
+
+Two constraints that will bound the answer **once the meter lands**. Neither is a rule today:
+
+- **The booster probably sets the practical floor, not the electrics.** The PB4-60 draws ~24 GPM, which `pool_heat_recovery.md` calls ample margin against a 45–50 GPM baseline. The lower the daytime speed goes, the less true that becomes — though the sweep window is staying at 2000 RPM, which is where it actually matters.
+- **~1000 RPM is a hard floor regardless.** The 20 W "pump running" threshold is calibrated against ~172 W at 1750 RPM (`jeeves_alerts.yaml:136-138`). Pump power falls as roughly RPM³, so somewhere near 900 RPM a *running* pump would read as off — which false-fires the L2 every night **and** makes the booster dry-run detector believe the main pump is dead. Nowhere near the speeds under discussion; written down so nobody wanders there later.
 
 ---
 
@@ -147,7 +192,7 @@ Covers planned electrical work and recovery after an outage. **Order matters, an
 2. [ ] Let the main pump run a few more minutes, then stop it
 3. [ ] Kill the A/C 240V at the breaker if any work touches the heat pump, FPH, or the 24VAC control wiring — **capacitors hold a lethal charge after disconnect; discharge them**
 4. [ ] Note valve positions before touching anything, especially the multiport handle
-5. [ ] Note that HA will lose its view of everything: alerts do not fire during an outage, planned or not
+5. [ ] Note that HA loses its view of everything: alerts do not fire during an outage, planned or not
 
 ### Power up ⚠
 
@@ -155,12 +200,13 @@ Covers planned electrical work and recovery after an outage. **Order matters, an
 
 1. [ ] **Multiport handle is on Filter** before anything is energized. Never turn the handle with the pump running
 2. [ ] Restore main pump power. Confirm it primes — watch for the basket to fill and pressure to come up. Air lock is normal after any drain-down; purge it before assuming a fault
-3. [ ] **Check the IntelliFlo2's clock and schedule.** It can come back wrong after an outage. Confirm the 9 p.m.–4 p.m. window is intact and **Ext. Program 4 is still 2200 RPM** — if Program 4 got cleared, heat recovery silently stops working with no other symptom
+3. [ ] **Check the IntelliFlo2's clock and schedule.** It can come back wrong after an outage. Confirm the 9 p.m.–4 p.m. window is intact, that both schedule speeds survived, and that **Ext. Program 4 is still 2200 RPM** — if Program 4 got cleared, heat recovery silently stops working with no other symptom
 4. [ ] Confirm the Shelly EM is back and reading real watts, and that its **on-device ionizer script** resumed (it runs independently of HA by design — 20 W threshold, 60 s on-delay for flow establishment)
 5. [ ] Confirm the pad node rejoined Wi-Fi and its entities are live in HA
 6. [ ] **Wait ≥30 minutes of proven pump runtime before the booster runs.** The HA sweep schedule already enforces this and will skip the run rather than risk it — let it. Do not hand-start the sweep to "test" it
-7. [ ] Run `python3 scripts/verify-alerts.py`
-8. [ ] Re-check the Tuya app for a schedule (Part 1 check 5) — worth repeating here, since a cloud reconnect is exactly when odd things resurface
+7. [ ] In winter, re-confirm the FPH is still disabled — a power cycle is exactly when a controller setting could revert
+8. [ ] Run `python3 scripts/verify-alerts.py`
+9. [ ] Re-check the Tuya app for a schedule (check 5) — a cloud reconnect is when odd things resurface
 
 ### Home Assistant after an outage ⚠
 
@@ -188,7 +234,7 @@ The permanent fix — a healthcheck-gated `depends_on` so HA does not launch unt
 **Two rules that override any troubleshooting instinct:**
 
 - **Never jumper the flow switch.** Not to test, not for a second. It is the entire safety interlock, and bridging a suspect switch — a normal, sensible habit everywhere else in HVAC — is the one move that creates the dangerous state with nothing left to catch it. Meter across it instead.
-- **Never re-add a schedule in the Tuya app.** See Part 1 check 5.
+- **Never re-add a schedule in the Tuya app.** See check 5.
 
 ---
 
@@ -196,9 +242,13 @@ The permanent fix — a healthcheck-gated `depends_on` so HA does not launch unt
 
 | Date | Change |
 |---|---|
-| 2026-08-08 | Document created. Monthly / seasonal / power-cycle checks, scoped to pool + heat recovery. Monthly check 4 and startup check 5 exist specifically to stand in for the unbuilt heat-recovery interlock alert; when that alert ships, revisit whether they can be relaxed. |
+| 2026-08-08 | Document created. Monthly / seasonal / power-cycle checks, scoped to pool + heat recovery. |
+| 2026-08-10 | **Seasonal model rewritten — the original was wrong.** It described a pool season with a shutdown and a startup. The pool runs **12 months a year**; the **FPH is the only thing that shuts down**, via a **disable on its own controller**, triggered by switching the heat pump to heat mode ~Nov 1. Part 2 restructured as one changeover run twice a year. Pump speeds recorded as **two-speed** (2000 RPM sweep window / 1750 RPM otherwise) — a fact that appeared in no document until now — with winter figures marked as uncalibrated guesses and **no RPM legislated** pending the flow meter. Monthly check 4 split into summer and winter forms, the winter one inverting to "`pool_heat_active` must never be true." Noted that the ΔT ≤ 0 L3 is **dormant, not broken**, Nov–Mar. Chemistry reframed: targets unchanged year-round, demand collapses, and the fixed test intervals flagged as a **placeholder pending the forecasting model** rather than a rule to build seasonal logic on. |
 
 ### Open questions
 
-- [ ] Filter clean baseline is stated as ~10–15 psi from the TA100D spec, **not measured on this filter.** Record the real number at the next backwash and correct the table in Part 1 check 3.
-- [ ] Monthly check 4 needs a cooling day with the pool below setpoint. In practice that may not line up with the first weekend of the month — decide whether it slips to "first suitable day" or gets its own trigger.
+- [ ] **Name the FPH controller's disable** the first time it is used, and replace the placeholder line in Part 2.
+- [ ] Filter clean baseline is stated as ~10–15 psi from the TA100D spec, **not measured on this filter.** Record the real number at the next backwash, along with the pump speed it was read at.
+- [ ] Winter pump speeds are guesses. Set them from measured flow once the meter is installed and calibrated.
+- [ ] Winter chemistry behaviour is unknown — first documented winter. Log it rather than predicting it.
+- [ ] Monthly check 4 (summer form) needs a cooling day with the pool below setpoint, which may not fall on the first weekend of the month. Decide whether it slips to "first suitable day."

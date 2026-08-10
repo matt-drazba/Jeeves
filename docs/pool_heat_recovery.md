@@ -14,7 +14,8 @@ Sources: HotSpot FPH installer manual (44p scan), Pentair IntelliComm II guide, 
 | FPH | **FPH5** (confirmed on HX label). Min **45 GPM** / max **70 GPM** / 75k BTU/h max. |
 | HVAC | Bryant 226ANA048-B, 4-ton two-stage heat pump. Recovery runs in **cooling only** (Type of AC setting, p.41). |
 | Baseline flow | **1750 RPM ≈ 45–50 GPM** (measured, Blue-White inline gauge). Flow scales ~1:1 with RPM. |
-| Sanitizer | **Clearwater MineralPURE R-40** copper/silver ionizer (40k gal). Low residual chlorine (~90% reduction; small residual still required). Copper target **0.2–0.4 ppm**. |
+| Schedule speeds | The daily schedule is **two-speed**: **2000 RPM** during the sweep window (21:45–23:15), **1750 RPM** the rest of the 19-hour run. Distinct from Ext. Program 4 below, which the FPH commands and which outranks both. Winter speeds are under review — see [pool_system_checks.md](pool_system_checks.md). |
+| Sanitizer | **Clearwater MineralPURE R-40** copper/silver ionizer (40k gal). Low residual chlorine (~90% reduction; small residual still required). Copper target **0.15–0.20 ppm** (R-40 manual p.14, verified 2026-08-07 — an earlier 0.2–0.4 figure here was wrong, its upper half exceeds the manufacturer maximum). |
 
 ## Locked program config
 
@@ -135,8 +136,7 @@ Do NOT add a second RS-485 master (njsPC) while IntelliComm II owns the bus.
 ## Chemistry
 
 **Probes: pH + temperature only.** ORP is removed from the plan — copper ions + low FC make ORP readings meaningless.
-Manual testing with Taylor K-2006 feeds ha-poolchem: FC, pH, TA, CH, CYA.
-Copper tracked separately (Taylor K-1730) as its own HA input_number, target 0.2–0.4 ppm — not a ha-poolchem input.
+⚠ **Stale — superseded 2026-08-07.** `ha-poolchem` was **rejected**; Jeeves' SQLite is the chemistry system of record, because HA's recorder retention is trimmed for SD-card wear and cannot hold the seasons of history forecasting needs. Copper is measured with a **Hanna HI747**, not a Taylor K-1730, and the target is **0.15–0.20 ppm** — the 0.2–0.4 figure recorded here was wrong, its upper half exceeding the manufacturer maximum. See [pool_chemistry_logging.md](pool_chemistry_logging.md) and [pool_data_addendum.md](pool_data_addendum.md) Part 2. Manual testing with the Taylor K-2006 still covers FC, pH, TA, CH, CYA.
 
 ## Parts
 

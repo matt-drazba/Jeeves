@@ -154,5 +154,6 @@ step change. **pH is the more important regressor for copper loss.**
   past doses actually achieved. Real pools never match label math.
 - **pH rise rate** — plaster + aeration drive it predictably; yields an acid
   interval without thinking about it.
-- **Copper tracking** for the Clearwater MineralPURE R-40 (target 0.2–0.4 ppm),
-  modeled on dilution events rather than decay.
+- **Copper tracking** for the Clearwater MineralPURE R-40 (target **0.15–0.20 ppm**
+  — see the correction above; the 0.2–0.4 figure was wrong), modeled on dilution
+  events rather than decay.
