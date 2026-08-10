@@ -8,7 +8,8 @@ Source docs: [pool_heat_recovery.md](pool_heat_recovery.md) ·
 [pool_booster_interlock.md](pool_booster_interlock.md) ·
 [pool_data_addendum.md](pool_data_addendum.md) ·
 [pool_chemistry_logging.md](pool_chemistry_logging.md) ·
-[pool_wiring_manual.md](pool_wiring_manual.md)
+[pool_wiring_manual.md](pool_wiring_manual.md) ·
+[pool_valve_position_sensing.md](pool_valve_position_sensing.md)
 
 **Recurring checks are not in this file.** One-time build tasks live here;
 monthly, seasonal, and power-cycle verification lives in
@@ -243,6 +244,27 @@ SQLite is the system of record — **ha-poolchem is not being installed** — an
       `~/Desktop` path.
 - [ ] Opportunistically confirm the 90340 contact-power routing next time the box
       is open.
+
+## 9. Multiport valve position — Filter and Closed
+
+→ [pool_valve_position_sensing.md](pool_valve_position_sensing.md)
+
+Approach decided 2026-08-10. Blocks nothing, and nothing blocks it — buy whenever.
+Sense **Filter** and **Closed** only; the backwash family is inferred from
+"left Filter, wasn't Closed, then pressure dropped and flow jumped."
+
+- [ ] **Order (~$70)** — Sonoff Zigbee 3.0 USB Dongle Plus · 2× Third Reality
+      contact sensor (**AAA, not coin cell** — rechargeables actually work) ·
+      2× small plastic outdoor junction box · 1 small disc magnet.
+- [ ] Stand up the Zigbee coordinator on the Pi (ZHA). First Zigbee device in
+      the house.
+- [ ] Find the two mounting spots on the handle. **The handle lifts ~½" before it
+      turns** — mount beside the arc, not under it. Clearance competes with the
+      transducer tee (→ data_addendum).
+- [ ] Confirm Zigbee reaches the pad. If not, one mains-powered Zigbee plug
+      between house and pool as a repeater. Do not buy up front.
+- [ ] Write the **"handle left in Backwash"** alert. Level unratified — it is a
+      drain-the-pool hazard, so probably L1, but L1 budget is under ~6/year.
 
 ## Whenever you feel like it — owner's call, nothing blocked, do not re-raise
 
