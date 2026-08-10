@@ -642,6 +642,46 @@ const POOL_EXTRA_ENTITIES = {
 // legitimate reading and only trips on a hard stop, not on "low".
 const FLOW_DEADHEAD_GPM = 10;
 
+// The HA schedule runs 21:45-23:15. A run that ends materially short of that
+// was cut off by something (breaker, Tuya round-trip failure, manual stop), and
+// that is the whole point of showing the duration rather than a yes/no.
+const SWEEP_FULL_MIN  = 90;
+const SWEEP_SHORT_MIN = 80;
+
+let _lastSweepOn = null;   // null until the first poll establishes a baseline
+
+// Turns the stored run into what the tile and the pool card actually say.
+function _describeSweep(run) {
+  if (!run) return null;
+  const mins = Math.round(run.duration_s / 60);
+  const when = new Date(run.ended_at * 1000);
+  const hh   = when.getHours() % 12 || 12;
+  const mm   = String(when.getMinutes()).padStart(2, '0');
+  const ampm = when.getHours() < 12 ? 'am' : 'pm';
+
+  // Calendar days back, not elapsed/86400 — a run that ended at 11:15pm last
+  // night is "last night" all of today, not "0 days ago" until 11:15pm.
+  const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+  const daysAgo = Math.max(0, Math.ceil((midnight.getTime() - when.getTime()) / 86400000));
+
+  const dayText = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Last night' : `${daysAgo} days ago`;
+  const ok = mins >= SWEEP_SHORT_MIN;
+
+  return {
+    endedAt: run.ended_at,
+    durationMin: mins,
+    daysAgo,
+    ok,
+    // Stale is a separate question from short: a full 90-min run three nights
+    // ago still means the sweep is not running nightly.
+    stale: daysAgo > 1,
+    text: `${dayText} · ${mins} min`,
+    detail: ok
+      ? `Ran ${hh}:${mm}${ampm} for ${mins} min — full cycle`
+      : `Ran ${hh}:${mm}${ampm} but stopped after ${mins} min of ${SWEEP_FULL_MIN}`,
+  };
+}
+
 async function fetchPoolStatus() {
   if (!HA_TOKEN) return;
   try {
@@ -677,6 +717,20 @@ async function fetchPoolStatus() {
 
     const flowLive = FLOW_METER_INSTALLED && !isNaN(rawFlow);
 
+    // Record sweep runs on the switch's own transitions, from ANY source —
+    // the HA schedule or a hand press. The question is "did the pool get
+    // cleaned", same as the jeeves_sweep_ran_latch automation.
+    //
+    // _lastSweepOn starts null so the first poll after a restart only sets the
+    // baseline. Treating a restart mid-run as a fresh start would log a run
+    // that began at boot and report a falsely short duration.
+    const sweepOn = s('sweep') === 'on';
+    if (_lastSweepOn !== null && sweepOn !== _lastSweepOn) {
+      if (sweepOn) db.openSweepRun();
+      else         db.closeSweepRun();
+    }
+    _lastSweepOn = sweepOn;
+
     cachedStatus.pool = {
       flowStatus,
       waterTempF: isNaN(hxInF) ? null : +hxInF.toFixed(1),
@@ -690,8 +744,11 @@ async function fetchPoolStatus() {
       padOnline,
       pumpRunning,
       pumpWatts:  isNaN(lastPumpWatts) ? null : Math.round(lastPumpWatts),
-      sweepOn:     s('sweep') === 'on',
+      sweepOn,
       sweepRanTonight: s('sweepRan') === 'on',
+      // The durable answer to "did the last sweep go well". sweepRanTonight is
+      // kept only for the 21:45-23:45 live window; it reads false all day.
+      lastSweep: _describeSweep(db.getLastSweepRun()),
     };
 
     // Tile: water temp. The HX inlet probe is the pool water temperature.

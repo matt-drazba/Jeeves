@@ -497,6 +497,19 @@
     .chart-foot  { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); flex-shrink: 0; }
     .chart-empty { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); text-align: center; }
 
+    /* Hour gridlines and the now-marker, matching the timeline strip above.
+       Drawn in SVG (lines survive preserveAspectRatio="none"); the hour LABELS
+       are HTML, because text in a non-uniformly scaled SVG gets stretched. */
+    .chart-grid  { stroke: #262626; stroke-width: 1; vector-effect: non-scaling-stroke; }
+    .chart-grid.day { stroke: #333; }
+    .chart-nowln { stroke: var(--text); stroke-width: 1; opacity: .55;
+                   stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+    /* One axis under both charts — they share a frame, so they share the axis. */
+    #pool-chart-axis {
+      display: flex; justify-content: space-between;
+      font-size: 10px; color: var(--muted); flex-shrink: 0; margin-top: 2px;
+    }
+
     .pool-read { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; padding: 5px 0; border-bottom: 1px solid #242424; }
     .pool-read:last-child { border-bottom: none; }
     .pool-read-k { color: var(--muted); }
@@ -1857,6 +1870,26 @@
   });
 
   /* ── Pool view rendering ────────────────────────────────────────── */
+  /* Sweep card. Three separable failures, and "Not yet" used to hide all of
+     them: it never ran, it ran but was cut short, or it ran fine but not since. */
+  function _sweepCard(p) {
+    if (p.sweepOn) {
+      return { label: 'Sweep', value: 'Running', sub: 'started just now · 2h cap', cls: 'good' };
+    }
+    const ls = p.lastSweep;
+    if (!ls) {
+      return { label: 'Sweep', value: 'No runs yet', sub: 'nothing recorded — 9:45–11:15pm', cls: 'warn' };
+    }
+    return {
+      label: 'Last sweep',
+      value: ls.text,                       // e.g. "Last night · 90 min"
+      sub:   ls.detail,                     // e.g. "Ran 11:15pm for 90 min — full cycle"
+      // Short OR stale both need attention; a full run last night is the only
+      // state that should read as fine.
+      cls:   (ls.ok && !ls.stale) ? 'good' : 'warn',
+    };
+  }
+
   function renderPool(data) {
     const p = data.pool || {};
 
@@ -1875,10 +1908,11 @@
                  : 'Idle',
         sub:   (p.hxInF != null && p.hxOutF != null) ? `${p.hxInF} → ${p.hxOutF}°F` : '—',
         cls:   p.heatActive ? (p.deltaF > 0 ? 'good' : 'warn') : '' },
-      { label: 'Sweep',
-        value: p.sweepOn ? 'Running' : (p.sweepRanTonight ? 'Ran tonight' : 'Not yet'),
-        sub:   '9:45–11:15pm · 2h cap',
-        cls:   p.sweepOn ? 'good' : '' },
+      // Answers "did the LAST sweep go well", which is what you can actually
+      // check during the day. sweepRanTonight is a latch the 23:45 check clears
+      // every night, so it reads "Not yet" from midnight onward no matter what
+      // happened -- it can only be trusted inside the 9:45-11:45pm window.
+      _sweepCard(p),
     ];
 
     // Pump energised with no flow is a deadhead — running against a closed
@@ -1933,40 +1967,77 @@
   }
 
   function renderPoolTimeline() {
-    const pct  = (h) => (h / 24) * 100;
-    const now  = new Date();
-    const nowH = now.getHours() + now.getMinutes() / 60;
+    const pct = (h) => (h / 24) * 100;
 
-    // Pump runs 9pm-4pm, so it wraps midnight and needs two bands.
+    // Same 9pm-anchored frame as the charts below, so a position on this strip
+    // means the same clock time as the position directly under it. Offsets are
+    // hours from 9pm. Anchoring here also stops the 19h pump run wrapping
+    // midnight into two bands, which the old midnight frame required.
     const bands = [
-      { cls: 'pump',  from: 0,     to: 16    },
-      { cls: 'peak',  from: 16,    to: 21    },
-      { cls: 'pump',  from: 21,    to: 24    },
-      { cls: 'sweep', from: 21.75, to: 23.25 },
+      { cls: 'pump',  from: 0,    to: 19   },   // 9pm - 4pm
+      { cls: 'peak',  from: 19,   to: 24   },   // 4pm - 9pm
+      { cls: 'sweep', from: 0.75, to: 2.25 },   // 9:45pm - 11:15pm
     ];
 
     document.getElementById('pool-tl-track').innerHTML =
       bands.map(b => `<div class="tl-band ${b.cls}" style="left:${pct(b.from)}%;width:${pct(b.to - b.from)}%"></div>`).join('') +
-      `<div id="pool-tl-now" style="left:${pct(nowH)}%"></div>`;
+      `<div id="pool-tl-now" style="left:${(poolDayFrame().nowFrac * 100).toFixed(2)}%"></div>`;
 
     document.getElementById('pool-tl-axis').innerHTML =
-      ['12a','4a','8a','12p','4p','8p','12a'].map(l => `<span>${l}</span>`).join('');
+      POOL_AXIS.map(l => `<span>${l}</span>`).join('');
   }
 
   /* ── Pool history charts ────────────────────────────────────────── */
   // Two stacked single-series charts on a shared time axis. Water temperature
   // (~78-86F) and heat-exchanger dT (~0-3F) live on different scales; putting
   // them on one plot with two y-axes would misrepresent both.
+  // needsFlow: drop samples taken while the pump is off.
+  //
+  // With no flow the exchanger holds a static column of water and the two probes
+  // decouple, drifting with the weather instead of the pool: measured +5.51F at
+  // 08-08 16:58 with heat recovery OFF, and -- in the other direction -- both
+  // probes falling 3F together after sunset on 08-09. Neither is exchanger
+  // performance. Left in, that one afternoon excursion sets the y-scale and
+  // squashes the real 0-1F heat-recovery signal into the bottom tenth of the plot.
+  //
+  // Gated on measured pump_watts, never on clock hours: the pump ran well past
+  // its scheduled 4pm stop on 08-09, so the schedule is not a reliable proxy.
   const POOL_SERIES = [
-    { key: 'hx_in_f', name: 'Water temperature',   unit: '°F', color: '#3987e5' },
-    { key: 'delta_f', name: 'Heat exchanger ΔT',   unit: '°F', color: '#d95926' },
+    { key: 'hx_in_f', name: 'Water temperature', unit: '°F', color: '#3987e5' },
+    { key: 'delta_f', name: 'Heat exchanger ΔT', unit: '°F', color: '#d95926',
+      needsFlow: true, footNote: 'pump-off hours hidden' },
   ];
+
+  const PUMP_ON_W = 20;   // matches POOL_PUMP_WATTS_THRESHOLD in server.js
+
+  /* The pool day runs 9pm -> 8:59pm, anchored at the pump start so nothing
+     wraps: the 19h pump run is one unbroken band, the 9:45-11:15pm sweep sits
+     whole near the left edge, and the 4-9pm peak-rate block closes the frame.
+     A midnight or 10pm anchor splits the sweep across both edges.
+
+     Fixed, not rolling: the same clock hour is always in the same place, so the
+     charts line up with the schedule timeline above them and the layout is
+     learnable. Data fills in left-to-right as the day happens. */
+  const POOL_DAY_START_H = 21;
+  const POOL_DAY_S = 24 * 3600;
+  const POOL_AXIS = ['9p', '12a', '3a', '6a', '9a', '12p', '3p', '6p', '9p'];
+
+  function poolDayFrame() {
+    const now = new Date();
+    const start = new Date(now);
+    start.setHours(POOL_DAY_START_H, 0, 0, 0);
+    if (now.getTime() < start.getTime()) start.setDate(start.getDate() - 1);
+    const t0 = Math.floor(start.getTime() / 1000);
+    return { t0, t1: t0 + POOL_DAY_S, nowFrac: (Date.now() / 1000 - t0) / POOL_DAY_S };
+  }
 
   let _poolHistory = null;
 
   async function loadPoolHistory() {
     try {
-      const res = await fetch('/api/pool/history?hours=24');
+      // 25h, not 24: just before 9pm the frame reaches back a full 24h, and a
+      // 24h request would clip the start of the window.
+      const res = await fetch('/api/pool/history?hours=25');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       _poolHistory = (await res.json()).samples || [];
     } catch {
@@ -1975,35 +2046,56 @@
     renderPoolCharts();
   }
 
-  function _buildPath(samples, key) {
+  function _buildPath(samples, series, frame) {
     const pts = samples
-      .filter(s => s[key] !== null && s[key] !== undefined)
-      .map(s => ({ t: s.recorded_at, v: s[key] }));
+      .filter(s => s.recorded_at >= frame.t0 && s.recorded_at <= frame.t1)
+      .filter(s => s[series.key] !== null && s[series.key] !== undefined)
+      .filter(s => !series.needsFlow || (s.pump_watts != null && s.pump_watts > PUMP_ON_W))
+      .map(s => ({ t: s.recorded_at, v: s[series.key] }));
     if (pts.length < 2) return null;
 
     const W = 1000, H = 100, PAD = 8;
-    const t0 = pts[0].t, t1 = pts[pts.length - 1].t;
     const vs = pts.map(p => p.v);
     let min = Math.min(...vs), max = Math.max(...vs);
     // A dead-flat series would divide by zero and render on the baseline;
     // give it a small band so the line sits mid-plot instead.
     if (max - min < 0.5) { const mid = (max + min) / 2; min = mid - 0.25; max = mid + 0.25; }
 
-    const x = (t) => ((t - t0) / ((t1 - t0) || 1)) * W;
+    // x is fixed to the frame, NOT to the data, so the line advances across the
+    // plot as the day happens instead of always spanning the full width.
+    const x = (t) => ((t - frame.t0) / POOL_DAY_S) * W;
     const y = (v) => H - PAD - ((v - min) / (max - min)) * (H - PAD * 2);
 
-    return {
-      d: pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join(' '),
-      min, max, last: pts[pts.length - 1].v, count: pts.length,
-    };
+    // Break the line across masked stretches and logging gaps rather than
+    // drawing a straight segment over hours of missing data. Idle logging is a
+    // 10-min heartbeat, so anything past ~25 min is a real gap.
+    const BREAK_S = 25 * 60;
+    let d = '', prev = null;
+    for (const p of pts) {
+      d += `${prev === null || p.t - prev > BREAK_S ? 'M' : 'L'}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)} `;
+      prev = p.t;
+    }
+
+    return { d, min, max, last: pts[pts.length - 1].v, count: pts.length };
   }
 
   function renderPoolCharts() {
     const host = document.getElementById('pool-charts');
     const samples = _poolHistory || [];
+    const frame = poolDayFrame();
 
-    host.innerHTML = POOL_SERIES.map((s) => {
-      const p = _buildPath(samples, s.key);
+    // Gridline every 3h, matching the axis labels. Heavier line at midnight and
+    // noon so the eye can find the day boundary without reading the labels.
+    const grid = POOL_AXIS.map((lbl, i) => {
+      const gx = (i / (POOL_AXIS.length - 1)) * 1000;
+      const heavy = lbl === '12a' || lbl === '12p' ? ' day' : '';
+      return `<line class="chart-grid${heavy}" x1="${gx}" y1="0" x2="${gx}" y2="100"/>`;
+    }).join('');
+    const nowLine = `<line class="chart-nowln" x1="${(frame.nowFrac * 1000).toFixed(1)}" y1="0"
+                           x2="${(frame.nowFrac * 1000).toFixed(1)}" y2="100"/>`;
+
+    const blocks = POOL_SERIES.map((s) => {
+      const p = _buildPath(samples, s, frame);
       if (!p) {
         return `<div class="chart-block">
             <div class="chart-head"><span class="chart-name">${s.name}</span></div>
@@ -2017,17 +2109,21 @@
             <span class="chart-now" style="color:${s.color}">${fmt(p.last)} ${s.unit}</span>
           </div>
           <svg class="chart-svg" viewBox="0 0 1000 100" preserveAspectRatio="none">
+            ${grid}${nowLine}
             <path d="${p.d}" fill="none" stroke="${s.color}" stroke-width="2"
                   stroke-linejoin="round" stroke-linecap="round"
                   vector-effect="non-scaling-stroke"/>
           </svg>
           <div class="chart-foot">
             <span>low ${fmt(p.min)}</span>
-            <span>${p.count} samples</span>
+            <span>${s.footNote || `${p.count} samples`}</span>
             <span>high ${fmt(p.max)}</span>
           </div>
         </div>`;
     }).join('');
+
+    host.innerHTML = blocks +
+      `<div id="pool-chart-axis">${POOL_AXIS.map(l => `<span>${l}</span>`).join('')}</div>`;
   }
 
   /* ── Alert overlay ──────────────────────────────────────────────── */

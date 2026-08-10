@@ -154,6 +154,30 @@ function migrate() {
     db.pragma('user_version = 6');
     console.log('DB: migrated to v6');
   }
+  if (v < 7) {
+    // Completed sweep runs.
+    //
+    // input_boolean.sweep_ran_tonight cannot answer "did last night's sweep go
+    // well" — jeeves_sweep_missed_check turns it OFF at 23:45 every night, so
+    // from midnight onward it always reads false and the tile says "Not yet"
+    // for the entire day. It is a latch for the 23:45 check, not a record.
+    //
+    // A real run needs a duration to be judged: the scheduled window is 90 min,
+    // so a 12-minute run means something cut it short. Stored here rather than
+    // read back from HA's recorder, which is trimmed to a few days for SD-card
+    // wear and would lose the history within the week.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sweep_runs (
+        id         INTEGER PRIMARY KEY,
+        started_at INTEGER NOT NULL,
+        ended_at   INTEGER,
+        duration_s INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_sweep_started ON sweep_runs(started_at);
+    `);
+    db.pragma('user_version = 7');
+    console.log('DB: migrated to v7');
+  }
 }
 
 migrate();
@@ -285,14 +309,52 @@ export function getOpenErrors() {
   ).all();
 }
 
+// pump_watts is included because the chart cannot be read without it. With the
+// pump off, water sits stagnant in the exchanger and the two probes stop seeing
+// the same water: measured 08-08 16:58 at in=79.4 out=84.9, a +5.5F delta with
+// heat recovery OFF. That is a no-flow artifact, not exchanger performance, and
+// plotting it sets the y-scale so the real 0-1F signal collapses to nothing.
 export function getPoolHeatSamples(sinceTs, limit = 1000) {
   return db.prepare(`
-    SELECT recorded_at, hx_in_f, hx_out_f, delta_f, heat_active
+    SELECT recorded_at, hx_in_f, hx_out_f, delta_f, heat_active, pump_watts
     FROM pool_heat_samples
     WHERE recorded_at >= ?
     ORDER BY recorded_at ASC
     LIMIT ?
   `).all(sinceTs, limit);
+}
+
+// ── Sweep runs ─────────────────────────────────────────────────────
+
+const _openSweep = db.prepare('INSERT INTO sweep_runs (started_at) VALUES (?)');
+const _openSweepRow = db.prepare(
+  'SELECT id, started_at FROM sweep_runs WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1'
+);
+const _closeSweep = db.prepare(
+  'UPDATE sweep_runs SET ended_at=?, duration_s=? WHERE id=?'
+);
+
+/** Sweep switch turned on. No-op if a run is already open. */
+export function openSweepRun() {
+  if (_openSweepRow.get()) return;
+  try { _openSweep.run(Math.floor(Date.now() / 1000)); }
+  catch (err) { console.error('DB sweep open failed:', err.message); }
+}
+
+/** Sweep switch turned off. No-op if nothing is open. */
+export function closeSweepRun() {
+  const row = _openSweepRow.get();
+  if (!row) return;
+  const now = Math.floor(Date.now() / 1000);
+  try { _closeSweep.run(now, now - row.started_at, row.id); }
+  catch (err) { console.error('DB sweep close failed:', err.message); }
+}
+
+/** Most recent COMPLETED run, or null. */
+export function getLastSweepRun() {
+  return db.prepare(
+    'SELECT started_at, ended_at, duration_s FROM sweep_runs WHERE ended_at IS NOT NULL ORDER BY started_at DESC LIMIT 1'
+  ).get() ?? null;
 }
 
 // ── Recurring tasks ────────────────────────────────────────────────
