@@ -187,6 +187,30 @@ Apple Home claims it, and you get the Home app behaviour instead of the Shortcut
 Known gotcha, same as the Tesla scripts: if *Run Script* shows **"no options
 available"**, quit and relaunch the HA Companion app.
 
+### Gotcha: "Siri opens it an inch and it stops"
+
+**The garage door was added to the HomeKit Bridge twice** (2026-08-10). Two accessories
+means two commands per request, and a garage button is a *toggle* — first press starts
+the door, second press stops it. An inch of travel is exactly what start-then-stop looks
+like.
+
+Fix: HomeKit Bridge → Configure → untick the garage door → Submit → restart HA →
+Configure → tick it once → Submit.
+
+Symptom in the logbook: the HomeKit-attributed open reaches `open` in **1 second**, where
+a genuine full open takes ~13.
+
+```bash
+cd ~/homelab && curl -s -H "Authorization: Bearer $(grep '^HA_TOKEN=' .env | cut -d= -f2-)" "http://localhost:8123/api/logbook?entity=cover.garage_door" | python3 -c "import sys,json;[print(e.get('when','')[11:19], e.get('state'), '|', e.get('context_name') or 'no context') for e in json.load(sys.stdin)[-15:]]"
+```
+
+Note the `when` field is **UTC**. Also worth knowing: `[ratgdo:984]: Cancelling position
+callbacks` in the device log looks like a smoking gun for position-control misbehaviour
+and is **not** — it appears during normal operation. It sent this diagnosis down a wrong
+path for a while.
+
+---
+
 `script.garage_close` is a **plain, unverified close** on purpose. Saying it out loud
 means you are standing there watching, so a reversal is something you can see; routing
 it through `garage_close_verified` would fire a critical alert while you are looking
