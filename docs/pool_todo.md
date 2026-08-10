@@ -60,13 +60,41 @@ Full spec and reasoning per line item in
 - [ ] **CT clamp (~$15)** for the Shelly EM Gen3 `IB` channel — destined for the
       **booster** circuit, not the pump's second leg. → booster_interlock
 
-## 2. Chemistry baseline — as soon as the kit lands
+## 2. Chemistry baseline — started 2026-08-10, not waiting on the kit
 
 No wiring, no code. This is the data the forecasting model will be fitted to.
+
+**Testing is already underway** with a drop-reagent kit and the CLA-41 ion kit
+that shipped with the R-40 — the Group A purchase improves resolution, it was
+never a prerequisite for starting. Readings go in
+[pool_chemistry_log.md](pool_chemistry_log.md) until the SQLite tables in tier 6
+exist.
+
+### Open thread — copper reads low, dial moved 2 → 3 on 2026-08-10
+
+First logged test: pH 7.4, FC 1.0, TA 130 — all in range — with **copper 0.1 ppm**
+against a 0.15–0.20 target. pH and chlorine being in range already rule out the
+R-40 manual's two most common causes (p.18 #6, #7), so this is a real output or
+conductivity question. → data_addendum Part 2 for the dial table and the ordered
+cause list.
+
+- [ ] **Retest copper 2026-08-13.** Expect the match at 0.15 or higher; setting 3
+      should add ~0.037 ppm/day at best. **Do not move the dial again before the
+      retest** — two changes inside one interval makes it uninterpretable.
+- [ ] **If the retest is flat: check the internal 115/230 VAC selector.** Set to
+      230 on a 115 V supply, the R-40 runs at **half output**, permanently and
+      silently. Never verified on this unit.
+- [ ] **If still unexplained: measure electrode current** (p.19 #13) — multimeter
+      in series with one electrode lead, chamber full, pump running. ~500 mA at
+      setting 5. **One test discriminates the voltage switch, dirty electrodes,
+      and low TDS.**
+- [ ] Date the CLA-41 reagents, or replace them. Age is currently unknown, and
+      stale reagents read low — which is this exact symptom.
 
 - [ ] **Measure TDS first.** Must be 500–3000 ppm or the R-40 physically cannot
       produce ions at any dial setting. Never verified. If this is low, it
       explains any ionizer underperformance and everything else is noise.
+      **Now the leading suspect for the low copper above.**
 - [ ] **Full baseline panel** — copper (target **0.15–0.20 ppm**), FC (floor 0.4
       ppm), pH (**7.2–7.6**, and this is a sanitiser-efficacy parameter here, not
       comfort), TA 80–140, CH 150–350, CYA (only matters if > 150).

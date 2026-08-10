@@ -644,6 +644,69 @@ Stated honestly: the incremental benefit of silver in consumer pool ionizers is
 not well quantified in any documentation found. This recommendation rests on what
 is controllable and measurable, not on evidence that silver is ineffective.
 
+### The R-40 output dial — what the settings actually mean
+
+The only tuning control the ionizer has. Added 2026-08-10; none of this was
+recorded anywhere in the repo before.
+
+| | |
+|---|---|
+| Settings | **OFF, 1, 2, 3, 4, 5** |
+| Output | 0–500 mA DC, **6 increments** (spec sheet p.21) — so ~100 mA per step |
+| Copper production | **500 mA → 358 mg/hr**; 250 mA → 179 mg/hr (p.21) |
+| Face-plate lights | Power indicator always on with mains present. Two **alternating electrode indicators** swap polarity every ~3 min 30 s — one lit at a time. With the knob at OFF the power light stays on and *both* electrode lights go out (p.15) |
+
+**Production rate for this pool.** Linear in current, so setting 3 ≈ 300 mA ≈
+215 mg/hr. Against 28,800 gal = 109,000 L, over the 19 h/day pump schedule:
+
+| Setting | ≈ mA | ≈ mg/hr | mg/day @ 19 h | **ppm/day, zero losses** |
+|---|---|---|---|---|
+| 1 | 100 | 72 | 1,360 | +0.012 |
+| 2 | 200 | 143 | 2,720 | +0.025 |
+| **3** | **300** | **215** | **4,085** | **+0.037** |
+| 4 | 400 | 286 | 5,440 | +0.050 |
+| 5 | 500 | 358 | 6,800 | +0.062 |
+
+Treat these as **upper bounds on rate** — they assume every ion produced stays in
+solution. Useful as a falsifier: if a dial change produces materially less than
+this over a few days, something in the troubleshooting table below is the real
+constraint. The manual's own rule of thumb (~24 h of run time per 10,000 gal to
+reach 0.15–0.20 from zero, p.14) implies ~69 h for this pool, which is
+meaningfully slower than the table and already prices in some loss.
+
+**Adjustment method (p.14, p.22).** One notch at a time, always:
+
+- **Starting from zero** — set to 5 to reach the band fast, then step *down* one
+  notch and retest a couple of days later. Repeat until it holds steady in range.
+- **Reading too low** — up one notch, retest a couple of days later.
+- **Reading too high** — down one notch, retest a couple of days later.
+- Expect the setting to change **seasonally**, not weekly — lower in winter,
+  higher in summer, since water temperature is the biggest factor. The manual
+  notes that if 2 is too low and 3 too high, the answer is more pump run time at
+  setting 2, not a half-step (p.15).
+
+**Do not make two dial changes inside one retest interval.** It makes the
+interval uninterpretable — neither change can be attributed.
+
+### Can't obtain the proper copper level — ordered causes (p.17–19)
+
+Work this list before assuming the electrodes are worn. Ordered by value for
+*this* installation, with the manual's own item numbers kept:
+
+| # | Cause | Notes for this pool |
+|---|---|---|
+| **#3** | **Internal 115/230 VAC selector set wrong** | The R-40 has a manual voltage switch inside the control box. **Set to 230 V on a 115 V supply cuts output in half, permanently and silently.** (The reverse blows the internal fuse, which at least announces itself.) **Never verified here.** Presents exactly as chronic low copper that a dial bump only partly compensates |
+| **#12** | **TDS below 500 ppm** | The R-40 electrolyses the water and needs conductivity. Below 500 ppm it **cannot produce ions at any dial setting**. Never measured on this pool. Raise with 1 lb table salt per 10,000 gal → +12 ppm; the manual says do this *only* if the ion level is otherwise unobtainable |
+| **#13** | **Measure actual electrode current** | Multimeter in DC current mode, in series with one electrode lead, chamber full of water, filter running. Should read **~500 mA at setting 5** and proportionally less below. **This single test discriminates #3, #4 and #12 at once** — a correct reading here moves the fault into the water, a low one puts it in the box |
+| #4 | Scaled, dirty, or worn electrodes | A blue-green coating is **normal**. Heavy buildup is not — unscrew the chamber, scrub with an old toothbrush and lemon juice or 50/50 muriatic acid, re-tape the threads. Electrodes last 1–5 years and are consumable (CLE-02) |
+| #5 | Test-kit procedure or reagent age | Look **down** into the tube, not from the side. Wait the full 3 minutes. Replace reagents yearly; never let them freeze, cook, or sit in sun. Do not mix manufacturers' reagents |
+| #6 | **Improper pH** | The manual's *"usually the main reason for a low copper-ion level."* Above 7.6 the ions fall out of solution. Rule this out first because it costs nothing — it is already being measured |
+| #7 | **Too much chlorine** | A recent shock bleaches the ion test toward zero. A copper reading within ~24 h of shocking is invalid, not low |
+| #1 | Algae or cloudy water | Consumes available copper. Only a candidate if the water is visibly off |
+| #9 | Sequestering agent stripping copper | Sequasol, Cop-Out, Metal Magnet, alum. Safe: Pool Stain Treat, The Ionizer Stuff, Super Blue, Sea-Klear. These can persist up to a year |
+| #11 | High phosphate (> 125 ppb) | Feeds algae, which eats the copper. Only worth testing when chasing algae |
+| #2, #8, #10 | Undersized unit · steel plumbing · electrodes on a bypass line | Installation-time faults. Not live here — 28,800 gal against a 40,000 gal rating, PVC, and the unit is on the return |
+
 ### The target is 0.15–0.20 ppm — CLAUDE.md was wrong
 
 The manual states this in a boxed callout on p.14 and repeats it on p.15 and in
@@ -815,8 +878,23 @@ not luxurious either. Two things make it the right buy anyway. First, the fixed
 ±10 ppb term dominates, and **repeatability is better than absolute accuracy** —
 the dilution model cares about *change between tests*, where a consistent bias
 cancels. Second, look at what it replaces: the included CLA-41 kit is a colour
-match card with exactly two reference blocks, 0.15 and 0.20. Anything numeric is
-a large upgrade.
+match card whose gradients are **0.05 ppm apart across a target band only 0.05 ppm
+wide** — it can place a reading inside, below, or above the band, but it cannot
+resolve movement within it, and the judgement is a by-eye colour match.
+
+> **Correction, 2026-08-10.** This paragraph previously stated the CLA-41 card has
+> *"exactly two reference blocks, 0.15 and 0.20,"* and concluded that "anything
+> numeric is a large upgrade." **Both were wrong.** The physical card carries eight
+> gradients — **0.05 / 0.1 / 0.15 / 0.2 / 0.3 / 0.5 / 0.7 / 1.0 ppm**. The error
+> came from the manual's p.14 wording (*"There is a reading and color match for
+> 0.15 and one for 0.20 on the enclosed chart"*), which names the two *target*
+> blocks rather than describing the card.
+>
+> **The HI747 verdict does not change** — it still wins on ±10 ppb accuracy versus
+> an eyeballed colour match, and on repeatability, which is what the dilution model
+> actually consumes. But the CLA-41 is a usable instrument in the meantime, and
+> readings taken with it are real values worth logging, not placeholders. See
+> [pool_chemistry_log.md](pool_chemistry_log.md).
 
 The HI747's ceiling is a useful accident: 0.999 ppm is essentially the industry
 limit above which copper begins staining plaster. An in-range reading means
