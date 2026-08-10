@@ -28,7 +28,7 @@ it is putting the wall-panel polling bytes `38 / 39 / 3A` on the bus and getting
 |---|---|---|
 | `cover.garage_door` | **Verified live** | Everything. The primary signal. |
 | `binary_sensor.garage_obstruction` | **Verified working 2026-08-10** | Explaining *why* a close failed, and not driving the door into an already-blocked beam. |
-| `binary_sensor Motion` | **Expected dead — untested** | Nothing. |
+| `binary_sensor Motion` | **Tested 2026-08-10 — does not report** | Nothing. |
 
 **The obstruction sensor works.** Proven on 2026-08-10 by streaming the device's own
 event feed while a hand was waved through the photo-eye beam: `OFF → ON → OFF → ON →
@@ -41,11 +41,23 @@ static read of `OFF` is exactly what a correctly wired, unobstructed sensor repo
 to make the thing it measures actually happen and watch the value change — which costs
 about ten seconds.
 
-**Motion is expected not to work**, because Security+ 1.0 motion comes from a
-motion-equipped wall panel and ratgdo is *replacing* the panel rather than listening to
-one. That is an **expectation, not a measurement** — it has not been tested the way
-obstruction was. If it ever reports `ON`, revisit it. To test: stream
-`http://192.168.0.230/events`, walk under the opener, watch `binary_sensor-motion`.
+**Motion does not work — and that is measured, not assumed.** Tested 2026-08-10 with
+the same 120-second capture that proved obstruction, someone walking back and forth
+under the opener: **zero transitions, one sample, `OFF`.** The obstruction run over the
+identical window produced 5 samples and 2 transitions, so the capture pipeline works and
+a flat line is a result rather than missing data.
+
+That matches the expected cause — Security+ 1.0 motion comes from a motion-equipped wall
+panel, and ratgdo is *replacing* the panel rather than listening to one, so nothing
+sources it. **Do not build "door open but nobody's in there" logic.**
+
+The test, for re-running after any firmware or wiring change:
+
+```bash
+curl -s --max-time 120 -N http://192.168.0.230/events | grep -a --line-buffered "binary_sensor-motion"
+```
+
+Walk under the opener while it runs. Swap `motion` for `obstruction` to check the beam.
 
 The door state stays the primary signal regardless. A reversal shows up as the door
 starting to close and never reaching `closed`, which is true whether or not the beam

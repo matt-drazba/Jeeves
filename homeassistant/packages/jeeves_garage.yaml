@@ -21,11 +21,15 @@
 # is disconnected" are indistinguishable at rest — the only way to tell is to
 # make the thing it measures actually happen and watch it change.
 #
-# binary_sensor Motion is a different story and is NOT used below. Security+ 1.0
-# motion comes from a motion-equipped wall panel, and ratgdo is REPLACING the
-# panel rather than listening to one, so there is nothing to source it. Note
-# this is an EXPECTATION, not a measurement — it has not been tested the way the
-# obstruction sensor was. If it ever reports ON, revisit it.
+# binary_sensor Motion is NOT used below, and unlike the note above this one IS
+# measured. Same 120-second capture, same command, with someone walking back and
+# forth under the opener: ZERO transitions, one sample, OFF. The obstruction run
+# caught 5 samples and 2 transitions, so the capture pipeline demonstrably works
+# — a flat line here is a result, not missing data.
+#
+# Matches the expected cause: Security+ 1.0 motion comes from a motion-equipped
+# wall panel, and ratgdo is REPLACING the panel rather than listening to one, so
+# nothing sources it. Do not build "door open but nobody's in there" logic.
 #
 # The door state itself remains the primary signal: a reversal shows up as the
 # door starting to close and never reaching `closed`, which is true whether or
