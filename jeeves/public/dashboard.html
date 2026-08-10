@@ -1878,7 +1878,10 @@
     }
     const ls = p.lastSweep;
     if (!ls) {
-      return { label: 'Sweep', value: 'No runs yet', sub: 'nothing recorded — 9:45–11:15pm', cls: 'warn' };
+      // Cold start: the sweep_runs table is empty until the first run completes
+      // after the v7 deploy, so this is the expected state for one evening. Say
+      // that, rather than showing a bare warn that reads like a fault.
+      return { label: 'Sweep', value: 'No runs logged', sub: 'first run records tonight, 9:45pm', cls: '' };
     }
     return {
       label: 'Last sweep',

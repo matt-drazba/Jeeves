@@ -60,10 +60,26 @@ tolerance and is not a fault. It just has to be calibrated out, because ΔT is a
 
 ---
 
-## Problem 2 — the outlet probe is probably in the sun
+## Problem 2 — the outlet probe is in the sun
 
-Owner hypothesis 2026-08-10, and the data supports it with one important
-qualifier.
+**Confirmed by direct observation 2026-08-10 (owner).** Raised as a hypothesis,
+then verified at the pad. The data below was what suggested it and remains the
+baseline to measure the fix against.
+
+### These are two independent problems
+
+Worth being explicit, because it is tempting to assume the sun explains the
+offset too. It does not.
+
+The pump-running, heat-off baseline is **+0.34 °F overnight**, with no sun on
+anything. If the +0.3 were solar it would collapse after dark. It does not.
+
+- **Problem 1 (probe offset, +0.3 °F)** — sensor tolerance. Present day and
+  night. Fixed by calibration.
+- **Problem 2 (solar, up to +5.5 °F)** — radiative load on the outlet leg.
+  Daylight only, and **only when flow stops**. Fixed by shielding.
+
+Both are real, they are additive, and neither fix substitutes for the other.
 
 ### Evidence
 
@@ -273,11 +289,10 @@ The whole point of Steps 1–3. `check_config` passing proves nothing.
 - **Is the offset constant across temperature?** Only ~3.5 hours of data across
   a narrow 79.1–79.6 °F band existed when this was first raised, and it is still
   unresolved. Step 3 answers it directly.
-- **Which probe is sun-exposed?** The no-flow data says the outlet leg heats
-  faster and retains heat longer, but the pump-running afternoon baseline drifts
-  slightly *down*, which would fit an inlet-side solar load instead. Both legs
-  get shielded identically, so this does not block the fix — but it is worth
-  looking at the physical pad in daylight before assuming.
+- ~~Which probe is sun-exposed?~~ **Closed 2026-08-10 — the outlet, confirmed
+  visually at the pad.** Matches the no-flow signature (outlet heats faster,
+  retains heat longer). Both legs still get shielded identically: the goal is
+  symmetry, and shielding only the exposed one leaves a different asymmetry.
 - **Pump state was inferred, not measured, for the historical analysis.** The
   documented 9pm–4pm schedule does not hold: `heat_active` was still 1 at 16:36
   on 08-09, and since that sensor reads the trio circuit *downstream of the flow
