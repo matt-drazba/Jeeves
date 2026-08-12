@@ -176,10 +176,122 @@ and record all four values at each step:
 | 2400 | | | | |
 | 2600 | | | | *(near the FPH5's 70 GPM ceiling)* |
 
-That single afternoon produces the pump curve, the DN50's `multiply:`, the pressure↔flow model,
-the watts↔flow model, and a real answer on the FPH5 flow ceiling. Taking one point throws away
-almost all of it for no extra effort saved. The DN50 and the gauge can't share the run, so the
-sweep gets done twice — gauge first, meter second, same speeds.
+The DN50 and the gauge can't share the run, so the sweep gets done twice — gauge first, meter
+second, same speeds.
+
+#### What the sweep does and does not give — corrected 2026-08-12
+
+An earlier version of this section claimed the afternoon sweep "produces the pump curve … the
+pressure↔flow model." **That was wrong, and the error is worth understanding because it changes
+the plan.**
+
+Two different curves are in play:
+
+| Curve | What traces it | Shape |
+|---|---|---|
+| **System curve** | varying RPM at a fixed filter condition | H ≈ kQ², set by the plumbing |
+| **Pump curve** | varying resistance at a fixed RPM | a property of the IntelliFlo2, one per speed |
+
+The pressure→flow inversion we want lives on the **pump curve** — filter fouling at a constant
+2200 RPM is exactly "resistance rising at fixed speed." The RPM sweep traces the **system curve**
+instead. Worse, the affinity laws (Q ∝ N, H ∝ N²) leave H = kQ² invariant, so normalising every
+sweep point back to a reference speed collapses them all onto **one** point. More speeds do not
+help. The sweep structurally cannot reconstruct the pump curve.
+
+**What the afternoon sweep genuinely delivers:**
+
+- ✅ The DN50's `multiply:` constant — the main deliverable, unaffected
+- ✅ Confirmation that affinity scaling holds, which then predicts flow at *any* RPM for a given
+  filter state — this is most of the practical value
+- ✅ The system curve at clean-filter state
+- ✅ The RPM where the FPH5's 70 GPM ceiling actually lands
+- ✅ Simultaneous GPM / PSI / watts triples to anchor everything else
+- ❌ **Not** the pressure↔flow model at fixed RPM
+
+**Three ways to get the pump curve, in order of cost:**
+
+1. **Pentair's published IntelliFlo2 VST performance curves.** Free, available, and good enough
+   for a first model — anchor it to the measured points from the sweep rather than trusting its
+   absolute values.
+2. **Throttle sweep at fixed RPM — and this one is safe here, which is not obvious.** Partially
+   closing a return valve at 2200 RPM raises filter pressure toward the ~23 psi deadhead figure
+   computed in [pool_data_addendum.md](pool_data_addendum.md). The TA100D is rated 50 psi, so
+   **the filter cannot be overpressured at 2200 RPM even with the valve fully shut.** Step the
+   valve down in stages, record GPM/PSI/watts at each, and the pump curve falls out in about
+   twenty minutes. Two conditions: keep each throttled step brief, since a near-deadheaded pump
+   heats with no water carrying it away; and do it with heat recovery off, so the FPH5 is never
+   starved below its 45 GPM floor. **Do not attempt this at speeds much above 2200** — the margin
+   shrinks with RPM².
+3. **A season of logged fouling cycles.** Free, happens anyway, needs no intervention — every
+   backwash-to-backwash interval traces one pass along the pump curve at whatever speed was
+   running. This is the version that ends up trustworthy; the first two get you started.
+
+So the honest answer to "can I calculate flow from RPM and pressure?" is **yes, eventually — but
+from the published curve plus a throttle sweep plus a season of fouling data, not from one
+afternoon.**
+
+### Swappable spool pieces — adopted
+
+Owner's suggestion 2026-08-12: mount the Blue-White gauge and the DN50 each on their own short
+PVC spool with true unions, so either can be swapped into the run by hand.
+
+**This is better than the single-meter plan and should be the default.** The two true-union
+fittings are already on the buy list; this adds only a second spool's worth of pipe. It converts
+every hard question in this doc into a reversible one:
+
+- Re-verification stops being a project. Drift *resolution* becomes a 15-minute swap instead of a
+  reason to keep the gauge permanently plumbed.
+- The DN50 can be pulled for the dead of winter if bearing hours are a worry, which makes the
+  install-now-vs-summer decision below almost free to get wrong.
+- A failed meter is removed in minutes rather than stranding the pad.
+
+**One gotcha that will silently corrupt the calibration if missed: build both spools to the same
+face-to-face length.** Turbine meters need straight run upstream (roughly 10 pipe diameters in,
+5 out) to read correctly. If the gauge spool and the meter spool differ in length, swapping one
+for the other changes the straight-run geometry, and the GPM figure transferred from the gauge
+will not be the GPM the meter sees. Same length, same orientation, same position in the run.
+
+### Buy a shelf spare, not a 3D printer
+
+Owner asked 2026-08-12 whether to photograph the DN50's internals to assess longevity, and
+whether worn parts could be 3D printed.
+
+**Photographs won't support a longevity estimate.** The wear that matters is dimensional loss at
+the shaft/bush interface, measured in microns — it is invisible until long after it has begun
+skewing the reading. A photo cannot distinguish a new bushing from one 40% through its life.
+
+**Photographs are worth taking for a different reason: material ID of the shaft and bearing.**
+That *is* visible, and it is the single biggest longevity determinant. A stainless or ceramic
+shaft running in a ceramic or jewelled bush is a genuinely long-lived arrangement; bare
+plastic-on-plastic is not. Worth ten seconds with the unit in hand, and it would firm up the
+whole wear argument above, which is currently reasoned from duty cycle alone.
+
+**3D printing the rotor is the wrong use of the printer:**
+
+- FDM tolerance (~±0.2 mm) and layer-line surface finish are both far coarser than a turbine
+  rotor bearing needs; the print would add drag, which is the exact failure being guarded against.
+- Rotor blade geometry and mass balance *are* the K-factor. A printed rotor is a different meter
+  and would need full recalibration — the thing the swappable spools exist to make possible, but
+  still not free.
+- The shaft can't be printed at all.
+- The economics settle it: the DN50 is a $16–25 part. A replacement unit costs less than the
+  filament iterations, let alone the modelling time.
+
+**Do this instead — buy two or three DN50s now, same listing, same batch.** Roughly $40–50 total,
+and it upgrades the whole cheap-first strategy:
+
+> An unworn shelf twin is the **drift arbiter**. Swap the spare onto its spool for one afternoon:
+> same reading means no drift, higher reading means the installed unit wore. Cheaper, faster and
+> more direct than re-installing the Blue-White, and it needs no pump curve, no model, and no
+> assumptions.
+
+That is a $25 answer to the question this entire document exists to ask, and it should be bought
+before the $642 paddlewheel is discussed again.
+
+**Where the printer genuinely helps:** the UV shroud. Direct pad sun is the confirmed
+environmental threat, and an opaque printed cover in **ASA or PETG** (not PLA, which creeps in
+heat and fails outdoors) is a good, fast, low-tolerance part. A spool-mounting bracket is the
+other one.
 
 ### Branch: install now, or wait for summer?
 

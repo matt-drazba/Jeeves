@@ -115,16 +115,51 @@ task on the list.
       **2" confirmed** 2026-08-07. DN50 is correct, and it matches the TA100D's
       2" multiport valve. Stale "measure before ordering" item removed from
       heat_recovery.
-- [ ] Source true-union fittings.
+- [ ] Source true-union fittings — **4 of them, not 2.** Building the Blue-White
+      gauge and the DN50 each onto their own swappable spool (owner's idea,
+      2026-08-12) makes every calibration and re-check a 15-minute hand swap.
+- [ ] **Build both spools to the same face-to-face length.** Different lengths
+      change the straight-run geometry the turbine sees, and the GPM transferred
+      from the gauge silently stops applying to the meter.
+- [ ] **Buy 2–3 DN50s, same listing/batch (~$40–50 total).** The unworn shelf
+      twin is the drift arbiter — swap it in for an afternoon and a matching
+      reading proves no wear, no model or pump curve required.
 - [ ] Install. Powers from the existing 5V buck rail alongside the ESP.
-- [ ] **Calibrate against the Blue-White gauge at the Program 4 speed** (2200 RPM
-      today — a setting, not a lock; hold it unchanged across both readings),
-      sequentially (both cannot be in the run at once). Replace the theoretical
-      `multiply: 0.02201` placeholder in `esphome/pool-pad.yaml` with the measured
-      value. → heat_recovery
-- [ ] **While the gauge is in the run, read GPM at 2200 RPM and settle it.** The
-      ~55–60 GPM figure is extrapolated from the 1750 RPM reading, never measured.
-      Also worth reading at ~2600 to check the FPH5's 70 GPM ceiling. → heat_recovery
+- [ ] Photograph the internals on arrival — **shaft and bearing material only**
+      (stainless/ceramic vs. plastic-on-plastic). That is the real longevity
+      determinant and the wear argument currently rests on duty cycle alone.
+      Photos cannot estimate remaining life; don't try.
+- [ ] Print a UV shroud in **ASA or PETG, not PLA**, before it sees pad sun.
+
+### The calibration afternoon — do this in one session, gauge first, meter second
+
+Record every column at every step, at **each** speed. Reasoning and the full
+analysis live in
+[pool_flow_meter_selection.md](pool_flow_meter_selection.md).
+
+| RPM | True GPM (Blue-White) | Filter PSI | Pump watts | DN50 pulses/min |
+|---|---|---|---|---|
+| 1500 | | | | *flow switch should drop out* |
+| 1750 | | | | *the one previously measured point* |
+| 2000 | | | | |
+| 2200 | | | | *current Program 4 setting* |
+| 2400 | | | | |
+| 2600 | | | | *near the FPH5's 70 GPM ceiling* |
+
+- [ ] Run the table above with the **Blue-White gauge** in the spool.
+- [ ] Swap spools, run it again with the **DN50**, same speeds.
+- [ ] Compute `multiply:` = true GPM ÷ pulses-per-minute and replace the
+      theoretical `0.02201` placeholder in `esphome/pool-pad.yaml`. → heat_recovery
+- [ ] **Settle the ~55–60 GPM figure at 2200** — it is extrapolated from the 1750
+      reading and has never been measured. → heat_recovery
+- [ ] Confirm where the FPH5's 70 GPM ceiling actually lands (predicted
+      ~2600–2700 RPM). → heat_recovery
+- [ ] **Throttle sweep at 2200 RPM only**, heat recovery off: step a return valve
+      closed in stages, recording GPM/PSI/watts at each. This is what yields the
+      *pump* curve — the RPM table above cannot, since those points trace the
+      system curve instead. Safe at 2200 because the deadhead there is ≈23 psi
+      against the TA100D's 50 psi rating; keep each step brief, and **do not do
+      this at higher RPM**, where the margin falls off as RPM².
 
 ## 4. Booster dry-run interlock — the actual safety item
 
