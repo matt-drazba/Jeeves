@@ -121,9 +121,11 @@ task on the list.
 - [ ] **Build both spools to the same face-to-face length.** Different lengths
       change the straight-run geometry the turbine sees, and the GPM transferred
       from the gauge silently stops applying to the meter.
-- [ ] **Buy 2–3 DN50s, same listing/batch (~$40–50 total).** The unworn shelf
-      twin is the drift arbiter — swap it in for an afternoon and a matching
-      reading proves no wear, no model or pump curve required.
+- [ ] **Buy one spare DN50, same listing/batch — $50** (they are $50 each, not
+      the $16–25 first assumed; at that price buy **two total**, not three). The
+      unworn shelf twin is the drift arbiter — swap it in for an afternoon and a
+      matching reading proves no wear, no model or pump curve required. Half the
+      spend is inventory needed anyway when the first one wears out.
 - [ ] Install. Powers from the existing 5V buck rail alongside the ESP.
 - [ ] Photograph the internals on arrival — **shaft and bearing material only**
       (stainless/ceramic vs. plastic-on-plastic). That is the real longevity

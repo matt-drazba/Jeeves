@@ -274,19 +274,24 @@ whole wear argument above, which is currently reasoned from duty cycle alone.
   and would need full recalibration — the thing the swappable spools exist to make possible, but
   still not free.
 - The shaft can't be printed at all.
-- The economics settle it: the DN50 is a $16–25 part. A replacement unit costs less than the
-  filament iterations, let alone the modelling time.
+- The economics still favour buying, though **less lopsidedly than first written**: the DN50 is
+  **$50, not the $16–25 estimated here on 2026-08-12** (owner correction). A replacement unit is
+  still cheaper than the filament iterations plus the modelling and recalibration time, but this
+  is now an argument rather than a rout. Note the three technical objections above are the
+  *primary* reasons and none of them move with price.
 
-**Do this instead — buy two or three DN50s now, same listing, same batch.** Roughly $40–50 total,
-and it upgrades the whole cheap-first strategy:
+**Do this instead — buy a second DN50 now, same listing, same batch.** **$50** (revised from an
+assumed $40–50 for three; at the real price, buy **two units, not three** — one installed, one on
+the shelf that doubles as the eventual replacement). It upgrades the whole cheap-first strategy:
 
 > An unworn shelf twin is the **drift arbiter**. Swap the spare onto its spool for one afternoon:
 > same reading means no drift, higher reading means the installed unit wore. Cheaper, faster and
 > more direct than re-installing the Blue-White, and it needs no pump curve, no model, and no
 > assumptions.
 
-That is a $25 answer to the question this entire document exists to ask, and it should be bought
-before the $642 paddlewheel is discussed again.
+That is a **$50** answer to the question this entire document exists to ask — still **13× cheaper
+than the $642 Signet**, and roughly half of it is inventory that would be bought anyway when the
+first unit wears out. It should be bought before the paddlewheel is discussed again.
 
 **Where the printer genuinely helps:** the UV shroud. Direct pad sun is the confirmed
 environmental threat, and an opaque printed cover in **ASA or PETG** (not PLA, which creeps in
