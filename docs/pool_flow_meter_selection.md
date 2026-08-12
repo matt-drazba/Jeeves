@@ -37,16 +37,28 @@ bearing wears and the impeller drags — which is worse than reading zero, becau
 silently reporting 40 GPM when the pipe is moving 58 GPM would false-trip a booster kill or
 mask a real deadhead. A meter that dies to `unavailable` is safe; one that lies plausibly is not.
 
-### Free mitigation: drift detection at fixed RPM
+### Free mitigation: drift detection at constant pump watts
 
-The main pump is locked to **Ext. Program 4 at 2200 RPM**, so true flow is near-constant by
-design. That makes wear detectable at zero hardware cost:
+**Corrected 2026-08-12.** This section previously claimed the pump is "locked to Ext. Program 4
+at 2200 RPM, so true flow is near-constant by design." **That is false.** Ext. Program 4's speed
+is a setting on the pump's own control pad, adjustable up to 3450 RPM; 2200 was *chosen* as the
+estimated speed to clear the FPH5's 45 GPM floor. Nothing prevents it from being changed, and a
+drift check anchored to an assumed setting would read a deliberate speed change as bearing wear —
+or, worse, hide real wear behind a speed increase.
 
-> Indicated GPM trending **down** at constant RPM and constant filter pressure is bearing
+**Anchor the check to pump watts instead**, which are already logged from the Shelly EM Gen3 and
+are a *measurement* of what the pump is doing rather than a belief about how it is configured:
+
+> Indicated GPM trending **down** at the same pump watts and the same filter pressure is bearing
 > wear, not real flow loss.
 
-Pump watts are already logged from the Shelly EM Gen3. This converts the silent-drift failure
-into an observable one, and it is the thing worth building *before* spending $650.
+This is strictly better than the RPM version — it survives someone changing Program 4, needs no
+new hardware, and needs nothing to be remembered. It is still the thing worth building *before*
+spending $650.
+
+Do **not** substitute "sample only during `pool_heat_active`" as the constant-condition trick here.
+That holds RPM constant only for as long as nobody re-configures Program 4, which is the exact
+assumption this correction removed.
 
 ## Head loss — the strongest argument for the paddlewheel
 
@@ -80,7 +92,9 @@ optocoupler. Most of the $292 saved goes back into circuitry to design and debug
 - [ ] **True unions both sides** — already on the buy list ([pool_heat_recovery.md](pool_heat_recovery.md) Parts). Makes replacement a 10-minute swap instead of a pipe cut. This is what makes the cheap-first strategy reversible.
 - [ ] **Shade or wrap the body** against direct pad sun.
 - [ ] **Never sole authority for a safety kill.** The booster dry-run interlock already gates on **pump watts** from the Shelly; flow was always an addition to that vote, never a replacement. The deadhead alert is deliberately unwritten (see CLAUDE.md Deferred) — when written, keep watts in the decision.
-- [ ] **Log GPM at 2200 RPM from day one** so the drift baseline exists before wear starts.
+- [ ] **Log GPM alongside pump watts from day one** so the drift baseline exists before wear
+      starts. Record the Program 4 speed setting in the log notes whenever it is changed — the
+      baseline is per-operating-point, and the speed is user-adjustable (see above).
 - [ ] Calibrate via the sequential Blue-White procedure in [pool_heat_recovery.md](pool_heat_recovery.md) — the `multiply: 0.02201` in the yaml is datasheet theory, not measurement.
 
 **Decision rule at one season:** flow steady at fixed RPM → the DN50 stays and $642 was saved.
@@ -95,7 +109,7 @@ right but contains three errors worth not carrying forward:
 
 | Claim in brief | Correction |
 |---|---|
-| "~75 GPM / 284 L/min continuous" | **~55–60 GPM measured** against the Blue-White gauge at the locked 2200 RPM. The wear argument is built on a figure ~25% high |
+| "~75 GPM / 284 L/min continuous" | **~55–60 GPM** at the current Ext. Program 4 setting of 2200 RPM. The wear argument is built on a figure ~25% high. Note this 55–60 is **extrapolated** from the one direct Blue-White reading (1750 RPM ≈ 45–50 GPM) by linear scaling, not measured at 2200 — corrected 2026-08-12 |
 | "Use GPIO4 (D2)" | `pin_flow_pulse` is already **GPIO12 (D5/D6 block)** in [pool-pad.yaml](../esphome/pool-pad.yaml) — equally interrupt-capable and boot-safe. Do not move it |
 | `multiply: 0.0565` | Ours is `0.02201` (12 pulses/L). **Both are placeholders**; only the sequential Blue-White calibration sets the real value |
 

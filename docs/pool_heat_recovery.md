@@ -17,11 +17,27 @@ Sources: HotSpot FPH installer manual (44p scan), Pentair IntelliComm II guide, 
 | Schedule speeds | The daily schedule is **two-speed**: **2000 RPM** during the sweep window (21:45–23:15), **1750 RPM** the rest of the 19-hour run. Distinct from Ext. Program 4 below, which the FPH commands and which outranks both. Winter speeds are under review — see [pool_system_checks.md](pool_system_checks.md). |
 | Sanitizer | **Clearwater MineralPURE R-40** copper/silver ionizer (40k gal). Low residual chlorine (~90% reduction; small residual still required). Copper target **0.15–0.20 ppm** (R-40 manual p.14, verified 2026-08-07 — an earlier 0.2–0.4 figure here was wrong, its upper half exceeds the manufacturer maximum). |
 
-## Locked program config
+## Program config
+
+**"Locked" was wrong and is corrected 2026-08-12.** Nothing about Ext. Program 4's speed is locked.
+It is a setting on the IntelliFlo2's own control pad, adjustable anywhere up to **3450 RPM**. The
+2200 figure is the speed that was *chosen* as a good estimate for clearing the FPH5's 45 GPM floor —
+it is a decision, not a constraint, and several docs had been treating it as a physical fact and
+building reasoning on top of it.
+
+**Usable band for Program 4 is roughly 1900–2600 RPM**, set by the FPH5 at both ends:
+
+- **Floor:** below ~1750 RPM the HX is under its 45 GPM minimum. The Tecmark 3010P enforces this in
+  hardware — it is calibrated to drop out at 1500 RPM / ~40 GPM.
+- **Ceiling:** the FPH5 maxes at **70 GPM**. On the same linear scaling that produced the 55–60 GPM
+  figure, that lands near **2600–2700 RPM**. So Program 4 cannot simply be cranked toward 3450 to
+  get more heat recovery — past roughly 2600 it exceeds the exchanger's rated flow.
+- Both ends are extrapolated from one measured point. **Confirm with the Blue-White gauge before
+  relying on either**, especially before raising the speed.
 
 | Setting | Value | Notes |
 |---|---|---|
-| Ext. Program 4 RPM | **2200 RPM** | ~55–60 GPM. Measured, not estimated. |
+| Ext. Program 4 RPM | **2200 RPM** (configurable, not locked) | ~55–60 GPM — **extrapolated** by linear scaling from the one direct gauge reading at 1750 RPM, not measured at 2200. Confirm during the sequential flow-meter calibration. |
 | Program 4 stop delay | Max / ≥60 s | UI shows seconds. HX flush cool-down after FPH releases pump-call. |
 | Input 4 | FPH pump-call (highest priority wins) | Voltage-driven 9–24V AC/DC, NOT dry-contact. Unpolarized. |
 | Input 2 | Unused. HA pump control was designed 2026-08-05 and dropped — see "Pump control (L4)" below. | Lower priority than FPH by design. |
@@ -143,9 +159,9 @@ Do NOT add a second RS-485 master (njsPC) while IntelliComm II owns the bus.
 **In hand:** ESP8266 HiLetgo, 12VDC adapter (2A) — **shared supply: powers IntelliComm II and ESP8266 off the same 12V/2A adapter** (combined draw well under 2A: IntelliComm modest + ESP8266 ~300mA peak; parallel-tap the 12V+/GND pair rather than daisy-chaining off one set of terminals), Blue-White inline flow gauge, Tecmark 3010P (installed, wiring remaining).
 
 **Flow meter (not yet received):** DN50 (2" MPT, both ends male), 10–300 L/min (~2.6–79 GPM, comfortably covers the 45–70 GPM FPH5 window), 12 pulses/liter, NPN pulse output (works with GPIO12's existing `INPUT_PULLUP`, no external pull-up needed). **Runs on 5V DC, not 12V** — power from the existing buck converter, not the shared 12V adapter (do not power from the ESP8266's 3.3V pin).
-- **The DN50's plastic construction was reviewed 2026-08-10 and it is still the right first install** — see [pool_flow_meter_selection.md](pool_flow_meter_selection.md). Chemical attack is a non-issue with a copper/silver ionizer at 0.4 ppm FC; the real risks are UV on the body (shade it) and bearing wear at ~6,900 h/yr, which shows up as a slow *under-read*. Detect it for free by watching indicated GPM at the locked 2200 RPM. Upgrade path if it drifts is a GF Signet 3-2536-P0 at ~$642, not the $500–1000 system price.
+- **The DN50's plastic construction was reviewed 2026-08-10 and it is still the right first install** — see [pool_flow_meter_selection.md](pool_flow_meter_selection.md). Chemical attack is a non-issue with a copper/silver ionizer at 0.4 ppm FC; the real risks are UV on the body (shade it) and bearing wear at ~6,900 h/yr, which shows up as a slow *under-read*. Detect it for free by watching indicated GPM **at constant pump watts** (Shelly EM Gen3) and constant filter pressure — **not** "at the locked 2200 RPM", which was the original wording and rested on a Program 4 speed that is in fact user-configurable. Upgrade path if it drifts is a GF Signet 3-2536-P0 at ~$642, not the $500–1000 system price.
 - **Needs true-union fittings on both sides** — both ends are male thread, so without a union anywhere in the run, removing/servicing the sensor later means unthreading the entire pipe run. Add to buy list below.
-- **Can't install flow meter and Blue-White gauge simultaneously** (no room for both in the run at once) — calibration plan is sequential instead: install Blue-White first, run pump at locked 2200 RPM, record true GPM; swap in the flow meter at the same RPM setting, record pulse rate; compute the real `multiply:` filter value from that pair of readings. Theoretical starting value from the datasheet math: `GPM ≈ pulses/min × 0.02201` — use this as a placeholder in the yaml until the sequential calibration confirms it.
+- **Can't install flow meter and Blue-White gauge simultaneously** (no room for both in the run at once) — calibration plan is sequential instead: install Blue-White first, run pump at the Program 4 speed (2200 RPM today), record true GPM; swap in the flow meter **at that same speed setting, unchanged between the two readings**, record pulse rate; compute the real `multiply:` filter value from that pair of readings. Theoretical starting value from the datasheet math: `GPM ≈ pulses/min × 0.02201` — use this as a placeholder in the yaml until the sequential calibration confirms it.
 
 **To buy:**
 - 1× White Rodgers Type 84 fan relay, 24VAC coil, SPNO (90-290Q, ~$8.35) + 10k pulldown resistor + female quick-disconnect (Faston) terminals for wiring

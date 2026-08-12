@@ -190,34 +190,41 @@ owner's "doing OK." No action; revisit only if the trees show stress.
 
 ---
 
-## 8. Diagnostics — results and one correction
+## 8. Zone 4 — THE ONE CHECK
 
-**Zone 4 drains out the bottom on every run. Owner-confirmed 2026-08-12.**
+> **On any odd-numbered day, push a finger 3–4 inches into the mix in each of the four
+> half-barrels, mid-radius — out between the trunk and the rim, NOT next to an emitter.**
+>
+> **Damp → zone 4 is fine. Change nothing.**
+> **Dry → the water is channeling straight through. Fix per below.**
 
-**Correction to the earlier framing in this doc: the drainage test is NOT binary here,
-and it was wrong to call it unambiguous.** Drainage proves water left the pot, not that
-the root ball was wetted. At these volumes the two readings are opposite:
+That is the whole test. Odd days are the driest point in an even-day schedule, so it is
+the moment of maximum information, and there is no timing pressure within the day.
+Mid-radius matters: soil directly under an emitter is wet in every scenario and tells you
+nothing.
 
-| Observation | Reading A — fine | Reading B — bad |
-|---|---|---|
-| Water exits the drain hole after ~0.5–1.4 gal into a **half-barrel** (~25–30 gal of mix) | The mix was already near field capacity from the every-other-day schedule, so anything added drains. Schedule is adequate. | **Channeling.** Dry or hydrophobic mix sheds water down the sides or through root channels straight out, wetting almost none of the root ball. |
+### Why this one check, and not the drainage observation
 
-Reading B is the concerning one and is plausible: filling a half-barrel from moderately
-dry takes ~2–4 gal, more than any zone-4 plant receives per run. **An RWS tube in a pot
-makes channeling more likely, not less** — it is designed to deliver at depth in open
-ground, and in a container it is a direct conduit toward the drain hole.
+**Correction to the earlier framing in this doc: the drainage test is NOT binary, and it
+was wrong to call it unambiguous.** Zone 4 does drain from the bottom on every run
+(owner-confirmed 2026-08-12) — but drainage proves water *left*, not that the root ball
+was *wetted*. At these volumes it reads two opposite ways:
 
-**The test that actually separates them:** poke a finger or trowel 3–4" into the mix,
-mid-radius (not at the emitter), **immediately before** a scheduled run.
+| Reading A — fine | Reading B — bad |
+|---|---|
+| The mix is already near field capacity from every-other-day watering, so anything added runs straight through. Schedule adequate. | **Channeling.** Dry or hydrophobic mix sheds water down the sides and through root channels, out the hole, wetting almost none of the root ball. |
 
-- Damp → Reading A. Zone 4 is fine. Leave it alone.
-- Dry → Reading B. Channeling; the pots need longer or repeated cycles, and possibly a
-  wetting agent or re-wetting by hand once to break hydrophobicity.
+Reading B is entirely plausible: wetting a half-barrel from moderately dry takes ~2–4 gal,
+more than any zone-4 plant gets per run (§7). Only the moisture check separates them.
 
-**Unresolved 2026-08-12.** Do not size zone 4 until this is answered.
+**If dry (Reading B):** this is hydrophobic mix, and *a longer schedule will not fix it* —
+faster water channels harder. Reset it by hand once: a slow soak, or several short cycles
+20 minutes apart to let the surface re-wet, or a commercial wetting agent. Once re-wetted
+the mix behaves normally again, and *then* runtime is worth adjusting.
 
-**Trowel test (rose):** one hour after zone 1 runs, dig 6–8" down near the rose. Not yet
-performed — but §7 makes the shortfall clear enough to act on regardless.
+**Trowel test (rose, separate):** one hour after zone 1 runs, dig 6–8" down near the rose,
+inside and outside the old root ball footprint (§13). Not yet performed — §7 makes the
+shortfall clear enough to act on regardless.
 
 ---
 
@@ -231,6 +238,34 @@ shape**, not merely the wrong number.
 
 Half-barrels are the forgiving end of container growing — ~25–30 gal of mix buffers far
 better than a nursery can — which is consistent with these plants coping so far.
+
+### What to know about these four specifically
+
+1. **A half-barrel holds less water than its size suggests.** An established tree's roots
+   displace much of the mix. These are old plants; treat the usable reservoir as a
+   fraction of 25–30 gal, not the whole thing.
+2. **For citrus, consistency beats volume.** Citrus punishes *swings* more than it
+   punishes a modest deficit — fruit drop, leaf drop, split fruit. Steady moisture is the
+   goal, not maximum gallons.
+3. **Over- and under-watering both yellow the leaves, which is the classic trap.**
+   Under: leaves cup or curl inward along the midrib, go dull, wilt by morning, fruit
+   drops small. Over: yellowing starts on older inner leaves, mix smells sour, and there
+   is *no* wilting. **The leaves will not settle it — the soil check will.**
+4. **The fig is the outlier, and it lies.** Thirstiest of the four in summer, and
+   dramatic about it. **Midday wilt on a fig is normal and means nothing.** Only a fig
+   that is still wilted in the morning, before sun hits it, is actually dry.
+5. **Bark/peat mix goes hydrophobic once fully dry** and then repels water — this is the
+   exact mechanism by which "it drains" and "it is bone dry" are both true at once. The
+   cure is one slow re-wetting by hand, not a longer schedule (§8).
+6. **Salt buildup is a container-only problem.** No native soil to buffer, so fertiliser
+   and tap-water salts accumulate. Symptom is leaf **tip and margin burn** on citrus. Cure
+   is periodic deep leaching — a long run that flushes volume through. **This couples to
+   the fertiliser schedule: more feeding means more flushing needed** (§10). Good drainage
+   here is an asset for exactly this.
+7. **The kumquat's RWS tube is the odd one out.** A 10" root-watering tube is designed for
+   open ground; in a barrel it is a short conduit pointed at the drain hole. **If one
+   zone-4 plant underperforms, suspect the kumquat first**, and consider capping the tube
+   and watering the surface instead.
 
 Consequences:
 
@@ -251,31 +286,56 @@ Consequences:
 
 ---
 
-## 10. Fertilizer — feeds the existing tickler, not a new system
+## 10. Fertilizer + mulch in the tickler — BUILT 2026-08-12, schema v8
 
-Goes in the existing `tasks` table (schema v6: `domain, title, icon, interval_days,
-last_done_at, enabled`), promoting to a real chore tile at 07:00 via `_addChore()`. No new
-mechanism required.
+Written, not yet deployed. No dashboard work was needed: the Next Up tile and the 07:00
+`_addChore()` promotion already consume anything in the `tasks` table.
 
-Starting cadences (to be ratified, not yet seeded):
+### The schema gap is closed
+`tasks` had `interval_days` only. Roses stop feeding around Labor Day and in-ground citrus
+feeds three times a year — on interval alone both would promote a chore tile every 35 days
+through December, and **a tickler that nags out of season is how the tile gets ignored
+entirely.** Same failure the garage snooze `timer` and the deleted
+`input_boolean.pool_maintenance` were built to avoid: suppression must clear itself.
 
-| Plant | Cadence | Notes |
-|---|---|---|
-| Rose | Every 4–6 wks, spring → ~Labor Day, then stop | Heavy feeder. **Fix the water first** — see §7 |
-| In-ground citrus (pomelo, Eureka lemon) | 3×/yr — roughly Feb, May, Aug | Citrus-specific food |
-| Potted citrus (kumquat, tangelo, Meyer) | Every 4–6 wks through the growing season | **Needs micronutrients** (Fe, Zn, Mn) — containers leach them |
-| Potted fig | Monthly in growing season, ease off late summer | |
+**v8 adds nullable `start_month` / `end_month` to `tasks`** (`db.js`). Outside its window a
+task's `dueAt` is **deferred to the next window opening, not hidden** — so Next Up still
+reads "Feed the rose · March 1" instead of the task vanishing for six months and looking
+like a bug. NULL months = no window, so every pre-v8 task is unchanged. Windows may wrap
+the year end. `refreshNextActions()` appends "Mar–Aug only" to the `basis` string for the
+same reason.
 
-**Interaction worth remembering: more irrigation water means more leaching, so fixing
-zone 4's watering *increases* how often the pots need feeding.** The two schedules are
-coupled; do not tune them independently.
+### Seeded tasks — domain `garden`
 
-### Known schema gap — blocks seeding
-**`tasks` has `interval_days` only, with no seasonal window.** A 3×/year citrus feeding
-or a rose schedule that stops at Labor Day would keep promoting chores through December.
-Needs either start/end month columns on `tasks`, or an accepted manual `enabled` toggle
-each season. **Decide this before seeding any fertilizer task** — a tickler that nags all
-winter is how people learn to ignore the tile.
+| Key | Task | Every | Window | Notes |
+|---|---|---|---|---|
+| `fert_rose` | Feed the rose | 35 d | Mar–Aug | Heavy feeder. **Water first** (§13) |
+| `fert_citrus_ground` | Feed pomelo + lemon | 120 d | Feb–Sep | Citrus-specific food |
+| `fert_potted` | Feed potted trees | 35 d | Mar–Sep | Kumquat, tangelo, Meyer, fig. **Micronutrients (Fe, Zn, Mn)** — containers leach them |
+| `mulch_beds` | Mulch the beds | 365 d | — | Seeded `last_done_at = NULL` so it is **due immediately** |
+
+**`mulch_beds` deliberately breaks the v6 "stamp last_done_at so nothing is due on day one"
+rule.** Mulching genuinely is outstanding; stamping it would hide a real task for a year.
+
+### Two consequences of the dates, both verified by test
+- **The rose gets no fertilizer this season.** Seeded 2026-08-12 it first comes due
+  2026-09-16, past its August close, so it defers to **2027-03-01**. Correct outcome: fix
+  water, pull suckers, mulch, feed in spring.
+- **The potted trees get one more feed, ~2026-09-16**, since September is inside their
+  window. This is the near-term check that the window logic works in the real world.
+
+Logic verified against 9 worked cases before deploy, including year-wrapping windows and
+the NULL-last_done path.
+
+### Coupling to keep in mind
+**More irrigation water means more leaching, so fixing zone 4's watering *increases* how
+often those pots need feeding** — and increases salt flushing needs (§9.6). Do not tune
+the water and fertilizer schedules independently.
+
+### Fig simplification
+The fig is folded into `fert_potted` at 35 days rather than getting its own monthly task.
+Deliberate — it avoids a fifth tile for a small difference. Split it out if the fig
+underperforms.
 
 ---
 

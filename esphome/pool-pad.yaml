@@ -134,8 +134,10 @@ sensor:
       # Theoretical, from DN50 sensor datasheet: 12 pulses/liter, 1L=0.2642gal.
       # GPM = pulses/min ÷ 12 × 0.2642 = pulses/min × 0.02201
       # Confirm via sequential calibration (Blue-White gauge, then this sensor,
-      # both at locked 2200 RPM — can't install both in the run at once).
-      - multiply: 0.02201   # theoretical — verify against Blue-White at 2200 RPM
+      # both at the SAME Ext. Program 4 speed — 2200 RPM today, but that is an
+      # adjustable setting on the pump pad (up to 3450), not a lock. Hold it
+      # unchanged across both readings. Can't install both in the run at once.
+      - multiply: 0.02201   # theoretical — verify against Blue-White at the Program 4 speed
 
   # ── Heat recovery BTU/hr ─────────────────────────────────────────────────
   # Standard pool formula: GPM × ΔT(°F) × 500 = BTU/hr

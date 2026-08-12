@@ -178,6 +178,51 @@ function migrate() {
     db.pragma('user_version = 7');
     console.log('DB: migrated to v7');
   }
+  if (v < 8) {
+    // Seasonal windows on recurring tasks, plus the garden domain.
+    //
+    // interval_days alone cannot express garden work. Roses stop feeding around
+    // Labor Day so they don't push tender growth into fall; in-ground citrus
+    // feeds three times a year and not at all in winter. Seeded on interval
+    // alone these promote a chore tile every 35 days through December, and a
+    // tickler that nags out of season is how the tile gets ignored entirely.
+    //
+    // Same reasoning that made the garage snooze a timer and deleted
+    // input_boolean.pool_maintenance: suppression has to clear itself rather
+    // than wait to be remembered. A month window closes and reopens on its own.
+    //
+    // NULL start_month/end_month means no window, so every task predating this
+    // migration keeps its current always-eligible behaviour.
+    db.exec(`
+      ALTER TABLE tasks ADD COLUMN start_month INTEGER;
+      ALTER TABLE tasks ADD COLUMN end_month   INTEGER;
+    `);
+
+    const now = Math.floor(Date.now() / 1000);
+    const seed = db.prepare(
+      `INSERT OR IGNORE INTO tasks
+         (key, domain, title, icon, interval_days, last_done_at, start_month, end_month)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    // Cadences from docs/sprinklers.md section 10.
+    //
+    // fert_rose seeded today first comes due mid-September, past its August
+    // window close, so it will not fire until March. That is deliberate, not an
+    // oversight: the rose is being corrected for water and rootstock suckers
+    // first, and a water-stressed plant cannot take up fertiliser anyway.
+    seed.run('fert_rose',          'garden', 'Feed the rose',       '🌹', 35,  now, 3, 8);
+    seed.run('fert_citrus_ground', 'garden', 'Feed pomelo + lemon', '🍋', 120, now, 2, 9);
+    seed.run('fert_potted',        'garden', 'Feed potted trees',   '🪴', 35,  now, 3, 9);
+
+    // Deliberately breaks the v6 "stamp last_done_at so nothing is due on day
+    // one" rule. Mulching genuinely IS outstanding right now — the rose bed has
+    // never been mulched — so a NULL makes it due immediately and it promotes at
+    // the next 07:00. Stamping it would hide a real task for a year.
+    seed.run('mulch_beds',         'garden', 'Mulch the beds',      '🍂', 365, null, null, null);
+
+    db.pragma('user_version = 8');
+    console.log('DB: migrated to v8');
+  }
 }
 
 migrate();
@@ -361,25 +406,54 @@ export function getLastSweepRun() {
 
 const DAY_S = 86400;
 
+// Is a timestamp inside a task's month window? Windows are inclusive and may
+// wrap the year end (start 11, end 2 = November through February).
+function _inWindow(ts, startMonth, endMonth) {
+  const m = new Date(ts * 1000).getMonth() + 1;
+  return startMonth <= endMonth
+    ? m >= startMonth && m <= endMonth
+    : m >= startMonth || m <= endMonth;
+}
+
+// First instant of startMonth at or after ts.
+function _nextWindowOpen(ts, startMonth) {
+  const from = new Date(ts * 1000);
+  const open = new Date(from.getFullYear(), startMonth - 1, 1, 0, 0, 0, 0);
+  if (open.getTime() < from.getTime()) open.setFullYear(open.getFullYear() + 1);
+  return Math.floor(open.getTime() / 1000);
+}
+
 // Every enabled task with its computed due date, soonest first. A task that has
-// never been done is due now — but the v6 seed stamps last_done_at, so that only
-// happens for rows added by hand later.
+// never been done is due now — the v6 seed stamps last_done_at so that only
+// happens for rows added deliberately (mulch_beds in v8) or by hand later.
 export function getTaskSchedule() {
   const rows = db.prepare(
     'SELECT * FROM tasks WHERE enabled = 1 ORDER BY key ASC'
   ).all();
   return rows
-    .map((t) => ({
-      key:       t.key,
-      domain:    t.domain,
-      title:     t.title,
-      icon:      t.icon,
-      intervalDays: t.interval_days,
-      lastDoneAt:   t.last_done_at,
-      dueAt: t.last_done_at
+    .map((t) => {
+      const rawDue = t.last_done_at
         ? t.last_done_at + Math.round(t.interval_days * DAY_S)
-        : Math.floor(Date.now() / 1000),
-    }))
+        : Math.floor(Date.now() / 1000);
+      // Out of season, a task is deferred to its next window opening rather
+      // than hidden. "Feed the rose · March 1" stays visible on Next Up instead
+      // of the task silently vanishing for six months and looking like a bug.
+      const dueAt =
+        t.start_month == null || _inWindow(rawDue, t.start_month, t.end_month)
+          ? rawDue
+          : _nextWindowOpen(rawDue, t.start_month);
+      return {
+        key:       t.key,
+        domain:    t.domain,
+        title:     t.title,
+        icon:      t.icon,
+        intervalDays: t.interval_days,
+        lastDoneAt:   t.last_done_at,
+        startMonth:   t.start_month,
+        endMonth:     t.end_month,
+        dueAt,
+      };
+    })
     .sort((a, b) => a.dueAt - b.dueAt);
 }
 

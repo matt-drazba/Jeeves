@@ -362,7 +362,7 @@ Source: [Supco 90340 Installation Instructions](https://www.manualslib.com/manua
 | Input used | **GPM/RPM 4 (Program 4)**, 9–24V AC/DC, **voltage-driven, not dry-contact**, unpolarized |
 | Fed by | **FPH controller terminal 3** (not 4 — see the naming-collision note in Part 2), returning on the shared-return leg (the yellow). Not flow-gated, and not the same point as the 90340 coil |
 | Output | RS-485 to the pump |
-| Pump program | **Ext. Program 4, configured at 2200 RPM** (~55–60 GPM, measured against the Blue-White gauge — not estimated) |
+| Pump program | **Ext. Program 4, configured at 2200 RPM** — a setting on the pump's control pad, adjustable up to 3450 RPM, **not locked**. 2200 was chosen as the estimated speed to clear the FPH5's 45 GPM floor; the resulting ~55–60 GPM is **extrapolated** from the one direct gauge reading at 1750 RPM, not measured at 2200. Corrected 2026-08-12 — an earlier version of this row claimed "measured … not estimated", which was wrong. Usable band is ~1900–2600 RPM; see [pool_heat_recovery.md](pool_heat_recovery.md) |
 | Stop delay | **≥10 min**, set on the pump's own screen — flushes the heat exchanger after the FPH releases the call, then the pump returns to its normal schedule |
 | Power | 12VDC adapter (shared with the ESP8266 — see 4.2) |
 
@@ -468,8 +468,8 @@ Manual runs are not faults. Pressing the Tuya sweep switch by hand works at any 
 
 **Calibration must be sequential** — there is not room in the run for the Blue-White gauge and the flow meter at the same time:
 
-1. Install the Blue-White gauge. Run the pump at the locked 2200 RPM. **Record the true GPM.**
-2. Swap in the flow meter at the same RPM. **Record the pulses/min** (ESPHome logs this pre-multiplier).
+1. Install the Blue-White gauge. Run the pump at the Program 4 speed (2200 RPM as configured today). **Record the true GPM** — and record the speed setting with it, since it is adjustable and the pair of readings is only valid at one setting.
+2. Swap in the flow meter **at that same speed, unchanged**. **Record the pulses/min** (ESPHome logs this pre-multiplier).
 3. Compute `multiply:` = (true GPM) ÷ (pulses per minute) and put that in [esphome/pool-pad.yaml](../esphome/pool-pad.yaml).
 
 The value in the config today is the datasheet theoretical: `GPM ≈ pulses/min × 0.02201`. Treat it as a placeholder — it has never been checked against reality.

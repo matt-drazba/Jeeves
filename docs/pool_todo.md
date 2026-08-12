@@ -117,10 +117,14 @@ task on the list.
       heat_recovery.
 - [ ] Source true-union fittings.
 - [ ] Install. Powers from the existing 5V buck rail alongside the ESP.
-- [ ] **Calibrate against the Blue-White gauge at locked 2200 RPM**, sequentially
-      (both cannot be in the run at once). Replace the theoretical
+- [ ] **Calibrate against the Blue-White gauge at the Program 4 speed** (2200 RPM
+      today — a setting, not a lock; hold it unchanged across both readings),
+      sequentially (both cannot be in the run at once). Replace the theoretical
       `multiply: 0.02201` placeholder in `esphome/pool-pad.yaml` with the measured
       value. → heat_recovery
+- [ ] **While the gauge is in the run, read GPM at 2200 RPM and settle it.** The
+      ~55–60 GPM figure is extrapolated from the 1750 RPM reading, never measured.
+      Also worth reading at ~2600 to check the FPH5's 70 GPM ceiling. → heat_recovery
 
 ## 4. Booster dry-run interlock — the actual safety item
 
@@ -171,9 +175,12 @@ Gated entirely on tier 3. This is the one where failure destroys hardware.
 - [ ] Decide bonding for the brass tee + transducer body (680.26(B)(6)).
 - [ ] Uncomment the ADS1115 block in `esphome/pool-pad.yaml`, flash from the Mac.
       **Scale constant 187.5** for the 150 psi sensor.
-- [ ] Two-point calibrate against the analog gauge (0 PSI bled, then 2200 RPM).
-- [ ] **Establish the clean-filter baseline PSI at 2200 RPM immediately after the
-      next backwash/clean.** Everything downstream compares to this number.
+- [ ] Two-point calibrate against the analog gauge (0 PSI bled, then the Program 4
+      speed, 2200 RPM today).
+- [ ] **Establish the clean-filter baseline PSI at the Program 4 speed immediately
+      after the next backwash/clean.** Everything downstream compares to this
+      number. **Re-establish it if the Program 4 speed is ever changed** — it is a
+      user-adjustable setting, so the baseline is per-speed, not permanent.
 - [ ] Add a `filter_pressure` column to `pool_heat_samples` in `jeeves/db.js`.
 
 ## 6. Chemistry logging + forecasting — software

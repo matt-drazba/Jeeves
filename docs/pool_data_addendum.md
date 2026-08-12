@@ -60,10 +60,17 @@ Pressure upgrades that event from "flow low, booster off, cause unknown" to
 It also closes the case the wiring manual currently lists as undetectable:
 flow switch closed, pump powered, water not actually moving.
 
-**One thing in this system's favor:** Ext. Program 4 is locked at **2200 RPM** —
-constant *speed*, not constant flow. A constant-flow VS pump would raise RPM to
-compensate for a fouling filter and mask the flow drop entirely. This one will
-not. Both signals stay honest.
+**One thing in this system's favor:** Ext. Program 4 commands a **fixed speed**
+(2200 RPM as configured today) — constant *speed*, not constant flow. A
+constant-flow VS pump would raise RPM to compensate for a fouling filter and
+mask the flow drop entirely. This one will not. Both signals stay honest.
+
+That argument survives the 2026-08-12 correction that Program 4's speed is
+**user-configurable up to 3450 RPM, not locked** — what matters here is that the
+pump holds whatever speed it is given rather than chasing a flow target. But it
+means the comparison is only valid *between samples at the same setting*: change
+the Program 4 speed and every pressure and flow baseline below must be
+re-established.
 
 **Staging is fine.** Nothing in the pressure plan depends on ordering. Install
 and calibrate the flow meter first if preferred; add pressure after.
@@ -129,10 +136,15 @@ Recorded once so it is not re-derived. The specified range moved 0–30 → 0–
   seller. Re-sourcing found 60 available, so the original preference won.
 
 **Why 60 is safe, given the deadhead argument that killed 0–30.** Shutoff head
-scales with RPM², and the IntelliFlo2 is locked at **2200 RPM** (Ext. Program 4),
-so a deadhead there is roughly (2200/3450)² × 130 ft ≈ **23 psi**. Even at full
-RPM it is ~56 psi — still on-scale on a 60 psi sensor, and overload is at least
-2× rated (120 psi) regardless. The 0–30 objection does not transfer.
+scales with RPM². At the **2200 RPM currently configured** for Ext. Program 4 a
+deadhead is roughly (2200/3450)² × 130 ft ≈ **23 psi**. At full 3450 RPM it is
+~56 psi — still on-scale on a 60 psi sensor, and overload is at least 2× rated
+(120 psi) regardless. The 0–30 objection does not transfer.
+
+**This conclusion is unaffected by the 2026-08-12 correction** that Program 4's
+speed is configurable rather than locked — the case above was already argued at
+full RPM, so the 60 psi choice never depended on the pump staying at 2200. It is
+worth noting explicitly because several *other* claims in these docs did.
 
 **Range barely moves the outcome anyway**, which is why this was never worth
 agonising over. Full-scale error looks alarming (2% FS = ±1.2 psi at 60, ±3 psi
@@ -627,7 +639,7 @@ handle's full sweep and the adjacent plumbing before sealing any threads.
 
 **2. Calibrate against the stock analog gauge, not the datasheet** — same
 discipline as the flow meter's sequential calibration. Two points: pump off with
-air relief open = 0 PSI; pump running at the locked 2200 RPM Program 4 setting =
+air relief open = 0 PSI; pump running at the Program 4 setting (2200 RPM today) =
 whatever the analog gauge reads. If the computed value is off, the correction
 goes in as a `calibrate_linear` on the template sensor rather than by editing
 the constants above, so the derivation stays readable.
@@ -651,11 +663,18 @@ Program 4.
 The metric is **pressure at a known operating point versus the clean baseline at
 that same point.**
 
-1. **Sample only while `pool_heat_active` is true.** That binary sensor already
-   means the pump is locked at 2200 RPM. Same RPM every sample, directly
-   comparable. Backwash or clean when pressure has risen **8–10 PSI over the
-   clean baseline** — the standard rule, and the number the filter manufacturer
-   will also state.
+1. **Sample only while `pool_heat_active` is true.** That binary sensor means the
+   pump is running Ext. Program 4, which is a single fixed speed — so every
+   sample is at the same speed and they are directly comparable. Backwash or
+   clean when pressure has risen **8–10 PSI over the clean baseline** — the
+   standard rule, and the number the filter manufacturer will also state.
+
+   **Caveat added 2026-08-12: that speed is a *setting*, not a lock.** Program 4
+   is adjustable up to 3450 RPM at the pump's control pad. Samples are comparable
+   only within one setting, so **changing the Program 4 speed invalidates the
+   clean baseline and it must be re-recorded after the next backwash.** Logging
+   pump watts alongside pressure makes a changed setting visible in the data
+   instead of silently shifting the threshold.
 2. **Later, once flow is calibrated: pressure ÷ GPM.** RPM-independent, works at
    any pump speed. Better long-term; needs both sensors live and trusted first.
 
@@ -1045,7 +1064,9 @@ mode no breaker or overload will.
       Restated 2026-08-12 for the 60 psi unit: the listing gives overload as 2–4×
       rated on the ranges where it states it at all, so assume the worst case,
       **2× ⇒ 120 psi.** Still 2.4× the filter's 50 psi rating, and the pump
-      dead-heads at ≈23 psi at the locked 2200 RPM
+      dead-heads at ≈23 psi at the 2200 RPM currently set for Program 4 — and at
+      ≈56 psi even at the pump's full 3450, which is still under 120. The margin
+      does not depend on the speed setting staying where it is
 - [x] ~~Check for a spare plugged 1/4" NPT port~~ — **moot, street tee
       purchased.** Still worth a glance during install: if a spare port exists,
       the transducer can go there instead and the tee stays in the parts bin
