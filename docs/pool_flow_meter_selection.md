@@ -102,6 +102,111 @@ Measurable downward drift → buy the 2536, with data showing exactly how fast i
 
 ---
 
+## Cross-calibrating flow against filter pressure — proposal, 2026-08-12
+
+**Status: analysed, NOT ratified. No parts change either way.**
+
+Owner's proposal, in four steps:
+
+1. Calibrate the DN50 against the Blue-White gauge at the same RPM.
+2. Calibrate DN50 flow against the (automatically captured) filter pressure.
+3. Decide whether GPM can be predicted from filter pressure alone.
+4. If yes, re-install the Blue-White only when the DN50 drifts. If no, replace or upgrade.
+
+### Why step 3 is more likely to work than it sounds
+
+The obvious objection is that filter pressure is confounded by filter fouling — pressure rises as
+the sand loads, so pressure can't mean flow. **That objection is wrong here**, and the reason is
+the pump:
+
+> At a fixed RPM the IntelliFlo2 operates somewhere on its own head-vs-flow curve, which is a
+> fixed physical property of the pump. A fouling filter doesn't invalidate that curve — it just
+> **moves the operating point along it**, to higher head and lower flow.
+
+So `(RPM, pressure) → GPM` is a real relationship, not a coincidence, and fouling is the thing
+that *traces out* the curve for you rather than the thing that breaks it. Every backwash cycle
+between clean and dirty is a free sweep through the operating range.
+
+### It gives three signals for the price of one
+
+Pump watts also sit on the pump curve — power falls with flow at fixed speed, which is why a
+loading filter draws *less* power. That yields three estimates of the same quantity:
+
+| Signal | Source | Status |
+|---|---|---|
+| Indicated GPM | DN50 pulse counter | on order |
+| Pressure-implied GPM | filter transducer + pump curve | ordered 2026-08-12 |
+| Watts-implied GPM | Shelly EM Gen3 | **already live** |
+
+Pressure and watts are not independent of *each other* — both derive from the pump curve — but
+both are independent of **the DN50's bearing**, which is the failure being hunted. A bearing
+dragging produces an under-read on exactly one of the three. That turns the silent-drift problem
+from "trust it and hope" into a two-out-of-three vote, with no new hardware.
+
+It also answers step 4 more cheaply than the owner's version: **drift can be *detected* without
+re-installing the Blue-White at all.** The gauge only comes back to re-establish absolute truth
+once the vote says something moved.
+
+### The two things that could sink it
+
+- **The suction side is uninstrumented.** Filter pressure is discharge pressure, not total
+  dynamic head. A loading pump or skimmer basket raises suction vacuum, which shifts the
+  operating point without showing up on the filter gauge. This is the main error term, and it is
+  the same blind spot [pool_data_addendum.md](pool_data_addendum.md) already notes.
+- **Resolution.** 2% FS on a 60 psi sensor is ±1.2 psi. Whether that resolves to ±2 GPM or ±8 GPM
+  depends on how steep the pump curve is in the operating band — unknown until measured. Likely
+  fine for month-scale drift, likely too coarse for absolute BTU/hr math.
+
+Neither is a reason not to try; both are reasons not to promise absolute GPM from pressure before
+the data exists.
+
+### What this changes about the calibration itself
+
+**Do not take a single reading at 2200 RPM.** The original plan captured one point because 2200
+was believed to be a lock; it is not (see the drift-detection correction above). While the
+Blue-White gauge is in the run — the one window where ground truth exists — **sweep the speed**
+and record all four values at each step:
+
+| RPM | True GPM (Blue-White) | Filter PSI | Pump watts | DN50 pulses/min |
+|---|---|---|---|---|
+| 1500 | | | | *(flow switch should drop out)* |
+| 1750 | | | | |
+| 2000 | | | | |
+| 2200 | | | | |
+| 2400 | | | | |
+| 2600 | | | | *(near the FPH5's 70 GPM ceiling)* |
+
+That single afternoon produces the pump curve, the DN50's `multiply:`, the pressure↔flow model,
+the watts↔flow model, and a real answer on the FPH5 flow ceiling. Taking one point throws away
+almost all of it for no extra effort saved. The DN50 and the gauge can't share the run, so the
+sweep gets done twice — gauge first, meter second, same speeds.
+
+### Branch: install now, or wait for summer?
+
+**Recommendation: install it in the off-season, and treat winter as the calibration window.**
+
+The premise behind waiting is that the meter exists to serve heat recovery, so it idles all
+winter while burning bearing life. That premise is wrong on the first half:
+
+- **The flow meter's safety jobs are year-round.** The booster dry-run interlock guards the
+  PB4-60, and the sweep runs nightly 9:45–11:15pm in January exactly as in July. Deadhead
+  detection guards against the handle left in the wrong position after a backwash — also
+  year-round. Heat recovery is the *BTU math* customer, not the safety customer.
+- **Bearing life spent in winter is the cheap kind.** Winter runs shorter hours at lower speed
+  (schedule under review in [pool_system_checks.md](pool_system_checks.md)), so wear accrues
+  slower than the 6,900 h/yr worst case.
+- **The calibration wants low stakes.** Sweeping the pump 1500→2600 RPM and cutting the plumbing
+  twice is a much better idea when nobody is swimming and no heat recovery is running. Doing it
+  in July means disturbing the system in the one season it matters most.
+- **A drift baseline is only useful if it predates the wear.** Installing in summer means the
+  baseline and peak-load duty start on the same day.
+
+The honest counterpoint: every hour of winter running is bearing life spent on a meter whose
+readings nobody needs yet. That is real but small, and it buys a validated three-signal model
+before the season where a bad number would actually mislead a safety decision.
+
+---
+
 ## Corrections to the source brief
 
 The upgrade brief that prompted this (insertion paddlewheel + PC817, 2026-08-10) is directionally
