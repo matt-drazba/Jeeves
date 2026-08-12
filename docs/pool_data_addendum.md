@@ -96,21 +96,21 @@ handle's full travel and the adjacent plumbing before sealing threads.
 
 | Spec | Value | Why |
 |---|---|---|
-| Range | **150 PSI — as purchased 2026-08-07** | Wider than ideal; 60–100 was preferred but 150 was the only stock. Workable — see "Range history" below. **Scale constant 187.5** |
-| **Thread** | **1/4" NPT — verify explicitly** | **The most likely way to buy the wrong part.** Listings for "G1/4" units look identical and are BSPP: a *parallel* British thread, where NPT is tapered. They start threading, then leak or crack the plastic multiport boss |
-| Thread | **1/4" NPT male** | Confirmed — matches the existing gauge port |
+| Range | **0–60 PSI — ordered 2026-08-12** | The 2026-08-07 150 psi order was cancelled by the seller. Re-sourced at the range that was preferred all along — see "Range history" below. **Scale constant 75** |
+| **Thread** | **1/8"-27 NPT male**, into a 1/4" MNPT × 1/8" FNPT brass reducing bushing | The automotive-sender market is almost entirely 1/8" NPT, so the parts are well labelled and unambiguous. **The most likely way to buy the wrong part is a `G1/8` unit** — those look identical and are BSPP, a *parallel* British thread where NPT is tapered. They start threading, then leak or crack the plastic multiport boss. NPT-to-NPT reducing bushings are fine; BSPP-to-NPT is not |
 | Output | **0.5–4.5V ratiometric** | Commodity part, easy to scale. Avoid 4–20mA: needs a loop supply and sense resistor for no benefit here |
 | Supply | **5V DC** | Confirmed available — the chimney-box buck outputs 5V |
-| Body | Stainless 304/316, sealed | Wetted metal, outdoors |
+| Body | Stainless 304/316, sealed | Wetted metal, outdoors. Grade is often unstated on these listings; not a practical difference in this water — copper/silver ionizer, FC floor 0.4 ppm, no shock regime |
+| Channel | **eBay or AliExpress, not Amazon** | $16–20 and ~$8–15 respectively for the identical unit, against $40+ on Amazon. This is a commodity; the Amazon price is markup, not a better part |
 
 Do not run a 5V ratiometric transducer from 3.3V to dodge level shifting.
 Ratiometric means the output scales with supply; accuracy below the spec'd
 supply voltage is undefined.
 
-#### Range history — CLOSED, 150 psi purchased 2026-08-07
+#### Range history — CLOSED, 60 psi ordered 2026-08-12
 
 Recorded once so it is not re-derived. The specified range moved 0–30 → 0–60 →
-0–80, then availability settled it at 150.
+0–80 → 150, then a cancelled order and a corrected fact brought it back to 60.
 
 - **0–30 → 0–60.** The original 0–30 predated identifying the filter, chosen
   because accuracy is % of full scale so a tighter range reads better across a
@@ -118,28 +118,43 @@ Recorded once so it is not re-derived. The specified range moved 0–30 → 0–
   is not a fouled filter but a **closed return valve with the pump running** — an
   IntelliFlo2 dead-heading drives well past 30 psi, leaving a 0–30 sensor rated
   150% proof (45 psi) at its limit.
-- **0–60 → 0–80.** These sensors ship in a fixed family — 10 / 30 / 80 / 100 /
-  150 / 200 / 300 psi. **There is no 60.**
-- **0–80 → 150, as purchased.** Only stock available.
+- **0–60 → 0–80.** ~~These sensors ship in a fixed family — 10 / 30 / 80 / 100 /
+  150 / 200 / 300 psi. There is no 60.~~ **This was wrong**, and it is the reason
+  the range escalated twice. Corrected 2026-08-12: dedicated 60 psi 1/8" NPT
+  units are sold by FASTROHY, RIFE and AutoMeter, and the multi-range listings
+  offer 60 in the variation dropdown. The claim was asserted from a handful of
+  search results, never checked.
+- **0–80 → 150.** Only stock available at the time.
+- **150 → 60, ordered 2026-08-12.** The 150 psi order was cancelled by the
+  seller. Re-sourcing found 60 available, so the original preference won.
 
-**Is 150 acceptable? Yes.** Full-scale error looks bad (1.5% FS = ±2.25 psi
-against an 8–10 psi threshold) but that figure is dominated by **offset and span
-error, which are common to the baseline reading and the current reading and
-therefore cancel in the subtraction.** What survives a differential is
-repeatability and hysteresis, typically 0.1–0.25% FS — call it ±0.2–0.4 psi in
-practice. Burst rating is 300 psi minimum, six times the filter's limit.
+**Why 60 is safe, given the deadhead argument that killed 0–30.** Shutoff head
+scales with RPM², and the IntelliFlo2 is locked at **2200 RPM** (Ext. Program 4),
+so a deadhead there is roughly (2200/3450)² × 130 ft ≈ **23 psi**. Even at full
+RPM it is ~56 psi — still on-scale on a 60 psi sensor, and overload is at least
+2× rated (120 psi) regardless. The 0–30 objection does not transfer.
 
-**If this sensor is ever replaced, prefer 60–100 psi** and change one constant.
-There are two lambda forms and they scale differently — use the one matching the
-circuit actually built:
+**Range barely moves the outcome anyway**, which is why this was never worth
+agonising over. Full-scale error looks alarming (2% FS = ±1.2 psi at 60, ±3 psi
+at 150, against an 8–10 psi threshold) but that figure is dominated by **offset
+and span error, which are common to the baseline reading and the current reading
+and therefore cancel in the subtraction.** What survives a differential is
+repeatability and hysteresis, typically 0.1–0.25% FS — **±0.06–0.15 psi at 60,
+±0.2–0.4 psi at 150.** Both are far under the decision threshold.
 
-| Form | Constant | 150 psi | 100 psi | 60 psi |
+**Scale constant if the range ever changes again.** There are two lambda forms
+and they scale differently — use the one matching the circuit actually built:
+
+| Form | Constant | 60 psi | 100 psi | 150 psi |
 |---|---|---|---|---|
-| **A1 rail-compensated** (fraction-based) | `FS_psi / 0.80` | **187.5** | 125 | 75 |
-| **Simple** (single channel, volts) | `FS_psi / 4.0` | **37.5** | 25 | 15 |
+| **A1 rail-compensated** (fraction-based) | `FS_psi / 0.80` | **75** | 125 | 187.5 |
+| **Simple** (single channel, volts) | `FS_psi / 4.0` | **15** | 25 | 37.5 |
 
-Note these listings routinely contradict themselves: marketing bullets claim
-"0.5% FS" while the spec table says "1% FS". **Budget for 1%.**
+⚠ **60 was selected from a dropdown that the listing's own spec table does not
+document** — the per-range blocks cover 30/100/150/200/300/500 only. That is
+unverifiable before delivery, and it does not matter: the two-point calibration
+below identifies the range outright, and a wrong-range unit costs one constant,
+not a return. See "Install-day sequence".
 
 #### Sourcing trap — these listings cannot be trusted on thread or range
 
@@ -172,6 +187,22 @@ published datasheet — thread, range, and output are chosen explicitly, $49–1
 The electrical argument for commodity parts still holds completely (differential
 measurement, errors cancel); what fails is *verifiability*, and a wrong thread
 cracks the filter head. That is a sourcing risk, not a performance one.
+
+#### What the description on the part actually ordered gets wrong
+
+Read in full 2026-08-12 before ordering. Thread (`1/8"-27 NPT`), supply (5V DC)
+and output (0.5–4.5V) are stated **identically in every per-range block**, which
+is why the part is fine — those are the three specs the design depends on.
+Everything below is inconsistent, and each one is a real trap:
+
+| Gotcha | What to do about it |
+|---|---|
+| **The signal wire colour changes by range** — Blue on 30/100, Green on 150/200/300, Yellow on 500, and **not stated at all for 60** | **Identify the signal wire by measurement, never by colour.** 5V on red, ground on black, probe the third wire at atmosphere: it sits at ~0.5V. Do this on the bench before landing anything on the ADS1115 |
+| Connector contents differ per block — 30 psi says "mating connector", 100 psi says "connector *and* pigtail", 150 psi says nothing, Package Includes says "with cable" | It may arrive as a bare mating connector. Crimping three wires is trivial; just don't plan around a harness that may not come |
+| Accuracy quoted as 2% FS at 30/100, **0.5% at 150/300**, 1% at 200/500 | Incoherent — a sensor family does not get *more* accurate as its range widens. **Budget 2% FS.** It is absorbed by the differential and by re-baselining after every backwash |
+| Overload capacity stated only for 150/300/500 (2–4×) and 200 (2×) — **absent for the low ranges** | Assume the worst case, 2× ⇒ 120 psi on a 60 unit. Still ample against the filter's 50 psi ceiling and a ~23 psi deadhead |
+| `Explosion-proof Class: ExiaTTCT6` and `EN50051-1` are not real standards (the 200 psi block correctly cites EN50081-1 / EN50082-2) | Confirms the page is patchwork boilerplate. **Treat any spec not repeated across blocks as unverified** |
+| Wetted grade is "Stainless steel" at top level, 316L in only some blocks | Not a blocker here. See the Body row in "The part" |
 
 #### Candidates evaluated 2026-08-07
 
@@ -226,7 +257,7 @@ Sourcing tiers, for the record:
 
 | Tier | Example | ~$ |
 |---|---|---|
-| **Commodity — chosen** | Generic 1/4" NPT, 5V in / 0.5–4.5V out, selectable range | 20–30 |
+| **Commodity — chosen** | Generic 1/8"-27 NPT, 5V in / 0.5–4.5V out, selectable range. **Buy it on eBay or AliExpress** — the same unit is $40+ on Amazon and $16–20 on eBay | 15–20 |
 | Mid | Transducers Direct TDH30 — US company, published datasheet | 60–90 |
 | Industrial | Gems 3100, Omega PX109 | 130–170 |
 
@@ -403,17 +434,23 @@ here, so QT solves the half of the problem this project does not have.
 
 ### Are the passives actually necessary? — yes, both
 
-Asked and answered 2026-08-07, after the sensor was purchased.
+Asked and answered 2026-08-07; voltages re-derived 2026-08-12 for the 60 psi part.
 
 **Resistors: required.** The ADS1115 runs at **3.3V** (off the ESP8266's 3V3 pin)
 so its I2C levels match the ESP cleanly. At a 3.3V supply its analog input
 absolute maximum is **VDD + 0.3 = 3.6V**, and the transducer can output **4.5V**.
 
-In normal operation that never happens — at 150 psi full scale, the 10–25 psi
-working band produces only **0.77–1.17V**, and even a dead-head at the filter's
-50 psi limit is 1.83V. The divider exists for the fault cases: a miswire putting
-5V on the signal line, or the sensor genuinely seeing full scale. 30¢ against a
-dead board.
+In normal operation that never happens — at **60 psi full scale** the 10–25 psi
+working band produces **1.17–2.17V**, and a dead-head at the filter's 50 psi
+limit is 3.83V. Through the 0.680 divider those become 0.79–1.47V and 2.61V,
+comfortably inside the 3.6V absolute maximum. The divider exists for the fault
+cases: a miswire putting 5V on the signal line, or the sensor genuinely seeing
+full scale. 30¢ against a dead board.
+
+*(Note this matters more at 60 psi than it did at the previously specified 150,
+where the same conditions produced only 0.77–1.17V and 1.83V raw. A narrower
+range means more volts per psi — better resolution, less headroom. The divider
+is what makes that trade free.)*
 
 *(Powering the ADS1115 at 5V instead would make the 4.5V input safe and remove
 the need for a divider — but then its digital VIH is 0.7 × VDD = 3.5V, and the
@@ -493,11 +530,12 @@ Sanity check at both endpoints:
 | Condition | A0 | A1 | fraction | PSI |
 |---|---|---|---|---|
 | 0 PSI (out = 0.5V) | 0.34V | 2.50V | 0.100 | 0.0 |
-| **150 PSI** (out = 4.5V) | 3.06V | 2.50V | 0.900 | 150.0 |
-| *typical working point*, 15 psi (out = 0.90V) | 0.61V | 2.50V | 0.180 | 15.0 |
+| **60 PSI** (out = 4.5V) | 3.06V | 2.50V | 0.900 | 60.0 |
+| *typical working point*, 15 psi (out = 1.50V) | 1.02V | 2.50V | 0.300 | 15.0 |
+| dead-head at the filter's 50 psi limit (out = 3.83V) | 2.61V | 2.50V | 0.767 | 50.0 |
 
 where `fraction = (A0 / A1) × (0.500 / 0.680)` and
-**`PSI = (fraction − 0.10) × 187.5`** for the 150 psi sensor purchased.
+**`PSI = (fraction − 0.10) × 75`** for the 60 psi sensor ordered.
 
 Use 1% metal film resistors — the divider ratios are inside the accuracy
 budget, and 5% carbon film would add roughly ±1 PSI of pure error for a
@@ -543,13 +581,18 @@ sensor:
       float a1 = id(rail_adc).state;
       if (isnan(a0) || isnan(a1) || a1 < 1.0f) return NAN;
       float frac = (a0 / a1) * (0.500f / 0.680f);
-      return (frac - 0.10f) * 187.5f;   // 150 psi FS
+      return (frac - 0.10f) * 75.0f;    // 60 psi FS
 ```
 
-**Scale constant depends on the sensor's full-scale range.** Purchased 2026-08-07
-was a **150 psi** unit (only stock available), so the constant is **187.5**. For a
-different sensor: `constant = FS_psi / 0.80`. A 100 psi part would be 125; a
-60 psi part, 75.
+**Scale constant depends on the sensor's full-scale range.** Ordered 2026-08-12
+is a **60 psi** unit, so the constant is **75**. For a different sensor:
+`constant = FS_psi / 0.80`. A 100 psi part would be 125; a 150 psi part, 187.5.
+
+⚠ **Confirm the range at calibration before trusting this number.** 60 was picked
+from a dropdown the listing's spec table does not document. If the computed
+pressure comes out at ~0.6× what the analog gauge reads, a 100 psi unit shipped —
+change 75 to 125 and carry on. The sensors are physically identical and both
+produce a plausible reading, so nothing else will tell you.
 
 **Simpler variant if the A1 rail-compensation channel is skipped** — one ADS1115
 channel, two fewer resistors:
@@ -564,18 +607,39 @@ channel, two fewer resistors:
       float a0 = id(press_adc).state;
       if (isnan(a0)) return NAN;
       float v = a0 / 0.680f;            // undo the input divider
-      return (v - 0.5f) * 37.5f;        // 150 psi FS: FS / 4.0V
+      return (v - 0.5f) * 15.0f;        // 60 psi FS: FS / 4.0V
 ```
 
 Keep `gain: 4.096` either way — it spans the sensor's full 0.5–4.5V output without
 clipping, and at 16 bits resolution is nowhere near the limiting factor.
 
-**Calibrate against the stock analog gauge, not the datasheet** — same
+#### Install-day sequence
+
+**0. Bench the sensor before it goes anywhere near the filter.** 5V on red,
+ground on black, probe the third wire at atmosphere — expect **~0.5V**. This
+confirms the unit is alive *and* identifies the signal wire, which cannot be
+taken from the colour (see the description-gotchas table above). Two minutes,
+and it separates "dead sensor" from "wrong wire" from "bad ADC channel" before
+any of them can be confused with each other on a wet pool pad.
+
+**1. Dry-fit** the street tee, bushing and transducer against the multiport
+handle's full sweep and the adjacent plumbing before sealing any threads.
+
+**2. Calibrate against the stock analog gauge, not the datasheet** — same
 discipline as the flow meter's sequential calibration. Two points: pump off with
 air relief open = 0 PSI; pump running at the locked 2200 RPM Program 4 setting =
 whatever the analog gauge reads. If the computed value is off, the correction
 goes in as a `calibrate_linear` on the template sensor rather than by editing
 the constants above, so the derivation stays readable.
+
+**This step is also the range check.** A ~0.6× ratio against the gauge means a
+100 psi unit shipped instead of the 60 selected — set the constant to 125 rather
+than reaching for `calibrate_linear`, since that is a wrong constant, not sensor
+error.
+
+**3. Record the clean baseline immediately after the next backwash.** That
+measured number — not the 10–15 psi estimate in this doc — is what the +8–10 psi
+backwash trigger keys off, and it gets re-established after every backwash.
 
 ### What the automation keys on
 
@@ -931,7 +995,7 @@ should be replaced yearly. Ongoing reagent cost settles around **$60–70/year**
 
 | Item | Spec | ~$ |
 |---|---|---|
-| Pressure transducer | **DECIDED:** automotive-sender type, **1/8"-27 NPT male**, 0.5–4.5V out, 5V supply, 316 SS, sealed QD + pigtail. **Request 60 or 100 psi**; 150 acceptable if that is all that is stocked. ***Never* G1/4** | 25 |
+| Pressure transducer | **ORDERED 2026-08-12:** automotive-sender type, **0–60 psi**, **1/8"-27 NPT male**, 0.5–4.5V out, 5V supply, stainless, sealed QD. Scale constant **75**. ***Never* G1/8** — that is BSPP. eBay/AliExpress, not Amazon | 16 |
 | **Reducing bushing** | **1/4" MNPT × 1/8" FNPT brass hex bushing.** An NPT *reducing bushing* is male on the large end, female on the small — one piece. **Not** a reducing *coupling*, which is female × female and will not thread into the tee | 4 |
 | Brass 1/4" NPT **street tee** | male run × female × female | 8 |
 | PTFE tape | standard white — **every male thread**, four joints total | 2 |
@@ -977,8 +1041,11 @@ mode no breaker or overload will.
       multiport thread. Owner-confirmed 2026-08-07
 - [x] ~~**Inspect the R-40 electrode capsule**~~ — **CLE-02, copper only.** No
       silver in this pool. CLE-51 upgrade assessed and declined; see Part 2
-- [x] ~~Confirm the transducer's overpressure rating is ≥ 50 psi~~ — **300 psi
-      burst minimum** on the unit purchased. Six times the filter's rating
+- [x] ~~Confirm the transducer's overpressure rating is ≥ 50 psi~~ — **yes.**
+      Restated 2026-08-12 for the 60 psi unit: the listing gives overload as 2–4×
+      rated on the ranges where it states it at all, so assume the worst case,
+      **2× ⇒ 120 psi.** Still 2.4× the filter's 50 psi rating, and the pump
+      dead-heads at ≈23 psi at the locked 2200 RPM
 - [x] ~~Check for a spare plugged 1/4" NPT port~~ — **moot, street tee
       purchased.** Still worth a glance during install: if a spare port exists,
       the transducer can go there instead and the tee stays in the parts bin
