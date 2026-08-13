@@ -38,25 +38,32 @@ substitutions:
 
   # Probe zero-offset, °F, added to the HX outlet reading.
   #
-  # ZEROED 2026-08-08 against 102 logged samples, all pump-running / heat-off,
-  # which is exactly the zero-delta condition this is meant to calibrate. With
-  # +0.3 applied the measured delta was a median +0.3 (range 0.19-0.53, i.e.
-  # 0.11°F quantization steps either side). Subtracting the offset back out puts
-  # the raw probes at a median 0.0 apart — they already agree to within one LSB.
+  # ⚠ STATUS: 0.0 today, and that DISARMS the heat-exchanger alert.
+  # binary_sensor.pool_hx_not_transferring fires on ΔT <= 0. Measured live
+  # 2026-08-10 with this offset genuinely at zero, pump running and heat off,
+  # the outlet reads +0.3 to +0.4°F ABOVE the inlet — so a heat exchanger that
+  # has completely stopped transferring still reads positive and can never
+  # trip the alert. Full write-up: docs/pool_probe_calibration.md (status OPEN).
   #
-  # The old 0.3 came from a 2026-08-05 spot reading of "outlet 0.3-0.5°F below
-  # inlet." That no longer reproduces; a single reading at the resolution floor
-  # was too thin a basis, and the probes have been reseated since.
+  # This is NOT a fault. DS18B20 is ±0.5°C absolute, so two of them may legally
+  # differ by up to 1.8°F. 0.3°F is well inside tolerance and simply has to be
+  # calibrated out.
   #
-  # This was not cosmetic. binary_sensor.pool_hx_not_transferring fires on
-  # ΔT <= 0, so a permanent +0.3 meant a heat exchanger that had genuinely
-  # stopped transferring would still read positive and never alert. It would
-  # also have injected phantom heat into BTU/hr (GPM x ΔT x 500 — about 8,000
-  # BTU/hr of fiction at 55 GPM) the day the flow meter goes in.
+  # A previous version of this comment claimed the raw probes "already agree to
+  # within one LSB" from 102 samples on 2026-08-08. That conclusion was WRONG
+  # and is retracted: it inferred raw agreement by SUBTRACTING an offset it
+  # assumed was live on the device, rather than measuring with the offset
+  # actually set to zero. Corrected 2026-08-10 by reflashing and confirming.
   #
-  # Still only ~3.5 hours of data across a narrow 79.1-79.6°F band. Re-check
-  # across a wider water-temp range; if the gap tracks temperature rather than
-  # staying flat, replace this with a calibrate_linear two-point fit.
+  # DO NOT simply set this to "-0.3". Shield the probes FIRST — shielding
+  # changes the offset, so calibrating now bakes in a bias you are about to
+  # remove. The outlet probe is very likely in direct sun: with the pump OFF
+  # the legs decouple to +5.51°F (2026-08-08 16:58, heat recovery off), while
+  # with the pump ON they track within ~0.3°F all day. Insulate and jacket BOTH
+  # legs identically — ΔT is a difference, so a symmetric load cancels; never a
+  # towel, wet fabric is an evaporative cooler. Then take the three-point
+  # measurement in docs/pool_probe_calibration.md and move the alert threshold
+  # to about -0.15°F so quantization noise cannot trip it.
   out_temp_offset_f: "0.0"
 
 # ── Relay dry-contact input ───────────────────────────────────────────────
@@ -165,11 +172,25 @@ sensor:
 # dry-run risk, which is solved entirely in HA + the flow meter with no main
 # pump control at all. See docs/pool_booster_interlock.md.
 #
-# GPIO13 (D7) is free. Findings kept here in case this is ever revisited:
+# GPIO13 (D7) is free TODAY, but docs/pool_data_addendum.md claims both GPIO13
+# and GPIO4 as the I2C bus for the planned ADS1115 filter-pressure ADC. If that
+# lands first, use GPIO16 (D0) for this relay instead: it is output-capable and
+# idles LOW, which is exactly the polarity required below. It is absent from the
+# pin list at the top of this file only because that list is for INPUTS —
+# GPIO16 has no interrupt and no pull-up, neither of which a relay drive needs.
+#
+# Findings kept here in case this is ever revisited:
 #
 # - IntelliComm inputs are VOLTAGE-DRIVEN (9-24V AC/DC), not dry-contact. The
-#   relay must switch a real source — a series switch in a 12V+ leg from the
-#   pad adapter, not a bare contact across the input terminals.
+#   relay must switch a real source — a series switch in a live leg, not a bare
+#   contact across the input terminals.
+# - SOURCE IT FROM THE 12V ADAPTER in the chimney box, the one already feeding
+#   the IntelliComm and the ESP's buck converter. 12V is inside the 9-24V input
+#   spec. docs/pool_wiring_manual.md 5.2 used to say "switch 24VAC onto the
+#   input ... from the same transformer pair" — both are electrically legal, but
+#   the only 24VAC here is the FPH trio leg, i.e. the flow-switch-gated safety
+#   circuit. Do not hang a discretionary HA pump command off the safety chain
+#   when an independent supply is already in the box. Reconciled 2026-08-13.
 # - Use input 2, never 4. FPH heat recovery owns input 4 and higher input
 #   number wins, so nothing commanded here could interrupt a live diversion.
 # - An IntelliComm input can only START a program. Releasing it stops the pump

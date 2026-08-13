@@ -210,8 +210,17 @@ Gated entirely on tier 3. This is the one where failure destroys hardware.
       100 µF + 0.1 µF at the **transducer's** supply pins. 5V for the transducer
       comes off the buck via the new WAGO splices.
 - [ ] Decide bonding for the brass tee + transducer body (680.26(B)(6)).
-- [ ] Uncomment the ADS1115 block in `esphome/pool-pad.yaml`, flash from the Mac.
-      **Scale constant 187.5** for the 150 psi sensor.
+- [ ] **Add** the ADS1115 block to `esphome/pool-pad.yaml`, flash from the Mac.
+      **There is nothing to uncomment** — no such block exists in that file; copy
+      it from [pool_data_addendum.md](pool_data_addendum.md) "ESPHome". *(This line
+      used to say "uncomment," the same stale instruction already corrected in
+      wiring manual §5.2 for the `switch:` block.)*
+- [ ] **Scale constant 75**, for the **60 psi** sensor ordered 2026-08-12. *(This
+      line used to say 187.5 for a 150 psi sensor — that order was cancelled by the
+      seller and re-sourced at 60 psi.)* Confirm the range at calibration: if the
+      computed pressure comes out ~0.6× what the analog gauge reads, a 100 psi unit
+      shipped — change 75 to 125. Nothing else will tell you; both parts are
+      physically identical and both produce a plausible number.
 - [ ] Two-point calibrate against the analog gauge (0 PSI bled, then the Program 4
       speed, 2200 RPM today).
 - [ ] **Establish the clean-filter baseline PSI at the Program 4 speed immediately
