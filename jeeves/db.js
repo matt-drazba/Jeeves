@@ -223,6 +223,34 @@ function migrate() {
     db.pragma('user_version = 8');
     console.log('DB: migrated to v8');
   }
+  if (v < 9) {
+    // Mulching is a late-winter/early-spring job here, so give mulch_beds a
+    // Feb-Apr window. v8 seeded it with no window and a NULL last_done_at, i.e.
+    // due immediately. Two things were wrong with that:
+    //
+    // 1. ANCHORING. interval_days counts from last_done_at, so whenever the job
+    //    first gets done becomes its permanent anniversary. Doing it in August
+    //    would lock every future year to August. A window pulls it back to
+    //    spring no matter when it actually gets done.
+    // 2. In this climate the soil is already wet from winter rain in Feb-Apr.
+    //    Mulch laid over dry soil KEEPS it dry - it sheds light irrigation - so
+    //    an August mulching has to be preceded by a deep watering, while a
+    //    February one gets that for free. See docs/sprinklers.md section 13.
+    //
+    // The rose still wants mulching now, in August. That is a one-off step in
+    // the rose remediation (docs/sprinklers.md section 13), not the recurring
+    // garden job, and conflating the two is what produced the bad seed.
+    //
+    // Written as an UPDATE rather than a corrected v8 seed so it lands whether
+    // or not v8 already ran on this database.
+    db.prepare(
+      `UPDATE tasks SET start_month = 2, end_month = 4
+        WHERE key = 'mulch_beds' AND start_month IS NULL`
+    ).run();
+
+    db.pragma('user_version = 9');
+    console.log('DB: migrated to v9');
+  }
 }
 
 migrate();

@@ -312,10 +312,27 @@ same reason.
 | `fert_rose` | Feed the rose | 35 d | Mar–Aug | Heavy feeder. **Water first** (§13) |
 | `fert_citrus_ground` | Feed pomelo + lemon | 120 d | Feb–Sep | Citrus-specific food |
 | `fert_potted` | Feed potted trees | 35 d | Mar–Sep | Kumquat, tangelo, Meyer, fig. **Micronutrients (Fe, Zn, Mn)** — containers leach them |
-| `mulch_beds` | Mulch the beds | 365 d | — | Seeded `last_done_at = NULL` so it is **due immediately** |
+| `mulch_beds` | Mulch the beds | 365 d | **Feb–Apr** (v9) | `last_done_at = NULL`; first due **2027-02-01** |
 
-**`mulch_beds` deliberately breaks the v6 "stamp last_done_at so nothing is due on day one"
-rule.** Mulching genuinely is outstanding; stamping it would hide a real task for a year.
+### v9 — mulch is a spring job. Corrected 2026-08-13.
+v8 seeded `mulch_beds` with no window and a NULL `last_done_at`, i.e. due immediately.
+**Two things were wrong with that, and the owner caught it:**
+
+1. **Anchoring.** `interval_days` counts from `last_done_at`, so whenever a job first gets
+   done becomes its permanent anniversary. Mulching in August would have locked **every
+   future year to August**. A window pulls it back to spring no matter when it actually
+   gets done — verified: mulched 2026-08-20, next due **2028-02-01**, not 2027-08-20.
+2. **Climate.** In Feb–Apr the soil here is already wet from winter rain. **Mulch laid
+   over dry soil keeps it dry** — it sheds light irrigation — so an August mulching must be
+   preceded by a deep watering, while a February one gets that for free (§13).
+
+**The rose still wants mulching now, in August.** That is a one-off step in the rose
+remediation (§13), *not* the recurring garden job. **Conflating a one-time remediation
+action with a recurring seasonal task is what produced the bad seed** — worth remembering
+before adding future tickler entries.
+
+v9 is written as an `UPDATE ... WHERE start_month IS NULL` rather than a corrected v8 seed,
+so it lands whether or not v8 already ran on the database.
 
 ### Two consequences of the dates, both verified by test
 - **The rose gets no fertilizer this season.** Seeded 2026-08-12 it first comes due
