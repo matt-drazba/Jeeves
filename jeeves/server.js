@@ -1254,7 +1254,9 @@ fetchTesla().catch(err => console.error('Tesla fetch failed:', err));
 setInterval(() => fetchTesla().catch(err => console.error('Tesla fetch failed:', err)), 5 * 60 * 1000);
 
 // ── Now Playing (Mac mini Music bridge) ──────────────────────────
-const MUSIC_BRIDGE_URL = 'http://192.168.0.204:8181';
+// Mac mini. Pin this in the router's DHCP reservations — the 2026-08-18 power
+// outage moved the lease from .204 to .203 and silently killed the Now Playing tile.
+const MUSIC_BRIDGE_URL = 'http://192.168.0.203:8181';
 
 async function fetchNowPlaying() {
   try {
