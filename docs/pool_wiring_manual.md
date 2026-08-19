@@ -375,6 +375,51 @@ Source: [Supco 90340 Installation Instructions](https://www.manualslib.com/manua
 
 **If programs are ever added to slots 1–3, they will always lose to the FPH.** That is intentional. If something on a lower slot "doesn't work" while heat recovery is running, it is not broken — it is being outranked. Do not fix it by moving it to a higher slot without thinking through the impact on heat recovery.
 
+### 3.5 The IntelliFlo2's 240V supply — ⚠ two single-pole breakers, no common trip
+
+**This section is not about heat recovery.** It is here because it is the pump's own supply, and on 2026-08-15 it produced a fault episode that presented as pump failure and was not.
+
+| Property | Value |
+|---|---|
+| Supply | **Two separate single-pole 120V breakers**, not one two-pole — VERIFIED (owner, 2026-08-16) |
+| Panel positions | **2R and 3L** originally; **moved to 3R and 4L on 2026-08-16** after repeated trips on 2R |
+| Rating | **20A each**, nothing else on them |
+| Also on this circuit | The Shelly EM Gen3 and the **R-40 ionizer**. The R-40 is tapped across both legs at 240V — one leg direct, the other through the Shelly's relay. Its internal 115/230 selector is correctly on **230** |
+| Shelly CT | On the **3L leg** — the one that did *not* trip. That terminal was never opened |
+
+**⚠ The defect: two independent single-pole breakers on a 240V load have no common trip.**
+
+When 2R tripped, the pump lost one leg but stayed energized through the other, so the drive saw ~120V instead of 240V. That is what produced the reported **Low Voltage**, and the **internal error** that followed as it failed to run on half voltage. A two-pole breaker cuts both legs together and would have stopped the pump cleanly.
+
+Two consequences:
+
+1. **The pump's error messages were a symptom, not the fault.** Nothing is wrong with the drive.
+2. **Switching off one breaker does not de-energize the pump.** Anyone who kills "the pump breaker" may still be working on live equipment — which undermines 6.6's ground rules and the L1 runbook line *"go kill the breaker."*
+
+**What tripped 2R is still unresolved.** Published measured draw for a 3 HP IntelliFlo is ~2300–2550 W at 3450 RPM, i.e. **~10.6 A at 240V** — about half a 20 A breaker, and in a 240V circuit the same current passes through both legs, so each breaker sees it. A healthy 20 A breaker does not trip at ~10 A; a ~20-second thermal trip implies roughly *double* the rating. **The pump was not overloading the circuit, and the circuit is not undersized** — ⚠ INFERRED, since this pump's nameplate has never been read. Read it and compare.
+
+That leaves a weak breaker whose thermal element has drifted, a loose connection at the breaker terminal heating that element, or a fault on that leg. **The move to 3R/4L addresses the first two** — new breaker, fresh termination — and may be a genuine fix. But the trip only ever occurred **at max RPM during backwash**, and no backwash has been run since, so it is **untested**. Daily filtering never approaches the condition.
+
+⚠ **Keep the removed 2R breaker for testing. Do not reuse it anywhere until it is cleared.**
+
+**Cross-check on the Shelly's watt figure:** published draw at 1800 RPM is ~408 W while the Shelly indicates ~180 W during normal filtering — consistent with a single CT on one leg of a 240V load (see 4.4). Treat that number as a *running / not-running* indicator, which is all the 20 W threshold needs. It is not true pump power.
+
+#### ⚠ The Shelly shares a failure domain with the pump it monitors
+
+**The Shelly EM Gen3 is powered from the same breakers that feed the pump.** A trip therefore takes out the pump *and* the instrument watching it, in the same instant.
+
+The 2026-08-15 episode appears to be the first live exercise of this, and **the fail-closed design held**:
+
+```
+2R trips → pump loses a leg → Shelly loses power
+        → pump-watts unavailable → booster interlock reads "pump not running"
+        → booster killed → L2 "caught and killed" + L3 meter offline
+```
+
+The PB4-60 was protected without the system ever needing to know *why* the pump stopped — which is exactly what "an unavailable power meter reads as pump-off" was written for (4.5). Worth recording as a design vindication, not just an incident.
+
+**But the coupling is still a defect.** A monitor that dies with its subject cannot distinguish "pump stopped" from "I stopped." Today that resolves safely because both answers produce the same protective action; it will not stay that way as more decisions lean on the meter. **Move the Shelly to its own circuit** alongside the R-40 — same electrician visit, same reasoning as Part 7's ask.
+
 ---
 
 ## Part 4 — The ESP8266 monitoring node
@@ -648,7 +693,17 @@ The physical form is a **8 AWG solid bare copper** loop tying the pool shell ste
 
 ### What to ask the electrician
 
+**There are now two jobs on this pad. Book them as one visit.**
+
+**1. Bonding (this Part):**
+
 *"The pool heat exchanger on the pad has copper/titanium in contact with circulating pool water and isn't tied into the equipotential bonding grid. The two pump motors are. Can you land an 8 AWG solid bare copper bond from the exchanger to the existing loop, and confirm it satisfies 680.26(B) and the (C) water-bond requirement for this install?"*
+
+**2. The pump's supply breakers (3.5):**
+
+*"The 240V pool pump is fed by two separate single-pole 20A breakers with no common trip. One of them kept tripping, and because the other stayed closed the pump kept running on ~120V and threw Low Voltage faults instead of stopping. I want a properly sized two-pole breaker with a common trip. While you're in there: test the old breaker I saved, check the terminations, and tell me whether the ionizer sharing this circuit needs its own branch — its wiring is currently protected by the pump's 20A breaker."*
+
+⚠ **Do not let anyone "solve" this with a larger breaker.** The breaker protects the wire, and at ~10.6 A measured draw the 20 A circuit is correctly sized. A bigger breaker would only let the conductor overheat without tripping.
 
 ---
 
@@ -713,9 +768,17 @@ Page citations are to the HotSpot FPH installer manual, 44-page scanned PDF, **p
 | 2026-08-08 | **Section 5.2 rewritten as DROPPED.** It had instructed the reader to "uncomment the `switch:` block at the bottom of pool-pad.yaml — it's already written." That block was deleted 2026-08-05 and GPIO13 is free, which 4.2 already said — the document contradicted itself. Rewritten with the actual reason for the cut (the motivating risk was a booster problem, addressed by the dry-run interlock), keeping the input-4 priority rule and the GPIO13 idle-LOW constraint for any future revisit. GPIO4's history added to 4.2 to match the config. |
 | 2026-08-08 | **6.1 purge delay corrected from ~20 s to ~2 min.** The tree still carried the printed manual's figure and told the reader to judge the condenser fan "after ~30 s" — inside the purge window, before the controller has sampled anything. It was misdiagnosing working hardware. Added 6.3, a symptom index keyed to what the reader actually observes. |
 
+| 2026-08-16 | **Added 3.5 — the pump's 240V supply circuit.** Recorded for the first time that the IntelliFlo2 is fed by **two separate single-pole 20A breakers with no common trip**, VERIFIED with the owner, and that the R-40 and Shelly share that circuit. This is the mechanism behind the 08-15 fault episode: 2R tripped, the pump stayed energized through 3L at ~120V, and the drive reported **Low Voltage** and **internal error**. The pump was never at fault. Three hypotheses were raised and killed in the course of this — relay arcing/EMI (breakers trip on current, not noise), a loose terminal from the CT install (the CT is on the *other* leg and that terminal was never opened), and a genuine overload at max RPM (published draw is ~10.6 A against a 20 A breaker, roughly half). **The circuit is correctly sized; do not upsize it.** What tripped 2R is still open — weak breaker, loose terminal at the panel, or a fault on that leg. The 08-16 move to 3R/4L may have fixed it but is **untested**, since the trip only occurred at max RPM during backwash and none has been run since. Part 7's electrician ask extended to cover both jobs in one visit. |
+
 ### Open items carried forward
 
 - [ ] **Build the heat-recovery interlock alert** (`pool_heat_active` && pump under 20 W) — 3.1's first row is a silent failure until this ships. Extend `scripts/verify-alerts.py` to cover it.
+- [ ] **Replace the pump's two single-pole breakers with one two-pole breaker with common trip (3.5).** Safety-relevant: today, switching off one breaker leaves the pump energized.
+- [ ] **At the next natural backwash, note whether it trips (3.5).** Owner's call 2026-08-16: **do not force a max-RPM run to test this.** Backwash when the filter needs it and observe. If the new ~2600 RPM procedure never reaches the trip condition again, that is a fine outcome — the point is to make the failure safe, not to reproduce it.
+- [ ] **Read the IntelliFlo2's nameplate max amps** and compare against the 20 A breakers (3.5). Currently the only ⚠ INFERRED figure in that section.
+- [ ] Have the saved 2R breaker tested; keep it out of service until cleared (3.5).
+- [ ] **Move the Shelly EM Gen3 off the pump's breakers onto its own circuit (3.5).** Today a trip kills the pump and its monitor together. It failed closed on 2026-08-15, but the coupling is a defect, not a feature.
+- [ ] Confirm the 08-15 sequence from HA (`last_triggered` on the pool automations) — the booster dry-run kill is believed to have fired for real, via the meter going unavailable rather than via a measured zero.
 - [ ] Opportunistically confirm the 90340 contact-power routing (Part 2, "Still INFERRED") next time the box is open.
 - [ ] Bond the FPH heat exchanger to the pad loop (Part 7).
 - [ ] Install and calibrate the flow meter (5.1) — safety-relevant, see 3.1 coverage table.
