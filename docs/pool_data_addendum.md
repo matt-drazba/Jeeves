@@ -1,11 +1,12 @@
 # Pool Data Addendum — filter pressure, chemistry instrumentation, and what to buy
 
-Last updated: 2026-08-07. Authority order: CLAUDE.md → this doc → coder briefs.
+Last updated: 2026-08-12. Authority order: CLAUDE.md → this doc → coder briefs.
 Companion docs: [pool_heat_recovery.md](pool_heat_recovery.md), [pool_booster_interlock.md](pool_booster_interlock.md), [pool_chemistry_logging.md](pool_chemistry_logging.md), [pool_wiring_manual.md](pool_wiring_manual.md).
 
-**Status: DESIGN + shopping list. Nothing ordered, nothing wired. The ESPHome
-additions below are written but should stay commented out in
-[../esphome/pool-pad.yaml](../esphome/pool-pad.yaml) until the parts are in hand,
+**Status: Filter-pressure transducer ordered 2026-08-12 (0–60 psi), street tee
+purchased. Nothing wired yet. The ESPHome additions below are written but
+should stay commented out in
+[../esphome/pool-pad.yaml](../esphome/pool-pad.yaml) until the install happens,
 same pattern as the flow meter placeholder.**
 
 ## Origin

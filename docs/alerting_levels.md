@@ -1,6 +1,6 @@
 # Alerting Levels — the house alarm ladder
 
-Last updated: 2026-08-07. Authority order: CLAUDE.md → this doc → individual
+Last updated: 2026-08-10. Authority order: CLAUDE.md → this doc → individual
 automations. Companion docs: [pool_booster_interlock.md](pool_booster_interlock.md),
 [pool_heat_recovery.md](pool_heat_recovery.md).
 

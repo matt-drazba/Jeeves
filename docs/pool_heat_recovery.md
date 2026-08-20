@@ -1,6 +1,6 @@
 # Pool Heat Recovery — HotSpot FPH5 + IntelliFlo2 VST
 
-Last updated: 2026-07-10. Authority order: CLAUDE.md → this doc → coder briefs.
+Last updated: 2026-08-12. Authority order: CLAUDE.md → this doc → coder briefs.
 **For as-built wiring, troubleshooting, and how this install differs from the FPH manual, see [pool_wiring_manual.md](pool_wiring_manual.md)** — that doc is the authority on what is physically in the boxes; this one covers design rationale and project status.
 Sources: HotSpot FPH installer manual (44p scan), Pentair IntelliComm II guide, TFP community.
 
@@ -113,8 +113,8 @@ HA failure degrades to "no free heat," never to danger. See HA layer below.
 **Sensors:**
 - `binary_sensor.pool_pad_pool_heat_active` — relay coil across trio 24VAC **after** flow switch
 - `sensor.pool_pad_hx_water_in_temp`, `sensor.pool_pad_hx_water_out_temp` — DS18B20 probes in FPH tank sensor wells
-- `sensor.pool_pad_pool_temp` — DS18B20 pool return
-- `sensor.pool_pad_pool_flow_gpm` — pulse counter, calibrate against Blue-White gauge
+- `sensor.pool_pad_pool_temp` — DS18B20 pool return, **deferred, not yet built**: `esphome/pool-pad.yaml` only has the two HX in/out `dallas_temp` blocks today; this is a third probe not yet wired (see Open items below)
+- `sensor.pool_pad_pool_flow_gpm` — pulse counter, calibrate against Blue-White gauge, **deferred, not yet built** — flow meter not yet installed
 - `sensor.pool_pad_pool_heat_btu_hr` — template: GPM × ΔT(°F) × 500
 - `sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power` — Shelly EM Gen3, 50A CT on one pump leg (240V, single leg only — see Jeeves tile for running-state derivation). `switch.shellyemg3_dcb4d9ce63a4` drives the R-40 ionizer relay (see ionizer note above).
 - Compressor call: T10 via HomeKit (`hvac_action`) — no Resideo cloud needed

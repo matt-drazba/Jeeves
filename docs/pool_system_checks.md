@@ -117,7 +117,7 @@ Targets are R-40 ionizer numbers, not conventional-pool numbers. Full table and 
 
 **Copper drifting low is usually a pH problem, not a dosing problem.** Check pH before adding anything.
 
-⚠ **Right now there is no copper or pH test kit** (Group A in [pool_todo.md](pool_todo.md)), so the pH and copper alerts in `alerting_levels.md` are both blocked and none of the numbers above can actually be measured. Until that kit arrives, **algae on the walls is the only sanitizer feedback this pool produces** — which is why check 7 treats it as a chemistry symptom rather than a cleaning one.
+⚠ **A basic kit exists and is in use — a drop-reagent test kit plus the R-40's own CLA-41 ion kit — but the higher-resolution Hanna Group A kit (HI747/HI701) is still on order** ([pool_todo.md](pool_todo.md)). Readings so far: pH 7.4, FC 1.0, TA 130, copper 0.1 ppm ([pool_chemistry_log.md](pool_chemistry_log.md)). So pH and copper **can** be measured today, just not at Group A's resolution — the pH and copper *alerts* in `alerting_levels.md` are still blocked (no automation wired to a manual reading), which is the real gap. Algae on the walls remains a useful secondary signal, not the only one.
 
 ⚠ **On test frequency — the fixed intervals are a placeholder, not a rule.** The 3-day / 7-day / 30-day cadences currently in the `tasks` table exist only because there is no forecasting model yet. Cadence is meant to be *predicted* from logged history — when will FC actually reach the floor — not set by calendar. **Do not add seasonal intervals** or winter logic to `jeeves/db.js`; that entrenches the placeholder the model is meant to replace.
 

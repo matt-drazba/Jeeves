@@ -1,7 +1,6 @@
 # Sprinklers — Orbit B-hyve, weather-aware watering
 
-**Status:** design in progress. Architecture decided 2026-08-12; nothing built yet.
-Open questions at the bottom must be answered before code is written.
+**Status:** the weather-aware watering model itself (ET-minus-rain deficit, `bhyve.update_program(budget:%)`) is design-in-progress, nothing built yet — open questions at the bottom must be answered before that code is written. Separately, the **tickler/fertilizer piece (§10) is built**: schema v8 seeded `fert_rose`/`fert_citrus_ground`/`fert_potted`/`mulch_beds` into the `tasks` table, written and verified locally but not yet deployed to the Pi.
 
 **Active work item: the rose — see §13.** It needs no code and does not wait on anything.
 

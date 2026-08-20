@@ -2,7 +2,7 @@
 
 **Project:** Jeeves homelab  
 **Scope:** Offline voice dismiss + device control via Whisper STT + Piper TTS on Pi 5  
-**Status:** Reviewed by Claude.ai — bugs fixed, ready for implementation
+**Status:** BUILT AND LIVE (as of commit `2444f2b`, "Voice control complete"). This brief is now a record of what was built, not a plan — `voice/main.py`, `voice/Dockerfile`, the `voice` service in `docker-compose.yml`, `dispatchVoice()` + `POST /api/voice` in `jeeves/server.js`, and the mic button + state machine in `dashboard.html` all match what's described below. See CLAUDE.md's Working section for the current-state summary.
 
 ---
 
@@ -297,7 +297,7 @@ Fully Kiosk mic over HTTP is the single hard blocker. Before writing the voice s
 
 ---
 
-## Deployment Sequence
+## Deployment Sequence (historical — completed)
 
 1. Step 0: mic test page, verify capture + playback on Fire HD 8
 2. Create `voice/` directory: `Dockerfile`, `main.py`, `requirements.txt`
