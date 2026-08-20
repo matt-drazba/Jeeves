@@ -66,7 +66,7 @@ Fire HD 8 / Fully Kiosk Browser (192.168.0.189:3000) → Express /api/status →
 ### Timers (coarse by design)
 | Timer | Interval |
 |-------|----------|
-| Clock + night-dim | 15s |
+| Night-dim check | 15s |
 | Data refresh (`REFRESH_INTERVAL_MS`) | 60s |
 | Staleness check | 30s |
 | Alert ticker | 5s |
@@ -74,7 +74,7 @@ Fire HD 8 / Fully Kiosk Browser (192.168.0.189:3000) → Express /api/status →
 Night dimming (opacity 0.45) activates 10 PM–6 AM in JS, not via a server flag.
 
 ### Adding tiles
-Add a new key to the `status` object in the API response. The grid uses CSS `auto-fill minmax(140px, 1fr)` and reflows automatically — no CSS changes needed.
+Add a new key to the `status` object in the API response. The grid uses CSS `auto-fill minmax(190px, 1fr)` and reflows automatically — no CSS changes needed.
 
 ## Repo layout
 ```
@@ -242,6 +242,7 @@ homelab/
   - **Do not add a Fully brightness schedule** — the dashboard already self-dims to 0.45 opacity 10pm–6am in JS; layering a second one makes it unreadable
   - Set the Kiosk PIN *before* enabling lockdown. Doing it in the wrong order locks you out and the recovery is a factory reset
   - **Performance is fine — resolved 2026-08-08.** The tablet is sluggish in Silk but the dashboard under Fully is not, and Silk is not used. No debloat needed. There is a latent inefficiency in the dashboard (`.tile.alert`/`.tile.degraded` animate `box-shadow`, which forces a full repaint every frame and cannot be GPU-composited; the fix is a static shadow on an `::after` with animated `opacity`) but it is **not** an observed problem — do not chase it unless slowness shows up under Fully
+  - **Header (clock/date/location) removed 2026-08-20, after real use on the wall tablet.** The kiosk sits next to a physical clock and calendar, so a digital clock and date in the header were redundant, and the location text ("Redwood City, CA") was static info not worth its own bar. `#root` dropped from a 3-row grid (topbar/main/footer) to 2 rows (main/footer) — no `<header>` element at all now. The tile grid (`#status-panel`) changed from a fixed `130px` row height with `align-content: start` to `height: 100%` with `grid-auto-rows: minmax(130px, 1fr)`, so however many rows are on a page stretch to fill the space evenly instead of leaving dead background above the footer on a partially-filled page. Night-dim logic (10pm–6am, unaffected by this) was pulled out of the old `updateClock()` into its own `updateNightDim()`, same 15s timer
 - **Voice control live** — `voice/main.py` (FastAPI microservice, its own container): `faster-whisper` (`base.en`, int8) for STT, Piper (`en_US-lessac-medium`) for TTS. Mic button + state machine (idle/listening/processing/playing) in `dashboard.html`; browser records via `MediaRecorder`, posts to `POST /api/voice` in `server.js`, which forwards to the voice service and back
   - `dispatchVoice()` in `server.js`: **Tier 1** local regex commands (dismiss washer/dryer/dishwasher, "what time") handled inside Jeeves, no HA round trip. **Tier 2** falls through to HA Assist (`/api/conversation/process`) for general device control — exposed entities only (Settings → Voice Assistants → Expose)
   - Night hours (10pm–6am): action still executes, TTS playback suppressed — visual state only, no audio
