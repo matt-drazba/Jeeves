@@ -1,0 +1,83 @@
+# Jeeves — dryer delayed start (avoid 4pm-9pm peak electricity rates)
+#
+# Deploy: lives at ~/homelab/homeassistant/packages/jeeves_dryer_delay.yaml on
+# the Pi, arrives via `git pull`. configuration.yaml has:
+#
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# Hardware: LG dryer via the built-in `lg_thinq` HA integration. "Load it and
+# get it ready" cashes out to a physical step on the machine: select a cycle
+# on the dial, then press the Wi-Fi/Remote Start button. That arms
+# binary_sensor.dryer_remote_start -> on, which HA can read but not set —
+# there is no way to arm this remotely, only to fire the start command once it
+# is already armed. select.dryer_operation's `start` option is the same
+# command the LG ThinQ app's own remote-start button sends.
+#
+# Entities confirmed live 2026-08-20 via /api/states (jeeves/server.js has no
+# write path to the dryer — this package is the only place that controls it):
+#   binary_sensor.dryer_remote_start   on/off, armed-and-waiting flag
+#   select.dryer_operation             options: start, stop, power_off, power_on
+#   sensor.dryer_current_status        power_off/running/pause/... — used to
+#                                       avoid firing start into an active cycle
+#
+# Not a safety alert — nothing is damaged if this is a no-op some night, so no
+# L1-L4 tier, no input_boolean flag, no Acknowledge button. Same reasoning as
+# the garage's daytime warning: an Acknowledge that clears nothing is a lie.
+#
+# NOT YET DEPLOYED OR TESTED. Written 2026-08-20 from the live entity dump but
+# never fired for real — the "armed, not running" combination in the condition
+# below is inferred from the options list, not observed. First live run should
+# be watched via the automation trace, not trusted blind.
+
+automation:
+  # ---------------------------------------------------------------------------
+  # 9pm = end of the peak rate window. If the dryer was armed for remote start
+  # any time before now, fire it; otherwise nothing was loaded and there is
+  # nothing to do. Deliberately not restricted to "armed during 4-9pm" —
+  # arming remote start (rather than just pressing Start on the panel) already
+  # means the intent was to defer it, whenever that happened.
+  # ---------------------------------------------------------------------------
+  - id: jeeves_dryer_delayed_start
+    alias: "Dryer: start at 9pm if armed for remote start"
+    description: >
+      Fires the LG remote-start command at the end of the peak rate window,
+      but only if the dryer is actually loaded and waiting.
+    mode: single
+    trigger:
+      - platform: time
+        at: "21:00:00"
+    condition:
+      - condition: state
+        entity_id: binary_sensor.dryer_remote_start
+        state: "on"
+      # Guards against firing into an already-running/paused cycle if the
+      # remote_start flag is stale by the time 9pm arrives.
+      - condition: template
+        value_template: >
+          {{ states('sensor.dryer_current_status')
+             not in ['running', 'pause', 'cooling'] }}
+    action:
+      - service: select.select_option
+        target:
+          entity_id: select.dryer_operation
+        data:
+          option: "start"
+
+      - wait_template: "{{ is_state('sensor.dryer_current_status', 'running') }}"
+        timeout: "00:01:00"
+        continue_on_timeout: true
+
+      - if:
+          - condition: template
+            value_template: >
+              {{ not is_state('sensor.dryer_current_status', 'running') }}
+        then:
+          - service: notify.mobile_app_matt_drazba_s_iphone
+            data:
+              title: "Dryer didn't start"
+              message: >
+                Sent the 9pm remote-start command but the dryer is still
+                {{ states('sensor.dryer_current_status') }}. Check it by hand.
+              data:
+                tag: dryer-delayed-start
