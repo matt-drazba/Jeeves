@@ -251,6 +251,23 @@ function migrate() {
     db.pragma('user_version = 9');
     console.log('DB: migrated to v9');
   }
+  if (v < 10) {
+    // 3 Tuya WiFi-to-RF433 repeaters (卷帘转发器) drive 5 battery motors between
+    // them — confirmed via the Device Debugging DP list that none of them
+    // report battery, so charge state has to be a manual periodic check, same
+    // pattern as the garden feed tasks.
+    const now = Math.floor(Date.now() / 1000);
+    const seed = db.prepare(
+      `INSERT OR IGNORE INTO tasks
+         (key, domain, title, icon, interval_days, last_done_at, start_month, end_month)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    seed.run('shade_battery_charge',  'home', 'Charge shade batteries', '🔋', 30, now, null, null);
+    seed.run('shade_operation_check', 'home', 'Test shade open/close',  '🪟', 14, now, null, null);
+
+    db.pragma('user_version = 10');
+    console.log('DB: migrated to v10');
+  }
 }
 
 migrate();
