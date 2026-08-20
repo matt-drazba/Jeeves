@@ -44,41 +44,8 @@
 
     #root {
       display: grid;
-      grid-template-rows: 90px 1fr 50px;
+      grid-template-rows: 1fr 50px;
       height: 800px;
-    }
-
-    /* ── Top bar ─────────────────────────────────────────────────── */
-    #topbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 28px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-    }
-
-    #clock {
-      font-size: 58px;
-      font-weight: 700;
-      letter-spacing: -2px;
-      color: var(--text);
-      line-height: 1;
-      font-variant-numeric: tabular-nums;
-    }
-
-    #topbar-right { text-align: right; }
-
-    #date-label {
-      font-size: 17px;
-      color: var(--muted);
-      line-height: 1.3;
-    }
-
-    #location-label {
-      font-size: 14px;
-      color: var(--accent);
-      font-weight: 500;
     }
 
     /* ── Views ───────────────────────────────────────────────────── */
@@ -86,13 +53,16 @@
     #view-calendar { display: none; overflow: hidden; }
 
     /* ── Status panel ────────────────────────────────────────────── */
+    /* height:100% + fr-sized rows so however many rows end up on a page,
+       they share the full main area instead of leaving dead space above
+       the footer when there are fewer than a full page of tiles. */
     #status-panel {
+      height: 100%;
       padding: 14px 16px;
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-      grid-auto-rows: 130px;
+      grid-auto-rows: minmax(130px, 1fr);
       gap: 10px;
-      align-content: start;
     }
 
     /* ── Tiles ───────────────────────────────────────────────────── */
@@ -880,14 +850,6 @@
 <body>
 <div id="root">
 
-  <header id="topbar">
-    <div id="clock">--:--</div>
-    <div id="topbar-right">
-      <div id="date-label">Loading…</div>
-      <div id="location-label"></div>
-    </div>
-  </header>
-
   <!-- Dashboard view -->
   <div id="main">
     <section id="status-panel"></section>
@@ -1109,7 +1071,6 @@
 
   function renderWeather(w) {
     _weatherData = w;
-    document.getElementById('location-label').textContent = w.location;
     _patchWeatherTile();
   }
 
@@ -1409,21 +1370,12 @@
     }
   }
 
-  /* ── Clock ──────────────────────────────────────────────────────── */
-  function updateClock() {
-    const now  = new Date();
-    let h      = now.getHours();
-    const m    = String(now.getMinutes()).padStart(2, '0');
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12;
-    document.getElementById('clock').textContent = `${h}:${m} ${ampm}`;
-
-    const days   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    document.getElementById('date-label').textContent =
-      `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}`;
-
-    document.body.classList.toggle('night', now.getHours() >= 22 || now.getHours() < 6);
+  /* ── Night dim ──────────────────────────────────────────────────── */
+  // No on-screen clock or date — the tablet sits next to a physical clock
+  // and calendar. This timer only drives the 10pm-6am dim.
+  function updateNightDim() {
+    const h = new Date().getHours();
+    document.body.classList.toggle('night', h >= 22 || h < 6);
   }
 
   /* ── Tap-to-dismiss with PIN overlay ───────────────────────────── */
@@ -2253,8 +2205,8 @@
   document.getElementById('pool-back-btn').addEventListener('click', showDashboardView);
 
   /* ── Boot ───────────────────────────────────────────────────────── */
-  updateClock();
-  setInterval(updateClock, 15_000);
+  updateNightDim();
+  setInterval(updateNightDim, 15_000);
 
   refresh();
   setInterval(refresh, REFRESH_INTERVAL_MS);
