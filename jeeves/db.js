@@ -268,6 +268,31 @@ function migrate() {
     db.pragma('user_version = 10');
     console.log('DB: migrated to v10');
   }
+  if (v < 11) {
+    // Fixed calendar-day scheduling. interval_days always drifts to whenever
+    // a task actually gets marked done - the same anchoring problem v9 fixed
+    // for mulch_beds with a season window. A shade check needs a literal
+    // date instead: "the 1st" must mean the 1st every time, not "30 days
+    // after whenever it last happened." days_of_month is a comma-separated
+    // list of day numbers (e.g. "1" or "1,15"); getTaskSchedule() uses it in
+    // place of last_done_at + interval_days when set. interval_days is left
+    // populated on these rows for schema/display purposes but is ignored
+    // once days_of_month is present.
+    //
+    // Written as an UPDATE against the v10 seed rather than an edit to v10
+    // itself, so it lands whether or not v10 already ran on this database.
+    db.exec(`ALTER TABLE tasks ADD COLUMN days_of_month TEXT;`);
+
+    db.prepare(
+      `UPDATE tasks SET days_of_month = '1' WHERE key = 'shade_battery_charge' AND days_of_month IS NULL`
+    ).run();
+    db.prepare(
+      `UPDATE tasks SET days_of_month = '1,15' WHERE key = 'shade_operation_check' AND days_of_month IS NULL`
+    ).run();
+
+    db.pragma('user_version = 11');
+    console.log('DB: migrated to v11');
+  }
 }
 
 migrate();
@@ -468,6 +493,22 @@ function _nextWindowOpen(ts, startMonth) {
   return Math.floor(open.getTime() / 1000);
 }
 
+// Next occurrence of one of a fixed set of calendar days-of-month, strictly
+// after lastDoneAt's day (or immediately if never done). Exists so a task's
+// due date never drifts by whenever it happened to last get done - "the
+// 1st" always means the 1st, unlike interval_days.
+function _nextAnchorDue(lastDoneAt, daysOfMonth) {
+  if (!lastDoneAt) return Math.floor(Date.now() / 1000);
+  const d = new Date(lastDoneAt * 1000);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 1);
+  for (let i = 0; i < 62; i++) {
+    if (daysOfMonth.includes(d.getDate())) return Math.floor(d.getTime() / 1000);
+    d.setDate(d.getDate() + 1);
+  }
+  return Math.floor(d.getTime() / 1000); // unreachable: every list has a hit within 31 days
+}
+
 // Every enabled task with its computed due date, soonest first. A task that has
 // never been done is due now — the v6 seed stamps last_done_at so that only
 // happens for rows added deliberately (mulch_beds in v8) or by hand later.
@@ -477,9 +518,14 @@ export function getTaskSchedule() {
   ).all();
   return rows
     .map((t) => {
-      const rawDue = t.last_done_at
-        ? t.last_done_at + Math.round(t.interval_days * DAY_S)
-        : Math.floor(Date.now() / 1000);
+      const daysOfMonth = t.days_of_month
+        ? t.days_of_month.split(',').map(Number)
+        : null;
+      const rawDue = daysOfMonth
+        ? _nextAnchorDue(t.last_done_at, daysOfMonth)
+        : t.last_done_at
+          ? t.last_done_at + Math.round(t.interval_days * DAY_S)
+          : Math.floor(Date.now() / 1000);
       // Out of season, a task is deferred to its next window opening rather
       // than hidden. "Feed the rose · March 1" stays visible on Next Up instead
       // of the task silently vanishing for six months and looking like a bug.
@@ -496,6 +542,7 @@ export function getTaskSchedule() {
         lastDoneAt:   t.last_done_at,
         startMonth:   t.start_month,
         endMonth:     t.end_month,
+        daysOfMonth,
         dueAt,
       };
     })

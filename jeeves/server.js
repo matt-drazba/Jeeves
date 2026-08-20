@@ -951,6 +951,12 @@ function _relativeDay(dueMs) {
 const MONTH_ABBR = [null, 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+function _ordinal(n) {
+  const suffixes = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0]);
+}
+
 function refreshNextActions() {
   try {
     const actions = db.getTaskSchedule().map((t) => ({
@@ -962,8 +968,13 @@ function refreshNextActions() {
       confidence: 'scheduled',
       // Seasonal tasks name their window. Without it "every 35 days" sitting
       // next to a due date five months out reads as a bug rather than a
-      // closed season.
-      basis: `every ${t.intervalDays} days${
+      // closed season. Anchor tasks (days_of_month) name their fixed date(s)
+      // instead of interval_days, which they ignore.
+      basis: `${
+        t.daysOfMonth
+          ? `monthly on the ${t.daysOfMonth.map(_ordinal).join(' & ')}`
+          : `every ${t.intervalDays} days`
+      }${
         t.startMonth ? ` · ${MONTH_ABBR[t.startMonth]}–${MONTH_ABBR[t.endMonth]} only` : ''
       } · last done ${
         t.lastDoneAt ? new Date(t.lastDoneAt * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'never'
