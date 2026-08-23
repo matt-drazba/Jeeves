@@ -84,8 +84,7 @@ let cachedStatus = {
     library:      { label: 'Library',      icon: '📚', value: '—',    sub: '', alert: false, degraded: false, readyHolds: [] },
     booksOut:     { label: 'Books Out',    icon: '📖', value: '—',    sub: '', alert: false, degraded: false, checkedOut: [] },
     nowPlaying: { label: 'Now Playing', icon: '🎵', value: '—',    sub: '', alert: false, degraded: false },
-    dusty:      { label: 'Dusty',       icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
-    snorlax:    { label: 'Snorlax',     icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
+    batteries:  { label: 'Batteries',   icon: '🔋', value: '—',    sub: '', alert: false, degraded: false, devices: [] },
     scoreboard: { label: 'Chores',      icon: '🏆', value: '—',    sub: 'This week', members: [], alert: false, degraded: false },
     homeEnergy: { label: 'Home Energy', icon: '⚡', value: '—',    sub: '', alert: false, degraded: false },
     poolPump:   { label: 'Pool Pump',   icon: '🏊', value: '—',    sub: '', alert: false, degraded: false },
@@ -1214,55 +1213,68 @@ setInterval(() => {
   }
 }, 60 * 1000);
 
-// ── Tesla ─────────────────────────────────────────────────────────
-const TESLA_VEHICLES = [
-  { key: 'dusty',   label: 'Dusty',   prefix: 'dusty'   },
-  { key: 'snorlax', label: 'Snorlax', prefix: 'snorlax' },
-];
+// ── Batteries ─────────────────────────────────────────────────────
+// One grouped tile instead of one tile per device — there are more
+// battery-powered things in the house (cars, locks, doorbell, tablets, phones)
+// than there are tile slots, and that gap only grows. Dusty and Snorlax are
+// pinned by decision 2026-08-23 ("the cars" stay visible regardless of
+// charge); everything else is sorted worst-first server-side and rotated
+// through the remaining rows client-side.
+//
+// Entity IDs confirmed live against HA on 2026-08-23 via `/api/states` —
+// see the ground-truth rule, never guessed. Resideo room sensors and backup
+// phones did not appear in that scan (no HomeKit battery characteristic
+// exposed for the sensors; Companion app not yet installed on the backup
+// phones) — not wired up here until one of those changes.
+const BATTERY_REGISTRY = {
+  dusty:        { label: 'Dusty',            icon: '🚗', pctEntity: 'sensor.dusty_battery_level',        chargingEntity: 'sensor.dusty_charging',   pinned: true },
+  snorlax:      { label: 'Snorlax',          icon: '🚗', pctEntity: 'sensor.snorlax_battery_level',      chargingEntity: 'sensor.snorlax_charging', pinned: true },
+  ringDoorbell: { label: 'Ring Doorbell',    icon: '🔔', pctEntity: 'sensor.front_door_battery' },
+  augustLock:   { label: 'Front Door Lock',  icon: '🔒', pctEntity: 'sensor.front_front_door_battery' },
+  ipad:         { label: 'iPad',             icon: '📱', pctEntity: 'sensor.ipad_battery_level',         chargingEntity: 'sensor.ipad_battery_state' },
+};
 
-async function fetchTesla() {
+async function fetchBatteries() {
   if (!HA_TOKEN) return;
-  for (const { key, label, prefix } of TESLA_VEHICLES) {
-    try {
-      const [battRes, chargingRes, timeRes] = await Promise.allSettled([
-        fetchHAState(`sensor.${prefix}_battery_level`),
-        fetchHAState(`sensor.${prefix}_charging`),
-        fetchHAState(`sensor.${prefix}_time_to_full_charge`),
-      ]);
 
-      const pct = battRes.status === 'fulfilled' ? Math.round(parseFloat(battRes.value.state)) : null;
-      const chargingState = chargingRes.status === 'fulfilled' ? chargingRes.value.state : null;
-      const timeToFull = timeRes.status === 'fulfilled' ? parseFloat(timeRes.value.state) : null;
-
-      const value = pct !== null && !isNaN(pct) ? `${pct}%` : '—';
-
-      let sub = '';
-      if (chargingState === 'Charging') {
-        if (timeToFull && timeToFull > 0) {
-          const h = Math.floor(timeToFull / 60);
-          const m = Math.round(timeToFull % 60);
-          sub = h > 0 ? `Charging · ${h}h ${m}m` : `Charging · ${m}m`;
-        } else {
-          sub = 'Charging';
-        }
-      } else if (chargingState === 'Complete') {
-        sub = 'Full';
-      } else if (chargingState && chargingState !== 'Disconnected' && chargingState !== 'unknown') {
-        sub = chargingState;
-      }
-
-      const degraded = pct !== null && !isNaN(pct) && pct < 20;
-
-      cachedStatus.status[key] = { label, icon: '🚗', value, sub, alert: false, degraded, done: false };
-      console.log(`Tesla ${label} updated: ${value} ${sub}`);
-    } catch (err) {
-      console.error(`Tesla ${label} fetch failed:`, err.message);
-    }
+  const entityMap = {};
+  for (const [key, dev] of Object.entries(BATTERY_REGISTRY)) {
+    entityMap[`${key}__pct`] = dev.pctEntity;
+    if (dev.chargingEntity) entityMap[`${key}__chg`] = dev.chargingEntity;
   }
+  const states = await fetchHAStates(entityMap);
+
+  const devices = Object.entries(BATTERY_REGISTRY)
+    .map(([key, dev]) => {
+      const pctState = states[`${key}__pct`];
+      const pct = pctState ? Math.round(parseFloat(pctState.state)) : NaN;
+      if (isNaN(pct)) return null; // never resolved — omit rather than show a broken row
+
+      const chgState = dev.chargingEntity ? states[`${key}__chg`] : null;
+      // Values differ by integration ("Charging" from Tesla, "Not Charging"
+      // from the Companion app) — compare case-insensitively rather than
+      // trust one integration's exact casing.
+      const charging = chgState?.state?.toLowerCase() === 'charging';
+
+      return {
+        key, label: dev.label, icon: dev.icon, pinned: !!dev.pinned,
+        pct, charging, lastChanged: pctState.lastChanged || null,
+      };
+    })
+    .filter(Boolean);
+
+  const lowest = devices.reduce((min, d) => Math.min(min, d.pct), 100);
+  cachedStatus.status.batteries = {
+    label: 'Batteries', icon: '🔋',
+    value: devices.length ? `${lowest}% lowest` : '—',
+    sub: devices.length ? `${devices.length} devices` : '',
+    alert: false, degraded: lowest < 20,
+    devices,
+  };
 }
 
-fetchTesla().catch(err => console.error('Tesla fetch failed:', err));
-setInterval(() => fetchTesla().catch(err => console.error('Tesla fetch failed:', err)), 5 * 60 * 1000);
+fetchBatteries().catch(err => console.error('Batteries fetch failed:', err));
+setInterval(() => fetchBatteries().catch(err => console.error('Batteries fetch failed:', err)), 5 * 60 * 1000);
 
 // ── Now Playing (Mac mini Music bridge) ──────────────────────────
 // Mac mini. Pin this in the router's DHCP reservations — the 2026-08-18 power
