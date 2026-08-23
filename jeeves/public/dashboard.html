@@ -1338,14 +1338,16 @@
     ticker.textContent = _alerts[_alertIndex];
   }
 
-  /* ── Battery tile (pinned rows + rotating rows) ───────────────────── */
+  /* ── Battery tile (pinned rows + attention rows) ──────────────────── */
   // Dusty and Snorlax are pinned — always rows 1-2, regardless of charge.
-  // Everything else sorts worst-first (charging floats up too, since that's
-  // active-state info) and a 2-wide window slides through it on the same
-  // 5s beat as the alert ticker, advancing by one row per tick.
-  const BATTERY_ROTATE_SIZE = 2;
-  let _batteryDevices     = [];
-  let _batteryRotateIndex = 0;
+  // The tile has room for 5 rows total, so the remaining 3 go to whatever's
+  // actually worth a glance: charging, or below the green threshold. A
+  // fully green house just shows the two pinned rows — no filler, no
+  // rotation. (An earlier version cycled through everything on a timer;
+  // with room for 5 and rarely more than a couple of things needing
+  // attention at once, that was solving a problem that didn't exist.)
+  const BATTERY_TOTAL_ROWS = 5;
+  let _batteryDevices = [];
 
   function _batteryClass(d) {
     if (d.charging) return 'charging';
@@ -1363,36 +1365,19 @@
     </div>`;
   }
 
-  function _sortedOthers() {
-    return _batteryDevices
-      .filter(d => !d.pinned)
-      .sort((a, b) => (b.charging - a.charging) || (a.pct - b.pct));
-  }
-
   function _paintBatteryRows() {
     const el = document.getElementById('battery-rows');
     if (!el) return;
     const pinned = _batteryDevices.filter(d => d.pinned);
-    const others = _sortedOthers();
-    const window = [];
-    for (let i = 0; i < Math.min(BATTERY_ROTATE_SIZE, others.length); i++) {
-      window.push(others[(_batteryRotateIndex + i) % others.length]);
-    }
-    el.innerHTML = pinned.map(_batteryRowHtml).join('') + window.map(_batteryRowHtml).join('');
+    const others = _batteryDevices
+      .filter(d => !d.pinned && (d.charging || d.pct < 50))   // green + idle = not shown
+      .sort((a, b) => (b.charging - a.charging) || (a.pct - b.pct))
+      .slice(0, Math.max(0, BATTERY_TOTAL_ROWS - pinned.length));
+    el.innerHTML = pinned.map(_batteryRowHtml).join('') + others.map(_batteryRowHtml).join('');
   }
 
   function renderBatteryRows(devices) {
     _batteryDevices = devices;
-    // A device set change (new device added/removed) shouldn't leave the
-    // rotation pointing past the end of a now-shorter list.
-    if (_batteryRotateIndex >= _sortedOthers().length) _batteryRotateIndex = 0;
-    _paintBatteryRows();
-  }
-
-  function tickBatteries() {
-    const others = _sortedOthers();
-    if (others.length <= BATTERY_ROTATE_SIZE) return; // everything already fits, nothing to rotate
-    _batteryRotateIndex = (_batteryRotateIndex + 1) % others.length;
     _paintBatteryRows();
   }
 
@@ -2359,7 +2344,6 @@
   setInterval(refresh, REFRESH_INTERVAL_MS);
   setInterval(checkStaleness, 30_000);
   setInterval(tickAlert, 5_000);
-  setInterval(tickBatteries, 5_000);
 </script>
 </body>
 </html>
