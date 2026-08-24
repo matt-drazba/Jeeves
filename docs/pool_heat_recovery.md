@@ -117,13 +117,15 @@ HA failure degrades to "no free heat," never to danger. See HA layer below.
 - `sensor.pool_pad_pool_flow_gpm` — pulse counter, calibrate against Blue-White gauge, **deferred, not yet built** — flow meter not yet installed
 - `sensor.pool_pad_pool_heat_btu_hr` — template: GPM × ΔT(°F) × 500
 - `sensor.shellyemg3_dcb4d9ce63a4_energy_meter_0_power` — Shelly EM Gen3, 50A CT on one pump leg (240V, single leg only — see Jeeves tile for running-state derivation). `switch.shellyemg3_dcb4d9ce63a4` drives the R-40 ionizer relay (see ionizer note above).
-- Compressor call: T10 via HomeKit (`hvac_action`) — no Resideo cloud needed
+- Compressor call: T10 via HomeKit (`hvac_action`) — entity confirmed 2026-08-23 as `climate.t10_thermostat`, `hvac_action` verified live and populated (`cooling`)
 
-**Dropped: FPH pump-call sensor (2026-07-28).** Originally planned as a second relay tapping the FPH's pump-call output (FPH control box terminal ↔ IntelliComm II GPM/RPM Program 4 input), to alert if the FPH requested heat but the trio never energized (flow-switch dropout). Cut after review:
+**Dropped: FPH pump-call sensor (2026-07-28) — partially superseded 2026-08-23.** Originally planned as a second relay tapping the FPH's pump-call output (FPH control box terminal ↔ IntelliComm II GPM/RPM Program 4 input), to alert if the FPH requested heat but the trio never energized (flow-switch dropout). Cut after review:
 - That failure mode (flow switch fails open despite real flow) only costs lost free heat recovery — no equipment risk. Not worth a second relay, GPIO, and wiring run for a pure efficiency alert.
 - The failure mode that actually matters — flow switch stuck *closed* with no real flow, diverting refrigerant into stagnant water (risk of FPH/compressor damage per manual p.25) — isn't caught by the pump-call signal anyway, since in that failure `pool_heat_active` and the pump-call signal would agree with each other while both miss the real problem.
 - That dangerous case is instead caught by comparing `pool_heat_active` against `pool_flow_gpm` directly (trio energized/pump running but flow reads ~0) — already-planned sensors, no new hardware needed.
 - GPIO4 (D2) is freed up as a result — available for a future use if needed.
+
+**The "lost free heat" case above did happen** — a post-backwash clogged filter kept flow below the Tecmark's trip point, so the trio never energized and the AC ran plain cooling with zero heat recovery, silently, for as long as it took to notice by hand. The relay that was rejected here would have caught it, but it isn't needed: `binary_sensor.pool_hx_not_engaging` (L2, `homeassistant/packages/jeeves_alerts.yaml`) reconstructs the same signal from parts that already exist — `climate.t10_thermostat`'s `hvac_action` stands in for the FPH pump-call relay (both are driven by the same AC-compressor-on event), combined with `pool_heat_active` staying off and `hx_water_in_temp` still below setpoint. No new hardware, no GPIO spent. See `docs/alerting_levels.md` and `docs/alerting_runbook.md`.
 
 **Alert rules (HA automations, phase after monitoring proven):**
 - `pool_heat_active && !pool_pump_running` for >30 s → critical alert (L1/L2 failed or bypassed)
