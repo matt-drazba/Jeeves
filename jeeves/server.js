@@ -1214,54 +1214,61 @@ setInterval(() => {
 }, 60 * 1000);
 
 // ── Batteries ─────────────────────────────────────────────────────
-// One grouped tile instead of one tile per device — there are more
-// battery-powered things in the house (cars, locks, doorbell, tablets, phones)
-// than there are tile slots, and that gap only grows. Dusty and Snorlax are
-// pinned by decision 2026-08-23 ("the cars" stay visible regardless of
-// charge); everything else is sorted worst-first server-side and rotated
-// through the remaining rows client-side.
+// Auto-discovered, not hand-listed. HA's own built-in Maintenance dashboard
+// (2026.5+) does the same thing: every sensor with device_class "battery",
+// sorted worst-first, no per-device config. device_class is a plain state
+// attribute — visible on the same /api/states call used everywhere else in
+// this file, no entity registry or WebSocket API needed. A new battery
+// entity in HA just shows up here on the next poll.
 //
-// Entity IDs confirmed live against HA on 2026-08-23 via `/api/states` —
-// see the ground-truth rule, never guessed. Resideo room sensors and backup
-// phones did not appear in that scan (no HomeKit battery characteristic
-// exposed for the sensors; Companion app not yet installed on the backup
-// phones) — not wired up here until one of those changes.
-const BATTERY_REGISTRY = {
-  dusty:        { label: 'Dusty',            icon: '🚗', pctEntity: 'sensor.dusty_battery_level',        chargingEntity: 'sensor.dusty_charging',   pinned: true },
-  snorlax:      { label: 'Snorlax',          icon: '🚗', pctEntity: 'sensor.snorlax_battery_level',      chargingEntity: 'sensor.snorlax_charging', pinned: true },
-  ringDoorbell: { label: 'Ring Doorbell',    icon: '🔔', pctEntity: 'sensor.front_door_battery' },
-  augustLock:   { label: 'Front Door Lock',  icon: '🔒', pctEntity: 'sensor.front_front_door_battery' },
-  ipad:         { label: 'iPad',             icon: '📱', pctEntity: 'sensor.ipad_battery_level',         chargingEntity: 'sensor.ipad_battery_state' },
+// Only two things stay explicit, because HA has no signal for either:
+//   - PINNED: which devices are always shown regardless of charge. That's a
+//     judgment call ("the cars", decision 2026-08-23), not a discoverable fact.
+//   - ICONS: cosmetic only. Anything not listed gets the default 🔋.
+// Charging (blue) has no house-wide standard signal either — none of these
+// integrations use HA's binary_sensor device_class "battery_charging" — so
+// it's inferred by looking for a sibling entity sharing the same entity_id
+// prefix (sensor.<prefix>_charging or _battery_state) and checking whether
+// its state is exactly "charging" (case-insensitive, so "Not Charging"
+// correctly reads as false, not a substring match on "charging"). A device
+// with no such sibling just never shows as charging — never wrong, just less complete.
+const BATTERY_PINNED = new Set(['sensor.dusty_battery_level', 'sensor.snorlax_battery_level']);
+const BATTERY_ICONS = {
+  'sensor.dusty_battery_level':       '🚗',
+  'sensor.snorlax_battery_level':     '🚗',
+  'sensor.front_door_battery':        '🔔',
+  'sensor.front_front_door_battery':  '🔒',
+  'sensor.ipad_battery_level':        '📱',
 };
 
 async function fetchBatteries() {
   if (!HA_TOKEN) return;
 
-  const entityMap = {};
-  for (const [key, dev] of Object.entries(BATTERY_REGISTRY)) {
-    entityMap[`${key}__pct`] = dev.pctEntity;
-    if (dev.chargingEntity) entityMap[`${key}__chg`] = dev.chargingEntity;
-  }
-  const states = await fetchHAStates(entityMap);
+  const res = await fetch(`${HA_URL}/api/states`, {
+    headers: { Authorization: `Bearer ${HA_TOKEN}` },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) throw new Error(`HA API ${res.status} fetching /api/states`);
+  const all = await res.json();
+  const byId = new Map(all.map(e => [e.entity_id, e]));
 
-  const devices = Object.entries(BATTERY_REGISTRY)
-    .map(([key, dev]) => {
-      const pctState = states[`${key}__pct`];
-      const pct = pctState ? Math.round(parseFloat(pctState.state)) : NaN;
-      if (isNaN(pct)) return null; // never resolved — omit rather than show a broken row
-
-      const chgState = dev.chargingEntity ? states[`${key}__chg`] : null;
-      // Values differ by integration ("Charging" from Tesla, "Not Charging"
-      // from the Companion app) — compare case-insensitively rather than
-      // trust one integration's exact casing.
-      const charging = chgState?.state?.toLowerCase() === 'charging';
+  const devices = all
+    .filter(e => e.attributes?.device_class === 'battery' && !isNaN(parseFloat(e.state)))
+    .map(e => {
+      const prefix  = e.entity_id.replace(/^sensor\./, '').replace(/_battery(_level)?$/, '');
+      const chgEnt  = byId.get(`sensor.${prefix}_charging`) || byId.get(`sensor.${prefix}_battery_state`);
+      const charging = chgEnt?.state?.toLowerCase() === 'charging';
 
       return {
-        key, label: dev.label, icon: dev.icon, pinned: !!dev.pinned,
-        pct, charging, lastChanged: pctState.lastChanged || null,
+        key:     e.entity_id,
+        label:   (e.attributes.friendly_name || e.entity_id).replace(/\s*Battery( Level)?$/i, ''),
+        icon:    BATTERY_ICONS[e.entity_id] || '🔋',
+        pinned:  BATTERY_PINNED.has(e.entity_id),
+        pct:     Math.round(parseFloat(e.state)),
+        charging,
+        lastChanged: e.last_changed || null,
       };
-    })
-    .filter(Boolean);
+    });
 
   const lowest = devices.reduce((min, d) => Math.min(min, d.pct), 100);
   cachedStatus.status.batteries = {
