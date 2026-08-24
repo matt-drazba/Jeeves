@@ -820,6 +820,12 @@ const ALERT_REGISTRY = {
     detector: null, // nightly 11:45pm check, no live detector to re-read
     action: 'Check whether the pump ran ≥30 min before 9:45pm.',
   },
+  hx_not_engaging: {
+    level: 2,
+    title: 'Heat recovery not engaging',
+    detector: 'binary_sensor.pool_hx_not_engaging',
+    action: 'AC cooling 10+ min, pool below setpoint, heat recovery never turned on — check the Tecmark flow switch / filter for a clog (common right after a backwash).',
+  },
 
   // Garage — homeassistant/packages/jeeves_garage.yaml. No garage tile by
   // decision; these surface only through the alerts tile and the overlay.

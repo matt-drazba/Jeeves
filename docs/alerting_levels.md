@@ -127,7 +127,7 @@ the Tuya app. Unconfirmed kill = still being destroyed = Level 1.
 | Booster dry run **caught and successfully killed** | **live** |
 | Main pump off during its 9pm–4pm window | **live** |
 | Garage door open >15 min between 6am and 9:15pm | **live** |
-| Heat recovery pump failure | planned |
+| AC cooling 10+ min, pool below setpoint, heat recovery never engaged | **live** |
 | HA / Pi offline seen from outside the house | **not building** — see blind spot |
 
 Both deliver as a normal push immediately, plus a 7am re-raise if still
