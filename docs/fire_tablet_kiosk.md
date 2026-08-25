@@ -117,7 +117,9 @@ differencing, forever. It is also a camera running in the kitchen. A kitchen
 display should just stay on.
 
 **Do not add a brightness schedule.** The dashboard already dims itself to 0.45
-opacity from 10pm–6am, in JS. Layering Fully's night dimming on top makes it
+opacity from 10pm–6am, and separately after 2 minutes of no touches
+(idle-dim, added 2026-08-23) — same visual state either way, just two
+different triggers for it. Layering Fully's own dimming on top makes it
 unreadable.
 
 **Battery swelling is the real long-term failure.** A Fire tablet held at 100%
