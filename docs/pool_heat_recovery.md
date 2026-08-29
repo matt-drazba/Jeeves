@@ -14,7 +14,7 @@ Sources: HotSpot FPH installer manual (44p scan), Pentair IntelliComm II guide, 
 | FPH | **FPH5** (confirmed on HX label). Min **45 GPM** / max **70 GPM** / 75k BTU/h max. |
 | HVAC | Bryant 226ANA048-B, 4-ton two-stage heat pump. Recovery runs in **cooling only** (Type of AC setting, p.41). |
 | Baseline flow | **1750 RPM ≈ 45–50 GPM** (measured, Blue-White inline gauge). Flow scales ~1:1 with RPM. |
-| Schedule speeds | The daily schedule is **two-speed**: **2000 RPM** during the sweep window (21:45–23:15), **1750 RPM** the rest of the 19-hour run. Distinct from Ext. Program 4 below, which the FPH commands and which outranks both. Winter speeds are under review — see [pool_system_checks.md](pool_system_checks.md). |
+| Schedule speeds | **Corrected 2026-08-29** — the daily schedule is **two-speed, by fixed clock times, not tied to the sweep window**: **Schedule 1 — 2000 RPM, 9:00pm–12:00am. Schedule 2 — 1750 RPM, 12:00am–4:00pm.** (An earlier version of this row tied the 2000 RPM segment to the 21:45–23:15 sweep window specifically — that was wrong; the two are independent.) **None of this is locked** — owner can and does adjust the RPM, the clock times, and may add a third schedule segment to hit the right turnover across seasons. Distinct from Ext. Program 4 below, which the FPH commands and which outranks both. Winter speeds are under review — see [pool_system_checks.md](pool_system_checks.md). |
 | Sanitizer | **Clearwater MineralPURE R-40** copper/silver ionizer (40k gal). Low residual chlorine (~90% reduction; small residual still required). Copper target **0.15–0.20 ppm** (R-40 manual p.14, verified 2026-08-07 — an earlier 0.2–0.4 figure here was wrong, its upper half exceeds the manufacturer maximum). |
 
 ## Program config

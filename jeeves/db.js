@@ -120,8 +120,10 @@ function migrate() {
     //
     // Only genuinely calendar-driven work belongs here. Backwash is deliberately
     // NOT seeded: docs/pool_data_addendum.md is explicit that it triggers at
-    // +8-10 psi over measured baseline, not on a schedule, and the filter
-    // pressure sensor isn't built yet. A calendar cadence would be invented.
+    // +8-10 psi over measured baseline, not on a schedule. (Filter pressure
+    // sensor went live 2026-08-28 — see pool_filter_baseline / getFilterBaseline
+    // below — but backwash still isn't a tasks-table row; it's threshold-driven,
+    // not calendar-driven, so it doesn't belong in this table even now.)
     db.exec(`
       CREATE TABLE IF NOT EXISTS tasks (
         id            INTEGER PRIMARY KEY,
@@ -293,6 +295,31 @@ function migrate() {
     db.pragma('user_version = 11');
     console.log('DB: migrated to v11');
   }
+  if (v < 12) {
+    // Filter pressure sensor went live 2026-08-28 — see
+    // docs/pool_pressure_install_card.md. The column stays on pool_heat_samples
+    // rather than a separate table since it's sampled on the same poll as
+    // everything else there, and needs the same pump_watts column to be
+    // comparable (the daily schedule runs 3 different pump speeds, so raw
+    // pressure isn't meaningful without knowing what watts it was read at).
+    //
+    // pool_filter_baseline is a single durable row (CHECK id=1 enforces one),
+    // not a time series — same "one current value" shape as the tasks table's
+    // last_done_at, just for a value set manually after a backwash rather than
+    // on a schedule.
+    db.exec(`
+      ALTER TABLE pool_heat_samples ADD COLUMN filter_pressure REAL;
+
+      CREATE TABLE IF NOT EXISTS pool_filter_baseline (
+        id             INTEGER PRIMARY KEY CHECK (id = 1),
+        baseline_psi   REAL NOT NULL,
+        baseline_watts REAL,
+        recorded_at    INTEGER NOT NULL
+      );
+    `);
+    db.pragma('user_version = 12');
+    console.log('DB: migrated to v12');
+  }
 }
 
 migrate();
@@ -345,8 +372,8 @@ export function maybeLogEnergy(device, watts) {
 
 const _logPoolHeat = db.prepare(
   `INSERT INTO pool_heat_samples
-     (recorded_at, hx_in_f, hx_out_f, delta_f, flow_gpm, btu_hr, heat_active, pump_watts)
-   VALUES (?,?,?,?,?,?,?,?)`
+     (recorded_at, hx_in_f, hx_out_f, delta_f, flow_gpm, btu_hr, heat_active, pump_watts, filter_pressure)
+   VALUES (?,?,?,?,?,?,?,?,?)`
 );
 
 const POOL_HEAT_IDLE_INTERVAL_MS = 10 * 60 * 1000; // heartbeat when heat recovery is off
@@ -356,7 +383,7 @@ let _poolHeatLastWrite = 0;
  * Called on the pool pad poll (~2 min). Full resolution while heat recovery is
  * running; a 10-minute heartbeat when it is idle, so a season of data stays small.
  */
-export function logPoolHeat({ hxInF, hxOutF, flowGpm, btuHr, heatActive, pumpWatts }) {
+export function logPoolHeat({ hxInF, hxOutF, flowGpm, btuHr, heatActive, pumpWatts, filterPressure }) {
   const now = Date.now();
   if (!heatActive && now - _poolHeatLastWrite < POOL_HEAT_IDLE_INTERVAL_MS) return;
 
@@ -367,12 +394,55 @@ export function logPoolHeat({ hxInF, hxOutF, flowGpm, btuHr, heatActive, pumpWat
   try {
     _logPoolHeat.run(
       Math.floor(now / 1000), inF, outF, delta,
-      n(flowGpm), n(btuHr), heatActive ? 1 : 0, n(pumpWatts)
+      n(flowGpm), n(btuHr), heatActive ? 1 : 0, n(pumpWatts), n(filterPressure)
     );
     _poolHeatLastWrite = now;
   } catch (err) {
     console.error('DB pool heat write failed:', err.message);
   }
+}
+
+// ── Filter pressure baseline + trend ──────────────────────────────
+
+const _setFilterBaseline = db.prepare(
+  `INSERT INTO pool_filter_baseline (id, baseline_psi, baseline_watts, recorded_at)
+   VALUES (1, ?, ?, ?)
+   ON CONFLICT(id) DO UPDATE SET baseline_psi=excluded.baseline_psi,
+     baseline_watts=excluded.baseline_watts, recorded_at=excluded.recorded_at`
+);
+
+/** Recorded once, by hand, right after a backwash — see docs/pool_pressure_install_card.md §4. */
+export function setFilterBaseline(psi, watts) {
+  const now = Math.floor(Date.now() / 1000);
+  _setFilterBaseline.run(psi, watts ?? null, now);
+  return { baselinePsi: psi, baselineWatts: watts ?? null, recordedAt: now };
+}
+
+export function getFilterBaseline() {
+  const row = db.prepare(
+    'SELECT baseline_psi, baseline_watts, recorded_at FROM pool_filter_baseline WHERE id = 1'
+  ).get();
+  if (!row) return null;
+  return { baselinePsi: row.baseline_psi, baselineWatts: row.baseline_watts, recordedAt: row.recorded_at };
+}
+
+/**
+ * Samples since the baseline was set, restricted to a watts band around the
+ * baseline's own reading. Required because the daily schedule runs pump speeds
+ * that differ (2000 RPM 9pm-12am, 1750 RPM 12am-4pm, 2200 RPM only during heat
+ * recovery) — pressure at a different flow rate isn't comparable to the
+ * baseline no matter how the filter is doing, so mixing speeds into one trend
+ * would read the RPM schedule as clogging.
+ */
+export function getFilterTrendSamples(sinceTs, wattsLow, wattsHigh) {
+  return db.prepare(`
+    SELECT recorded_at, filter_pressure
+    FROM pool_heat_samples
+    WHERE recorded_at >= ?
+      AND filter_pressure IS NOT NULL
+      AND pump_watts BETWEEN ? AND ?
+    ORDER BY recorded_at ASC
+  `).all(sinceTs, wattsLow, wattsHigh);
 }
 
 // ── Behavior errors ────────────────────────────────────────────────
@@ -431,7 +501,7 @@ export function getOpenErrors() {
 // plotting it sets the y-scale so the real 0-1F signal collapses to nothing.
 export function getPoolHeatSamples(sinceTs, limit = 1000) {
   return db.prepare(`
-    SELECT recorded_at, hx_in_f, hx_out_f, delta_f, heat_active, pump_watts
+    SELECT recorded_at, hx_in_f, hx_out_f, delta_f, heat_active, pump_watts, filter_pressure
     FROM pool_heat_samples
     WHERE recorded_at >= ?
     ORDER BY recorded_at ASC

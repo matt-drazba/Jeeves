@@ -24,6 +24,15 @@ ota:
   - platform: esphome
     password: !secret ota_password
 
+# I2C bus for the ADS1115 (filter pressure ADC). GPIO4/GPIO13 freed 2026-07-28
+# and 2026-08-05 respectively — see the pin assignments note below.
+i2c:
+  sda: GPIO4      # D2
+  scl: GPIO13     # D7
+
+ads1115:
+  - address: 0x48   # default address on the ADDR-to-GND breakout wiring
+
 # ── Pin assignments ────────────────────────────────────────────────────────
 # Set before flashing. Confirm physical wiring at the pad first.
 # Safe NodeMCU GPIO choices for inputs: GPIO5(D1), GPIO4(D2), GPIO14(D5), GPIO12(D6)
@@ -164,6 +173,39 @@ sensor:
         }
       }
       return 0.0f;
+
+  # ── Filter pressure ────────────────────────────────────────────────────
+  # ADS1115 on A0 only — no rail-compensation channel, evaluated and skipped
+  # 2026-08-28 (calibration against the analog gauge below covers the small
+  # offset/scale error that would introduce). Divider actually built is
+  # 2.2k + 4.7k (ratio 0.681), not the originally spec'd 4.7k + 10k (0.680) —
+  # nearly identical, see docs/pool_pressure_install_card.md.
+  - platform: ads1115
+    multiplexer: A0_GND
+    gain: 4.096
+    id: press_adc
+    update_interval: 10s
+    internal: true
+    filters:
+      - median: {window_size: 5, send_every: 5}
+
+  - platform: template
+    name: "Filter Pressure"
+    id: filter_pressure
+    unit_of_measurement: "PSI"
+    accuracy_decimals: 1
+    update_interval: 30s
+    lambda: |-
+      float a0 = id(press_adc).state;
+      if (isnan(a0)) return NAN;
+      float v = a0 / 0.681f;            // undo the input divider (2.2k/4.7k built)
+      return (v - 0.5f) * 15.0f;        // 60 psi FS: FS / 4.0V
+    filters:
+      # Two-point calibration against the analog gauge, 2026-08-28:
+      # pump off -> gauge 0 psi, raw read 1.3; pump on -> gauge 7.9 psi, raw read 10.9.
+      - calibrate_linear:
+          - 1.3 -> 0.0
+          - 10.9 -> 7.9
 
 # ── Pump control relay — DROPPED 2026-08-05, not built ───────────────────
 # Briefly designed as ESP relay → IntelliComm II input 2 → Ext. Program 2, to

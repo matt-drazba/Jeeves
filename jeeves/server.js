@@ -600,6 +600,10 @@ const POOL_PAD_ENTITIES = {
   flow:   'sensor.pool_pad_pool_flow_gpm',
   btu:    'sensor.pool_pad_pool_heat_btu_hr',
   active: 'binary_sensor.pool_pad_pool_heat_active',
+  // Live 2026-08-28 — entity_id confirmed against the API, not guessed (this
+  // project's own documented trap: HA derives it from the ESPHome `name` at
+  // first registration, and it does not match the friendly name literally).
+  filterPsi: 'sensor.infrawall_pool_pad_filter_pressure',
 };
 
 async function fetchPoolHeat() {
@@ -622,6 +626,7 @@ async function fetchPoolHeat() {
       btuHr:      haNum(state.btu),
       heatActive: state.active === 'on',
       pumpWatts:  lastPumpWatts,
+      filterPressure: haNum(state.filterPsi),
     });
   } catch (err) {
     console.error('Pool heat fetch failed:', err.message);
@@ -682,6 +687,70 @@ function _describeSweep(run) {
   };
 }
 
+// Filter pressure only means something relative to the clean-filter baseline,
+// which is recorded by hand after a backwash (POST /api/pool/set-filter-baseline)
+// — there's no automatic "the filter is clean now" signal. Colors and the
+// forecast both stay in a "not ready yet" state until that baseline exists.
+const FILTER_WATTS_BAND_FRAC     = 0.15; // ±15% around the baseline's own watts
+const FILTER_ALERT_PSI_OVER_BASE = 9;    // midpoint of the documented +8-10 psi window
+const FILTER_TREND_MIN_DAYS      = 5;
+const FILTER_TREND_MIN_SAMPLES   = 20;
+
+// Least-squares slope over [unixSeconds, psi] points. Returns psi per second.
+function _linearSlope(points) {
+  const n = points.length;
+  const sumX  = points.reduce((a, [x])    => a + x, 0);
+  const sumY  = points.reduce((a, [, y])  => a + y, 0);
+  const sumXY = points.reduce((a, [x, y]) => a + x * y, 0);
+  const sumXX = points.reduce((a, [x])    => a + x * x, 0);
+  const denom = n * sumXX - sumX * sumX;
+  return denom === 0 ? 0 : (n * sumXY - sumX * sumY) / denom;
+}
+
+function _describeFilterHealth(currentPsi) {
+  const baseline = db.getFilterBaseline();
+
+  if (!baseline) {
+    return {
+      value: currentPsi != null ? `${currentPsi.toFixed(1)} PSI` : '—',
+      sub: 'Tap to set baseline after backwash',
+      color: null, bg: null,
+    };
+  }
+  if (currentPsi == null) {
+    return { value: '—', sub: 'Pad node offline', color: null, bg: null };
+  }
+
+  const delta = currentPsi - baseline.baselinePsi;
+  let color, bg, label;
+  if (delta < 5)      { color = '#68e143'; bg = '#0a1a06'; label = 'Healthy'; }
+  else if (delta < FILTER_ALERT_PSI_OVER_BASE - 1) { color = '#f0c040'; bg = '#1a1500'; label = 'Watch'; }
+  else                { color = '#e53935'; bg = '#1a0000'; label = 'Backwash due'; }
+
+  let sub = `${label} · building trend`;
+  if (baseline.baselineWatts) {
+    const low  = baseline.baselineWatts * (1 - FILTER_WATTS_BAND_FRAC);
+    const high = baseline.baselineWatts * (1 + FILTER_WATTS_BAND_FRAC);
+    const samples = db.getFilterTrendSamples(baseline.recordedAt, low, high);
+    const spanDays = samples.length > 1
+      ? (samples[samples.length - 1].recorded_at - samples[0].recorded_at) / 86400
+      : 0;
+
+    if (samples.length >= FILTER_TREND_MIN_SAMPLES && spanDays >= FILTER_TREND_MIN_DAYS) {
+      const slopePerSec = _linearSlope(samples.map(s => [s.recorded_at, s.filter_pressure]));
+      const thresholdPsi = baseline.baselinePsi + FILTER_ALERT_PSI_OVER_BASE;
+      if (slopePerSec > 0.001 / 86400) {
+        const daysLeft = Math.max(0, Math.round((thresholdPsi - currentPsi) / (slopePerSec * 86400)));
+        sub = `${label} · ~${daysLeft}d to backwash`;
+      } else {
+        sub = `${label} · stable`;
+      }
+    }
+  }
+
+  return { value: `${currentPsi.toFixed(1)} PSI`, sub, color, bg };
+}
+
 async function fetchPoolStatus() {
   if (!HA_TOKEN) return;
   try {
@@ -690,6 +759,8 @@ async function fetchPoolStatus() {
 
     const hxInF   = haNum(s('hxIn'));
     const hxOutF  = haNum(s('hxOut'));
+    const rawFilterPsi = haNum(s('filterPsi'));
+    const filterPsi = isNaN(rawFilterPsi) ? null : +rawFilterPsi.toFixed(1);
     const padOnline = !isNaN(hxInF) || !isNaN(hxOutF);
     const deltaF  = !isNaN(hxInF) && !isNaN(hxOutF) ? +(hxOutF - hxInF).toFixed(1) : null;
     const heatActive = s('active') === 'on';
@@ -749,6 +820,19 @@ async function fetchPoolStatus() {
       // The durable answer to "did the last sweep go well". sweepRanTonight is
       // kept only for the 21:45-23:45 live window; it reads false all day.
       lastSweep: _describeSweep(db.getLastSweepRun()),
+      filterPsi,
+    };
+
+    // Tile: filter pressure. Color/forecast both stay a plain placeholder
+    // until a baseline is recorded (POST /api/pool/set-filter-baseline) — see
+    // _describeFilterHealth. Tapping the tile opens the pool page, same as
+    // poolPump/poolTemp, where the "set baseline" action actually lives.
+    const fh = _describeFilterHealth(filterPsi);
+    cachedStatus.status.filterHealth = {
+      label: 'Filter', icon: '🌀',
+      value: fh.value, sub: fh.sub,
+      alert: false, degraded: false,
+      color: fh.color, bg: fh.bg,
     };
 
     // Tile: water temp. The HX inlet probe is the pool water temperature.
@@ -1461,6 +1545,19 @@ app.get('/api/pool/history', (req, res) => {
   const hours = Math.min(Math.max(parseInt(req.query.hours) || 24, 1), 168);
   const sinceTs = Math.floor((Date.now() - hours * 3600 * 1000) / 1000);
   res.json({ hours, samples: db.getPoolHeatSamples(sinceTs) });
+});
+
+// Manual — recorded once, right after a backwash. There's no automatic
+// "filter is clean now" signal to detect this from, so a person has to say so.
+app.post('/api/pool/set-filter-baseline', express.json(), (req, res) => {
+  const psi = cachedStatus.pool?.filterPsi;
+  if (psi == null) {
+    return res.status(409).json({ error: 'No live filter pressure reading right now — try again once the pad node is online.' });
+  }
+  const watts = cachedStatus.pool?.pumpWatts ?? null;
+  const baseline = db.setFilterBaseline(psi, watts);
+  console.log(`Filter baseline set: ${psi} PSI @ ${watts ?? '—'} W`);
+  res.json({ ok: true, baseline });
 });
 
 function refreshScoreboard() {

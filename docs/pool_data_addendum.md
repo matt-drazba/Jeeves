@@ -3,11 +3,26 @@
 Last updated: 2026-08-12. Authority order: CLAUDE.md → this doc → coder briefs.
 Companion docs: [pool_heat_recovery.md](pool_heat_recovery.md), [pool_booster_interlock.md](pool_booster_interlock.md), [pool_chemistry_logging.md](pool_chemistry_logging.md), [pool_wiring_manual.md](pool_wiring_manual.md).
 
-**Status: Filter-pressure transducer ordered 2026-08-12 (0–60 psi), street tee
-purchased. Nothing wired yet. The ESPHome additions below are written but
-should stay commented out in
-[../esphome/pool-pad.yaml](../esphome/pool-pad.yaml) until the install happens,
-same pattern as the flow meter placeholder.**
+**Status: INSTALLED AND LIVE, 2026-08-28.** Threaded into the filter, wired,
+flashed, and calibrated against the analog gauge. The design below is the
+*original* two-channel plan (4.7kΩ+10kΩ divider, rail-compensation on A1,
+scale constant 75) — **what actually got built differs in three ways**, all
+deliberate, all recorded with reasoning in
+[pool_pressure_install_card.md](pool_pressure_install_card.md):
+
+1. **Divider is 2.2kΩ+4.7kΩ** (ratio 0.681), not 4.7kΩ+10kΩ (0.680) —
+   nearly identical, built from parts on hand, no rebuild needed.
+2. **No rail-compensation channel (A1).** Evaluated and dropped — the
+   two-point gauge calibration already corrects the resulting offset, and
+   it's one less divider to build.
+3. **Software is single-channel** (A0 only), scale constant **15**, not the
+   two-channel ratio formula with constant 75 shown below.
+
+**Read this section for the *why*; read the install card for what's actually
+in the pad node.** One real incident during install: 12V was briefly fed to
+the sensor's power wire by mistake instead of 5V. Both the sensor and the
+ADS1115 survived — confirmed via the bench test and a clean two-point
+calibration afterward.
 
 ## Origin
 
@@ -1081,11 +1096,30 @@ mode no breaker or overload will.
 - [ ] Confirm which sequestering agent (if any) is in use — several common ones
       strip copper and would corrupt the dilution model
 - [ ] Date the Hanna reagent packs on arrival; replace yearly
-- [ ] Establish the clean-filter baseline PSI at 2200 RPM immediately after the
-      next backwash/clean — everything downstream compares against it
+- [x] ~~Uncomment the ADS1115 block in `esphome/pool-pad.yaml` once parts
+      arrive~~ — **installed 2026-08-28**, single-channel version (see status
+      note above), not the commented two-channel block this doc originally
+      specified
+- [x] ~~Two-point calibration against the analog gauge~~ — **done 2026-08-28**:
+      0 psi / 7.9 psi. See `pool_pressure_install_card.md` §4
+- [ ] **Establish the clean-filter baseline PSI immediately after the next
+      backwash/clean** — everything downstream compares against it.
+      **Corrected 2026-08-29: anchor to measured `pump_watts`, not "2200
+      RPM."** The daily schedule actually runs **three** different speeds
+      most nights — Schedule 1 (2000 RPM, 9pm–12am), Schedule 2 (1750 RPM,
+      12am–4pm), and Ext. Program 4 (2200 RPM) only when heat recovery is
+      actively diverting — so "at 2200 RPM" barely applies to routine data.
+      `pool_heat_samples.pump_watts` is already logged on every sample
+      (confirmed in `jeeves/db.js` — no extra work needed), so segment/
+      compare by watts instead of by RPM label
 - [ ] Decide bonding for the brass tee + transducer body (680.26(B)(6))
 - [ ] Add `filter_pressure` column to `pool_heat_samples` in `jeeves/db.js`
-- [ ] Uncomment the ADS1115 block in `esphome/pool-pad.yaml` once parts arrive
+- [ ] Verify the `Filter Pressure` entity's actual HA `entity_id` against the
+      live API before wiring any alert or dashboard logic to it — this
+      project's own documented trap (entity_id is derived from `name` at
+      first registration, not assumed)
+- [ ] Build the actual backwash-due alert in `jeeves_alerts.yaml` (+8–10 psi
+      over the recorded baseline) — the sensor exists now, the alert doesn't
 
 ## Sources
 
