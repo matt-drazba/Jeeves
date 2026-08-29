@@ -28,7 +28,10 @@
       --dim:          1;
     }
 
-    body.night { --dim: 0.45; }
+    /* Night-dim and idle-dim are two independent reasons to dim, but they
+       share one visual state — nothing distinguishes "it's late" from
+       "nobody's touched it in a while" on screen. */
+    body.dimmed { --dim: 0.45; }
     #root { opacity: var(--dim); transition: opacity 2s ease; }
 
     html, body {
@@ -138,6 +141,16 @@
     .sb-count { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 20px; text-align: right; }
     .sb-count-pos { color: var(--good); }
     .sb-count-zero { color: var(--muted); }
+
+    /* ── Batteries tile ──────────────────────────────────────────── */
+    .battery-rows { display: flex; flex-direction: column; justify-content: space-evenly; flex: 1; margin-top: 6px; }
+    .bat-row { display: flex; justify-content: space-between; align-items: center; padding: 1px 0; }
+    .bat-name { font-size: 12px; color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bat-pct { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+    .bat-pct.charging { color: var(--accent); }
+    .bat-pct.good { color: var(--good); }
+    .bat-pct.warn { color: var(--warn-col); }
+    .bat-pct.bad  { color: var(--alert-col); }
 
     /* ── PIN overlay ─────────────────────────────────────────────── */
     #pin-overlay {
@@ -1182,6 +1195,15 @@
             <div class="scoreboard-rows" id="scoreboard-rows"></div>
           </div>`;
         }
+        if (key === 'batteries') {
+          return `<div class="tile" data-key="${key}">
+            <div class="tile-header">
+              <span class="tile-icon">🔋</span>
+              <span class="tile-label">Batteries</span>
+            </div>
+            <div class="battery-rows" id="battery-rows"></div>
+          </div>`;
+        }
         if (tile.isChore) {
           return `<div class="tile chore-tile" data-key="${key}" data-chore-id="${tile.choreId}">
             <div class="tile-header">
@@ -1233,6 +1255,11 @@
             </div>`
           ).join('');
         }
+        continue;
+      }
+
+      if (key === 'batteries') {
+        renderBatteryRows(tile.devices || []);
         continue;
       }
 
@@ -1312,6 +1339,75 @@
     ticker.textContent = _alerts[_alertIndex];
   }
 
+  /* ── Battery tile (pinned rows + attention rows) ──────────────────── */
+  // Dusty and Snorlax are pinned — always rows 1-2, regardless of charge.
+  // The tile has room for 5 rows total, so the remaining 3 go to whatever's
+  // actually worth a glance: charging, or below the green threshold. A
+  // fully green house just shows the two pinned rows — no filler, no
+  // rotation. (An earlier version cycled through everything on a timer;
+  // with room for 5 and rarely more than a couple of things needing
+  // attention at once, that was solving a problem that didn't exist.)
+  const BATTERY_TOTAL_ROWS = 5;
+  let _batteryDevices = [];
+
+  function _batteryClass(d) {
+    if (d.charging) return 'charging';
+    if (d.pct < 20) return 'bad';
+    if (d.pct < 50) return 'warn';
+    return 'good';
+  }
+
+  function _batteryRowHtml(d) {
+    const cls  = _batteryClass(d);
+    const bolt = d.charging ? '⚡ ' : '';
+    return `<div class="bat-row">
+      <span class="bat-name">${d.icon || '🔋'} ${d.label}</span>
+      <span class="bat-pct ${cls}">${bolt}${d.pct}%</span>
+    </div>`;
+  }
+
+  function _paintBatteryRows() {
+    const el = document.getElementById('battery-rows');
+    if (!el) return;
+    const pinned = _batteryDevices.filter(d => d.pinned);
+    const others = _batteryDevices
+      .filter(d => !d.pinned && (d.charging || d.pct < 50))   // green + idle = not shown
+      .sort((a, b) => (b.charging - a.charging) || (a.pct - b.pct))
+      .slice(0, Math.max(0, BATTERY_TOTAL_ROWS - pinned.length));
+    el.innerHTML = pinned.map(_batteryRowHtml).join('') + others.map(_batteryRowHtml).join('');
+  }
+
+  function renderBatteryRows(devices) {
+    _batteryDevices = devices;
+    _paintBatteryRows();
+  }
+
+  function _batteryStaleSub(d) {
+    if (!d.lastChanged) return '';
+    const ageMs = Date.now() - new Date(d.lastChanged).getTime();
+    const days  = Math.floor(ageMs / (24 * 3600 * 1000));
+    return days >= 2 ? ` · as of ${days}d ago` : '';
+  }
+
+  function openBatteriesOverlay() {
+    document.getElementById('library-panel-title-text').textContent = 'Batteries';
+    const list = document.getElementById('library-list');
+    const all  = [..._batteryDevices].sort((a, b) => (b.charging - a.charging) || (a.pct - b.pct));
+    list.innerHTML = all.length
+      ? all.map(d => {
+          const cls = _batteryClass(d);
+          const colorVar = cls === 'charging' ? 'var(--accent)' : cls === 'bad' ? 'var(--alert-col)' : cls === 'warn' ? 'var(--warn-col)' : 'var(--good)';
+          return `<div class="library-row">
+            <div class="library-row-title">${d.icon || '🔋'} ${d.label}${d.pinned ? ' 📌' : ''}</div>
+            <div class="library-row-sub">
+              <span style="color:${colorVar}; font-weight:600;">${d.pct}%${d.charging ? ' · Charging' : ''}</span>${_batteryStaleSub(d)}
+            </div>
+          </div>`;
+        }).join('')
+      : '<div class="library-empty">No battery data</div>';
+    document.getElementById('library-overlay').classList.add('open');
+  }
+
   /* ── Stale / error state ────────────────────────────────────────── */
   const REFRESH_INTERVAL_MS = 60_000;
   let _lastSuccessfulRefresh = null;
@@ -1371,13 +1467,47 @@
     }
   }
 
-  /* ── Night dim ──────────────────────────────────────────────────── */
+  /* ── Night dim + idle dim ───────────────────────────────────────── */
   // No on-screen clock or date — the tablet sits next to a physical clock
-  // and calendar. This timer only drives the 10pm-6am dim.
+  // and calendar. Two independent triggers want the same dim look: it's
+  // 10pm-6am, or nobody has touched the screen in a while.
+  let _isNight       = false;
+  let _isIdleDimmed  = false;
+  let _idleTimer     = null;
+  const IDLE_DIM_MS  = 120_000; // 2 min of no touches
+
+  function updateDimState() {
+    document.body.classList.toggle('dimmed', _isNight || _isIdleDimmed);
+  }
+
   function updateNightDim() {
     const h = new Date().getHours();
-    document.body.classList.toggle('night', h >= 22 || h < 6);
+    _isNight = h >= 22 || h < 6;
+    updateDimState();
   }
+
+  function armIdleTimer() {
+    clearTimeout(_idleTimer);
+    _idleTimer = setTimeout(() => {
+      _isIdleDimmed = true;
+      updateDimState();
+    }, IDLE_DIM_MS);
+  }
+
+  // Every touch resets the idle clock. If the screen is currently idle-dimmed,
+  // the touch that wakes it is swallowed here (capture phase, before it can
+  // reach a tile's own pointerdown/click handler) so a half-asleep tap can't
+  // also dismiss a chore or open an alert — it just wakes the screen. The
+  // *next* tap behaves normally.
+  document.addEventListener('pointerdown', (e) => {
+    if (_isIdleDimmed) {
+      _isIdleDimmed = false;
+      updateDimState();
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+    armIdleTimer();
+  }, true);
 
   /* ── Tap-to-dismiss with PIN overlay ───────────────────────────── */
   let _pendingKey = null, _pendingTile = null, _pinInput = '', _pendingType = null, _pendingChoreId = null;
@@ -1510,6 +1640,7 @@
     if (tile.dataset.key === 'upNext') { showCalendarView(); return; }
     if (tile.dataset.key === 'poolPump' || tile.dataset.key === 'poolTemp' || tile.dataset.key === 'filterHealth') { showPoolView(); return; }
     if (tile.dataset.key === 'alerts') { openAlertOverlay(); return; }
+    if (tile.dataset.key === 'batteries') { openBatteriesOverlay(); return; }
     const isChore = tile.classList.contains('chore-tile');
     const isDone  = tile.classList.contains('done');
     if (!isChore && !isDone) return;
@@ -2224,6 +2355,7 @@
   /* ── Boot ───────────────────────────────────────────────────────── */
   updateNightDim();
   setInterval(updateNightDim, 15_000);
+  armIdleTimer();
 
   refresh();
   setInterval(refresh, REFRESH_INTERVAL_MS);

@@ -84,8 +84,7 @@ let cachedStatus = {
     library:      { label: 'Library',      icon: '📚', value: '—',    sub: '', alert: false, degraded: false, readyHolds: [] },
     booksOut:     { label: 'Books Out',    icon: '📖', value: '—',    sub: '', alert: false, degraded: false, checkedOut: [] },
     nowPlaying: { label: 'Now Playing', icon: '🎵', value: '—',    sub: '', alert: false, degraded: false },
-    dusty:      { label: 'Dusty',       icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
-    snorlax:    { label: 'Snorlax',     icon: '🚗', value: '—',    sub: '', alert: false, degraded: false },
+    batteries:  { label: 'Batteries',   icon: '🔋', value: '—',    sub: '', alert: false, degraded: false, devices: [] },
     scoreboard: { label: 'Chores',      icon: '🏆', value: '—',    sub: 'This week', members: [], alert: false, degraded: false },
     homeEnergy: { label: 'Home Energy', icon: '⚡', value: '—',    sub: '', alert: false, degraded: false },
     poolPump:   { label: 'Pool Pump',   icon: '🏊', value: '—',    sub: '', alert: false, degraded: false },
@@ -905,6 +904,12 @@ const ALERT_REGISTRY = {
     detector: null, // nightly 11:45pm check, no live detector to re-read
     action: 'Check whether the pump ran ≥30 min before 9:45pm.',
   },
+  hx_not_engaging: {
+    level: 2,
+    title: 'Heat recovery not engaging',
+    detector: 'binary_sensor.pool_hx_not_engaging',
+    action: 'AC cooling 10+ min, pool below setpoint, heat recovery never turned on — check the Tecmark flow switch / filter for a clog (common right after a backwash).',
+  },
 
   // Garage — homeassistant/packages/jeeves_garage.yaml. No garage tile by
   // decision; these surface only through the alerts tile and the overlay.
@@ -1298,55 +1303,75 @@ setInterval(() => {
   }
 }, 60 * 1000);
 
-// ── Tesla ─────────────────────────────────────────────────────────
-const TESLA_VEHICLES = [
-  { key: 'dusty',   label: 'Dusty',   prefix: 'dusty'   },
-  { key: 'snorlax', label: 'Snorlax', prefix: 'snorlax' },
-];
+// ── Batteries ─────────────────────────────────────────────────────
+// Auto-discovered, not hand-listed. HA's own built-in Maintenance dashboard
+// (2026.5+) does the same thing: every sensor with device_class "battery",
+// sorted worst-first, no per-device config. device_class is a plain state
+// attribute — visible on the same /api/states call used everywhere else in
+// this file, no entity registry or WebSocket API needed. A new battery
+// entity in HA just shows up here on the next poll.
+//
+// Only two things stay explicit, because HA has no signal for either:
+//   - PINNED: which devices are always shown regardless of charge. That's a
+//     judgment call ("the cars", decision 2026-08-23), not a discoverable fact.
+//   - ICONS: cosmetic only. Anything not listed gets the default 🔋.
+// Charging (blue) has no house-wide standard signal either — none of these
+// integrations use HA's binary_sensor device_class "battery_charging" — so
+// it's inferred by looking for a sibling entity sharing the same entity_id
+// prefix (sensor.<prefix>_charging or _battery_state) and checking whether
+// its state is exactly "charging" (case-insensitive, so "Not Charging"
+// correctly reads as false, not a substring match on "charging"). A device
+// with no such sibling just never shows as charging — never wrong, just less complete.
+const BATTERY_PINNED = new Set(['sensor.dusty_battery_level', 'sensor.snorlax_battery_level']);
+const BATTERY_ICONS = {
+  'sensor.dusty_battery_level':       '🚗',
+  'sensor.snorlax_battery_level':     '🚗',
+  'sensor.front_door_battery':        '🔔',
+  'sensor.front_front_door_battery':  '🔒',
+  'sensor.ipad_battery_level':        '📱',
+};
 
-async function fetchTesla() {
+async function fetchBatteries() {
   if (!HA_TOKEN) return;
-  for (const { key, label, prefix } of TESLA_VEHICLES) {
-    try {
-      const [battRes, chargingRes, timeRes] = await Promise.allSettled([
-        fetchHAState(`sensor.${prefix}_battery_level`),
-        fetchHAState(`sensor.${prefix}_charging`),
-        fetchHAState(`sensor.${prefix}_time_to_full_charge`),
-      ]);
 
-      const pct = battRes.status === 'fulfilled' ? Math.round(parseFloat(battRes.value.state)) : null;
-      const chargingState = chargingRes.status === 'fulfilled' ? chargingRes.value.state : null;
-      const timeToFull = timeRes.status === 'fulfilled' ? parseFloat(timeRes.value.state) : null;
+  const res = await fetch(`${HA_URL}/api/states`, {
+    headers: { Authorization: `Bearer ${HA_TOKEN}` },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) throw new Error(`HA API ${res.status} fetching /api/states`);
+  const all = await res.json();
+  const byId = new Map(all.map(e => [e.entity_id, e]));
 
-      const value = pct !== null && !isNaN(pct) ? `${pct}%` : '—';
+  const devices = all
+    .filter(e => e.attributes?.device_class === 'battery' && !isNaN(parseFloat(e.state)))
+    .map(e => {
+      const prefix  = e.entity_id.replace(/^sensor\./, '').replace(/_battery(_level)?$/, '');
+      const chgEnt  = byId.get(`sensor.${prefix}_charging`) || byId.get(`sensor.${prefix}_battery_state`);
+      const charging = chgEnt?.state?.toLowerCase() === 'charging';
 
-      let sub = '';
-      if (chargingState === 'Charging') {
-        if (timeToFull && timeToFull > 0) {
-          const h = Math.floor(timeToFull / 60);
-          const m = Math.round(timeToFull % 60);
-          sub = h > 0 ? `Charging · ${h}h ${m}m` : `Charging · ${m}m`;
-        } else {
-          sub = 'Charging';
-        }
-      } else if (chargingState === 'Complete') {
-        sub = 'Full';
-      } else if (chargingState && chargingState !== 'Disconnected' && chargingState !== 'unknown') {
-        sub = chargingState;
-      }
+      return {
+        key:     e.entity_id,
+        label:   (e.attributes.friendly_name || e.entity_id).replace(/\s*Battery( Level)?$/i, ''),
+        icon:    BATTERY_ICONS[e.entity_id] || '🔋',
+        pinned:  BATTERY_PINNED.has(e.entity_id),
+        pct:     Math.round(parseFloat(e.state)),
+        charging,
+        lastChanged: e.last_changed || null,
+      };
+    });
 
-      const degraded = pct !== null && !isNaN(pct) && pct < 20;
-
-      cachedStatus.status[key] = { label, icon: '🚗', value, sub, alert: false, degraded, done: false };
-      console.log(`Tesla ${label} updated: ${value} ${sub}`);
-    } catch (err) {
-      console.error(`Tesla ${label} fetch failed:`, err.message);
-    }
-  }
+  const lowest = devices.reduce((min, d) => Math.min(min, d.pct), 100);
+  cachedStatus.status.batteries = {
+    label: 'Batteries', icon: '🔋',
+    value: devices.length ? `${lowest}% lowest` : '—',
+    sub: devices.length ? `${devices.length} devices` : '',
+    alert: false, degraded: lowest < 20,
+    devices,
+  };
 }
 
-fetchTesla().catch(err => console.error('Tesla fetch failed:', err));
-setInterval(() => fetchTesla().catch(err => console.error('Tesla fetch failed:', err)), 5 * 60 * 1000);
+fetchBatteries().catch(err => console.error('Batteries fetch failed:', err));
+setInterval(() => fetchBatteries().catch(err => console.error('Batteries fetch failed:', err)), 5 * 60 * 1000);
 
 // ── Now Playing (Mac mini Music bridge) ──────────────────────────
 // Mac mini. Pin this in the router's DHCP reservations — the 2026-08-18 power

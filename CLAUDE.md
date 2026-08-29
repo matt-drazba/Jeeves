@@ -66,7 +66,7 @@ Fire HD 8 / Fully Kiosk Browser (192.168.0.189:3000) → Express /api/status →
 ### Timers (coarse by design)
 | Timer | Interval |
 |-------|----------|
-| Clock + night-dim | 15s |
+| Night-dim check | 15s |
 | Data refresh (`REFRESH_INTERVAL_MS`) | 60s |
 | Staleness check | 30s |
 | Alert ticker | 5s |
@@ -74,7 +74,7 @@ Fire HD 8 / Fully Kiosk Browser (192.168.0.189:3000) → Express /api/status →
 Night dimming (opacity 0.45) activates 10 PM–6 AM in JS, not via a server flag.
 
 ### Adding tiles
-Add a new key to the `status` object in the API response. The grid uses CSS `auto-fill minmax(140px, 1fr)` and reflows automatically — no CSS changes needed.
+Add a new key to the `status` object in the API response. The grid uses CSS `auto-fill minmax(190px, 1fr)` and reflows automatically — no CSS changes needed.
 
 ## Repo layout
 ```
@@ -96,7 +96,7 @@ homelab/
 | `docker-compose.yml` | Orchestrates HA + Jeeves + ESPHome (repo root) |
 | `esphome/pool-pad.yaml` | ESP8266 pool pad node — relay sensing, DS18B20, flow, BTU/hr |
 
-## Current state (as of 2026-08-28)
+## Current state (as of 2026-08-29)
 
 ### Working
 - Pi 5 running Docker; HA Container + Jeeves both up via `docker compose`
@@ -158,13 +158,21 @@ homelab/
   - Auth: Tesla developer account, OAuth app, public key hosted at `sq9si.fleetkey.net` via fleetkey.cc
   - Scopes: vehicle info, location, commands, charging (no energy products, no profile)
   - Dusty (white), Snorlax (blue)
-  - Dashboard tiles live: battery % + charging status sub-line, polls every 5 min
+  - Battery % no longer has its own tile — folded into the grouped **Batteries** tile below (2026-08-24), pinned as the two always-visible rows
   - **Lock/unlock**: via HomeKit Bridge accessory entries (`lock.dusty_lock`, `lock.snorlax_lock`); renamed in Apple Home to "Dusty Doors" / "Snorlax Doors"; Siri: "unlock Dusty Doors"
   - **Siri commands (frunk, trunk, windows, honk, fart)**: implemented as HA Scripts → iOS Shortcuts
     - HA Scripts in Settings → Automations & Scenes → Scripts; each script calls one cover/button service
     - iOS Shortcuts use Home Assistant → **Run Script** action
     - If "Run Script" shows "no options available", quit and relaunch the HA Companion app — fixes the sync issue
     - **Naming convention**: avoid car names (Siri routes to Tesla app) and avoid "open"/"trunk" together (triggers media). Use color + action + thing: "open white car trunk", "fart blue car", "honk white car", etc.
+- **Batteries tile — shipped 2026-08-24/25, pushed to main, not yet Pi-verified.** One grouped tile (`server.js` `fetchBatteries()`) replacing the old per-device Dusty/Snorlax tiles — there are more battery-powered things in the house than tile slots, and that gap only grows.
+  - **Auto-discovered, not hand-listed.** Pulls HA's full `/api/states` once per 5-min poll and includes any entity with `device_class: "battery"` — the same thing HA's own built-in Maintenance dashboard (2026.5+, `<pi-ip>:8123/maintenance`) does. A new battery entity in HA just appears on the tile next poll, no code change. `device_class` is a plain state attribute, so this needed no entity registry or WebSocket API — the existing REST `/api/states` call was enough.
+  - Two things stay explicit because HA has no signal for either: **`BATTERY_PINNED`** (which rows are always shown regardless of charge — currently just Dusty/Snorlax, a judgment call not a discoverable fact) and **`BATTERY_ICONS`** (cosmetic; unlisted devices get 🔋).
+  - **Charging (blue) is a best-effort guess, not a real signal.** HA defines a standard `binary_sensor` class for it (`battery_charging`), but none of this house's integrations use it. Inferred instead by looking for a sibling entity sharing the same entity_id prefix (`_charging` or `_battery_state`) and checking for an exact `"charging"` state, case-insensitive — deliberately an exact match, not a substring, so `"Not Charging"` doesn't false-positive. No sibling found = never shows as charging; it degrades to incomplete, not wrong.
+  - **Row display: 2 pinned + up to 3 more, filtered — not rotated.** An earlier version cycled through every device on a 5s timer; with room for 5 rows total and rarely more than a couple of things needing attention, that solved a problem that didn't exist. Current design: unpinned devices only show if charging or under the green threshold (<50%); anything green and idle is simply omitted, no filler row. Colors: blue = charging, red <20%, yellow <50%, else green.
+  - Tap the tile for the full list (every discovered device, sorted worst-first, with a staleness note past 2 days) — reuses the existing library-overlay component rather than a new one.
+  - **Known gap:** picks up your own primary iPhone (`sensor.matt_drazba_s_iphone_battery_level`) along with everything else, since it genuinely has `device_class: battery` and auto-discovery has no notion of "this one doesn't belong on the house tile." Not excluded — flag it for a one-line addition to an exclude-list if it turns out to be unwanted in practice.
+- **Idle-dim — shipped 2026-08-23, pushed to main, not yet Pi-verified.** Any tap resets a 2-minute timer (`dashboard.html`); at 2 minutes idle the screen fades to the same 0.45 opacity as the existing 10pm–6am night-dim — one visual "dimmed" look for both triggers, not two. The waking tap is swallowed at the document capture phase (`pointerdown`, before it reaches a tile's own handler) so a half-asleep tap can't also dismiss a chore or open an alert — it just wakes the screen; the next tap behaves normally.
 - **Rheem water heater (EcoNet)** — integrated in HA; entities/dashboard tile not yet built
 - **Bhyve sprinkler controller** — integrated in HA (HACS `sebr/bhyve-home-assistant` 4.1.2); `sprinklers` tile live on the dashboard showing next watering (`server.js:468`). Weather-aware watering is designed but **not built** — full brief in `docs/sprinklers.md`
   - **There is no local control path. Cloud-only, no LocalTuya equivalent exists — do not go looking for one again.** The integration is a websocket to Orbit's cloud
@@ -202,6 +210,7 @@ homelab/
   - **L1 budget: under ~6/year.** A noisy L1 is a bug in the levels doc, not a fact about the house
   - **Live: booster dry-run kill (L1/L2)** — booster on + pump under 20 W for 30s → shuts `switch.pool_sweep_socket_1` off, waits, retries, re-checks. Kill confirmed = L2; **kill unconfirmed = L1** ("go kill the breaker"), since the Tuya cloud round trip can fail or be overridden by a schedule still in the Tuya app. Fails closed — an unavailable power meter reads as pump-off and kills the booster
   - **Live: main pump off during 9pm–4pm window (L2)** — under 20 W for 15 min
+  - **Live: heat recovery not engaging (L2), deployed 2026-08-23** — `binary_sensor.pool_hx_not_engaging`. Closes a real silent-failure gap: a post-backwash clogged filter kept flow below the Tecmark 3010P's trip point, so the trio never energized and the AC ran plain cooling with zero heat recovery for as long as it took to notice by hand — no existing alert covered this, since `pool_hx_not_transferring` (below) requires `pool_heat_active` to already be `on`, which is exactly what didn't happen. Fires when `climate.t10_thermostat`'s `hvac_action` reads `cooling` for 10+ minutes (the same signal that unconditionally starts Ext. Program 4) while `binary_sensor.pool_pad_pool_heat_active` stays off and `sensor.pool_pad_hx_water_in_temp` is still below 91°F (1°F under the 92°F setpoint, so the alert doesn't fire on the normal case of the pool already being warm enough). No new hardware — reuses signals already live. Supersedes the 2026-07-28 decision not to build an FPH pump-call sensor for this exact failure mode; see `docs/pool_heat_recovery.md`.
   - **Live L3 alerts** — pool pad node offline · Shelly meter offline · sweep did not run tonight · HX calling but ΔT ≤ 0
   - **Template sensor entity_id trap:** HA derives a template entity's `entity_id` from `name`, not `unique_id`, and only at *first registration* — renaming later does not move it, so an automation pointing at a guessed id silently never fires. Always confirm with `/api/states/<entity_id>` after deploying; `check_config` passing proves nothing about whether entities exist
   - HX alert triggers on **ΔT ≤ 0, not "ΔT is small"** — stage-1 compressor runs legitimately produce small HX gains, so a small-delta threshold would fire constantly
@@ -249,9 +258,10 @@ homelab/
 - **Fire HD 8 kiosk live (2026-08-08)** — Fully Kiosk Browser on the wall tablet, pointed at `http://192.168.0.189:3000`. Setup guide, settings table, and gotchas in `docs/fire_tablet_kiosk.md`
   - **Kiosk Mode is a Fully PLUS feature**, as are Remote Admin and motion detection. PLUS is unlimited free to try, so the setup can be proven before paying — note unlicensed Fully shows the kiosk PIN on screen as a hint (observed 2026-08-08). Judged acceptable 2026-08-08: you must know the 7-tap exit gesture to ever see it, which no guest does. Not a reason to buy the license
   - **Motion detection stays off** — continuous camera capture plus frame differencing is the biggest CPU drain available on 2GB hardware, and it is a camera in the kitchen. The display just stays on
-  - **Do not add a Fully brightness schedule** — the dashboard already self-dims to 0.45 opacity 10pm–6am in JS; layering a second one makes it unreadable
+  - **Do not add a Fully brightness schedule** — the dashboard already self-dims to 0.45 opacity, both 10pm–6am and after 2 minutes of no touches (idle-dim, 2026-08-23); layering a third dim source on top makes it unreadable
   - Set the Kiosk PIN *before* enabling lockdown. Doing it in the wrong order locks you out and the recovery is a factory reset
   - **Performance is fine — resolved 2026-08-08.** The tablet is sluggish in Silk but the dashboard under Fully is not, and Silk is not used. No debloat needed. There is a latent inefficiency in the dashboard (`.tile.alert`/`.tile.degraded` animate `box-shadow`, which forces a full repaint every frame and cannot be GPU-composited; the fix is a static shadow on an `::after` with animated `opacity`) but it is **not** an observed problem — do not chase it unless slowness shows up under Fully
+  - **Header (clock/date/location) removed 2026-08-20, after real use on the wall tablet.** The kiosk sits next to a physical clock and calendar, so a digital clock and date in the header were redundant, and the location text ("Redwood City, CA") was static info not worth its own bar. `#root` dropped from a 3-row grid (topbar/main/footer) to 2 rows (main/footer) — no `<header>` element at all now. The tile grid (`#status-panel`) changed from a fixed `130px` row height with `align-content: start` to `height: 100%` with `grid-auto-rows: minmax(130px, 1fr)`, so however many rows are on a page stretch to fill the space evenly instead of leaving dead background above the footer on a partially-filled page. Night-dim logic (10pm–6am, unaffected by this) was pulled out of the old `updateClock()` into its own `updateNightDim()`, same 15s timer
 - **Voice control live** — `voice/main.py` (FastAPI microservice, its own container): `faster-whisper` (`base.en`, int8) for STT, Piper (`en_US-lessac-medium`) for TTS. Mic button + state machine (idle/listening/processing/playing) in `dashboard.html`; browser records via `MediaRecorder`, posts to `POST /api/voice` in `server.js`, which forwards to the voice service and back
   - `dispatchVoice()` in `server.js`: **Tier 1** local regex commands (dismiss washer/dryer/dishwasher, "what time") handled inside Jeeves, no HA round trip. **Tier 2** falls through to HA Assist (`/api/conversation/process`) for general device control — exposed entities only (Settings → Voice Assistants → Expose)
   - Night hours (10pm–6am): action still executes, TTS playback suppressed — visual state only, no audio

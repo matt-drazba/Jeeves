@@ -76,6 +76,7 @@ Arrives as a normal push, re-raised at **7:00am** until acknowledged.
 |---|---|---|
 | **"Pool sweep shut off — booster was running dry"** | Booster was on with no pump; HA killed the switch and confirmed it. The pump is safe. | Find out why the main pump wasn't running before sweeping again. |
 | **"Pool pump is off"** | Under 20 W for 15 min during the 9pm–4pm run window. | Check the breaker and the pump. No filtration or heat recovery until it's back. |
+| **"Pool heat recovery isn't engaging"** | AC has been cooling 10+ min, pool is below setpoint, but the heat-recovery relay never energized. | Check the Tecmark flow switch / filter for a clog — this is what a backwash-clogged filter looks like. No damage, just no free heat. |
 | **"Garage has been open N minutes"** | Open >15 min between 6am and 9:15pm. Repeats every 15 min, four times. | Close it, or confirm someone is out there using it. HA will never close it during the day on purpose. |
 
 ### Level 3 — handle it when you get home
@@ -115,6 +116,7 @@ The flags, one per alert:
 | Booster kill failed (L1) | `input_boolean.alert_open_booster_kill_failed` |
 | Booster dry run (L2) | `input_boolean.alert_open_booster_dry_run` |
 | Pump off (L2) | `input_boolean.alert_open_pump_off` |
+| Heat recovery not engaging (L2) | `input_boolean.alert_open_hx_not_engaging` |
 | Sweep didn't run (L3) | `input_boolean.alert_open_sweep_skipped` |
 | Pad node offline (L3) | `input_boolean.alert_open_pad_offline` |
 | Pump meter offline (L3) | `input_boolean.alert_open_meter_offline` |

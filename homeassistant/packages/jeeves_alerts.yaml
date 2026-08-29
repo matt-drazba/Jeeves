@@ -68,6 +68,10 @@ input_boolean:
     name: Open Alert - Heat Exchanger Not Transferring
     icon: mdi:heat-wave
 
+  alert_open_hx_not_engaging:
+    name: Open Alert - Heat Recovery Not Engaging
+    icon: mdi:snowflake-alert
+
   # Latch, not an alert flag. Set the moment the sweep actually switches on
   # inside its window; checked and reset at 11:45pm. This is what makes a
   # SILENT skip visible — the schedule deliberately declines to start the
@@ -197,6 +201,41 @@ template:
              and (states('sensor.pool_pad_hx_water_out_temp') | float(0))
                  - (states('sensor.pool_pad_hx_water_in_temp') | float(0))
                  <= 0 }}
+
+      # ---------------------------------------------------------------------
+      # L2 — AC has been cooling long enough that heat recovery should have
+      # engaged, and it hasn't. Distinct from Pool HX Not Transferring above:
+      # that one fires when the trio DID energize but moved no heat (dead
+      # exchanger, short-cycling compressor); this one fires when the trio
+      # never energized at all — the flow switch never proved flow, most
+      # commonly a clogged filter right after a backwash. Caught by hand once
+      # already (2026-08-23) with nothing telling us it was happening.
+      #
+      # hvac_action == cooling is the same signal that unconditionally starts
+      # the pump on Ext. Program 4 (FPH terminal 3 -> IntelliComm) — it is not
+      # inferred from pump runtime, which is useless here: the main pump runs
+      # on its own ~19h/day schedule regardless of the AC.
+      #
+      # The < 91 F check is what keeps this from firing on every ordinary
+      # cooling cycle once the pool is already at its 92 F setpoint, which is
+      # the normal state most of the time. Without it this alert would be
+      # noise, not signal.
+      #
+      # 10-minute debounce matches the Program 4 stop delay (pump_wiring
+      # keeps running >=10 min after a call ends to flush the exchanger) —
+      # same order of magnitude as "long enough that flow should have proven
+      # by now if it was ever going to."
+      # ---------------------------------------------------------------------
+      - name: "Pool HX Not Engaging"
+        unique_id: pool_hx_not_engaging
+        device_class: problem
+        delay_on: "00:10:00"
+        state: >
+          {{ is_state_attr('climate.t10_thermostat', 'hvac_action', 'cooling')
+             and is_state('binary_sensor.pool_pad_pool_heat_active', 'off')
+             and has_value('sensor.pool_pad_hx_water_in_temp')
+             and (states('sensor.pool_pad_hx_water_in_temp') | float(999))
+                 < 91.0 }}
 
 # ===========================================================================
 # Notification scripts — one per delivery style
@@ -386,6 +425,40 @@ automation:
           ack_action: "ACK_PUMP_OFF"
 
   # -------------------------------------------------------------------------
+  # L2 — AC has been cooling 10+ min with the pool below setpoint, but heat
+  # recovery never engaged. Nothing is at risk (worst case is the AC just
+  # runs as plain cooling), so morning is soon enough — but it is easy to
+  # miss for days otherwise, since the AC keeps cooling the house just fine.
+  # -------------------------------------------------------------------------
+  - id: jeeves_pool_hx_not_engaging
+    alias: "Pool: heat recovery not engaging"
+    description: >
+      AC cooling call sustained 10+ minutes, pool still below setpoint, but
+      the heat-recovery relay never energized. Usually a flow-switch trip
+      point issue — check the filter for a clog (common right after a
+      backwash).
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.pool_hx_not_engaging
+        to: "on"
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.alert_open_hx_not_engaging
+      - service: script.normal_alert
+        data:
+          title: "Pool heat recovery isn't engaging"
+          message: >
+            AC has been cooling for 10+ minutes and the pool is at
+            {{ states('sensor.pool_pad_hx_water_in_temp') }} F (below the 92 F
+            setpoint), but heat recovery never turned on. Check the Tecmark
+            flow switch / filter for a clog — this is what a backwash-clogged
+            filter looks like.
+          tag: "pool-hx-not-engaging"
+          ack_action: "ACK_HX_NOT_ENGAGING"
+
+  # -------------------------------------------------------------------------
   # The L2 delivery mechanism. "In the morning" means the alert survives the
   # night without waking anyone and is still in front of you at breakfast —
   # that is a re-notification, not a louder notification.
@@ -427,6 +500,20 @@ automation:
                 the main pump was not running before sweeping again.
               tag: "pool-booster-dry-run"
               ack_action: "ACK_BOOSTER_DRY_RUN"
+
+      - if:
+          - condition: state
+            entity_id: input_boolean.alert_open_hx_not_engaging
+            state: "on"
+        then:
+          - service: script.normal_alert
+            data:
+              title: "Still open: heat recovery isn't engaging"
+              message: >
+                Unacknowledged from overnight. Check the Tecmark flow switch
+                and filter for a clog.
+              tag: "pool-hx-not-engaging"
+              ack_action: "ACK_HX_NOT_ENGAGING"
 
   # -------------------------------------------------------------------------
   # L3 — sensor offline. Nothing is being damaged; the house has just gone
@@ -603,6 +690,11 @@ automation:
         event_data:
           action: "ACK_HX_NO_TRANSFER"
         id: hx_no_transfer
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "ACK_HX_NOT_ENGAGING"
+        id: hx_not_engaging
     action:
       - service: input_boolean.turn_off
         target:
