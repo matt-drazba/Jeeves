@@ -67,11 +67,24 @@ Fire HD 8 / Fully Kiosk Browser (192.168.0.189:3000) → Express /api/status →
 | Timer | Interval |
 |-------|----------|
 | Night-dim check | 15s |
+| Idle-dim (`IDLE_DIM_MS`) | 60s of no touches |
 | Data refresh (`REFRESH_INTERVAL_MS`) | 60s |
 | Staleness check | 30s |
 | Alert ticker | 5s |
 
-Night dimming (opacity 0.45) activates 10 PM–6 AM in JS, not via a server flag.
+### Ambient/action-driven dimming (2026-08)
+
+The grid is a backup/detail view, reached on demand — the primary interface is ambient, driven entirely in JS (no server flag): near-black when there's nothing to do, near-black-plus-a-highlighted-zone when something needs doing, full brightness only while someone's actively using it. Three states, computed by `updateDimState()`/`applyDimValue()` in `dashboard.html`:
+
+| State | `--dim` (day / night) | Trigger |
+|-------|------------------------|---------|
+| Awake | 1 / 0.45 | Tapped within the last 60s (`IDLE_DIM_MS`). Night caps brightness even while awake — this dashboard never goes full-bright overnight, tapped or not, matching the pre-existing night-dim behavior. |
+| Idle, nothing pending | 0.06 / 0.02 | No touch in 60s, `computeActionItems()` empty |
+| Idle, action(s) pending | 0.06 / 0.02 (background) | Same as above, but `#ambient-zone` (a top strip, sibling of `#root` so it isn't subject to `--dim`) shows up to 3 cards + an overflow card. Card opacity is `--ambient-card-dim`: 1 by day, 0.85 by night. |
+
+**Action item** = something a bystander can physically do: a promoted chore (`isChore`), a finished appliance (`done`), or an open alert with `level <= 2`. L3+ alerts are excluded — they're diagnostic facts (offline sensors, ΔT deltas), not something to act on standing in the kitchen; `level` already carries this distinction (`docs/alerting_levels.md`), so no separate field was added to `ALERT_REGISTRY`.
+
+Tapping the black background just wakes the screen (the tap is swallowed in a capture-phase `pointerdown` listener). Tapping an `.ambient-card` wakes **and** acts in the same tap — opens the alert overlay, or the same PIN-overlay flow (`openPinOverlayFor()`) the grid tiles use — since a "go kill the breaker" card shouldn't need a second tap.
 
 ### Adding tiles
 Add a new key to the `status` object in the API response. The grid uses CSS `auto-fill minmax(190px, 1fr)` and reflows automatically — no CSS changes needed.
@@ -96,7 +109,7 @@ homelab/
 | `docker-compose.yml` | Orchestrates HA + Jeeves + ESPHome (repo root) |
 | `esphome/pool-pad.yaml` | ESP8266 pool pad node — relay sensing, DS18B20, flow, BTU/hr |
 
-## Current state (as of 2026-08-25)
+## Current state (as of 2026-08-29)
 
 ### Working
 - Pi 5 running Docker; HA Container + Jeeves both up via `docker compose`
@@ -172,7 +185,7 @@ homelab/
   - **Row display: 2 pinned + up to 3 more, filtered — not rotated.** An earlier version cycled through every device on a 5s timer; with room for 5 rows total and rarely more than a couple of things needing attention, that solved a problem that didn't exist. Current design: unpinned devices only show if charging or under the green threshold (<50%); anything green and idle is simply omitted, no filler row. Colors: blue = charging, red <20%, yellow <50%, else green.
   - Tap the tile for the full list (every discovered device, sorted worst-first, with a staleness note past 2 days) — reuses the existing library-overlay component rather than a new one.
   - **Known gap:** picks up your own primary iPhone (`sensor.matt_drazba_s_iphone_battery_level`) along with everything else, since it genuinely has `device_class: battery` and auto-discovery has no notion of "this one doesn't belong on the house tile." Not excluded — flag it for a one-line addition to an exclude-list if it turns out to be unwanted in practice.
-- **Idle-dim — shipped 2026-08-23, pushed to main, not yet Pi-verified.** Any tap resets a 2-minute timer (`dashboard.html`); at 2 minutes idle the screen fades to the same 0.45 opacity as the existing 10pm–6am night-dim — one visual "dimmed" look for both triggers, not two. The waking tap is swallowed at the document capture phase (`pointerdown`, before it reaches a tile's own handler) so a half-asleep tap can't also dismiss a chore or open an alert — it just wakes the screen; the next tap behaves normally.
+- **Idle-dim — shipped 2026-08-23, superseded 2026-08-29** by the ambient/action-driven redesign below (see the Fire HD 8 kiosk section's "Ambient/action-driven redesign" bullet, and "Ambient/action-driven dimming" earlier in this file for the mechanism). The original version reset a flat 2-minute/0.45-opacity timer with no concept of what's pending; the wake-swallow tap handling it introduced (capture-phase `pointerdown`, so a half-asleep tap can't also dismiss a chore or open an alert) is still the same mechanism, just extended.
 - **Rheem water heater (EcoNet)** — integrated in HA; entities/dashboard tile not yet built
 - **Bhyve sprinkler controller** — integrated in HA (HACS `sebr/bhyve-home-assistant` 4.1.2); `sprinklers` tile live on the dashboard showing next watering (`server.js:468`). Weather-aware watering is designed but **not built** — full brief in `docs/sprinklers.md`
   - **There is no local control path. Cloud-only, no LocalTuya equivalent exists — do not go looking for one again.** The integration is a websocket to Orbit's cloud
@@ -248,10 +261,11 @@ homelab/
 - **Fire HD 8 kiosk live (2026-08-08)** — Fully Kiosk Browser on the wall tablet, pointed at `http://192.168.0.189:3000`. Setup guide, settings table, and gotchas in `docs/fire_tablet_kiosk.md`
   - **Kiosk Mode is a Fully PLUS feature**, as are Remote Admin and motion detection. PLUS is unlimited free to try, so the setup can be proven before paying — note unlicensed Fully shows the kiosk PIN on screen as a hint (observed 2026-08-08). Judged acceptable 2026-08-08: you must know the 7-tap exit gesture to ever see it, which no guest does. Not a reason to buy the license
   - **Motion detection stays off** — continuous camera capture plus frame differencing is the biggest CPU drain available on 2GB hardware, and it is a camera in the kitchen. The display just stays on
-  - **Do not add a Fully brightness schedule** — the dashboard already self-dims to 0.45 opacity, both 10pm–6am and after 2 minutes of no touches (idle-dim, 2026-08-23); layering a third dim source on top makes it unreadable
+  - **Do not add a Fully brightness schedule** — the dashboard already handles its own dimming in JS (ambient/action-driven dimming, see "Ambient/action-driven dimming" above); layering a second one makes it unreadable
   - Set the Kiosk PIN *before* enabling lockdown. Doing it in the wrong order locks you out and the recovery is a factory reset
-  - **Performance is fine — resolved 2026-08-08.** The tablet is sluggish in Silk but the dashboard under Fully is not, and Silk is not used. No debloat needed. There is a latent inefficiency in the dashboard (`.tile.alert`/`.tile.degraded` animate `box-shadow`, which forces a full repaint every frame and cannot be GPU-composited; the fix is a static shadow on an `::after` with animated `opacity`) but it is **not** an observed problem — do not chase it unless slowness shows up under Fully
+  - **Performance is fine — resolved 2026-08-08.** The tablet is sluggish in Silk but the dashboard under Fully is not, and Silk is not used. No debloat needed. There is a latent inefficiency in the grid (`.tile.alert`/`.tile.degraded` animate `box-shadow`, which forces a full repaint every frame and cannot be GPU-composited) but it is **not** an observed problem there — brief full-bright glances only, not worth chasing unless slowness shows up under Fully. The ambient action-zone cards (2026-08) use the fix anyway (`::after` with animated `opacity`) since they can now sit on screen pulsing for hours, which is a different exposure profile
   - **Header (clock/date/location) removed 2026-08-20, after real use on the wall tablet.** The kiosk sits next to a physical clock and calendar, so a digital clock and date in the header were redundant, and the location text ("Redwood City, CA") was static info not worth its own bar. `#root` dropped from a 3-row grid (topbar/main/footer) to 2 rows (main/footer) — no `<header>` element at all now. The tile grid (`#status-panel`) changed from a fixed `130px` row height with `align-content: start` to `height: 100%` with `grid-auto-rows: minmax(130px, 1fr)`, so however many rows are on a page stretch to fill the space evenly instead of leaving dead background above the footer on a partially-filled page. Night-dim logic (10pm–6am, unaffected by this) was pulled out of the old `updateClock()` into its own `updateNightDim()`, same 15s timer
+  - **Ambient/action-driven redesign, 2026-08.** The tile grid was found to be a reference screen, not what actually gets someone else in the house to act. Reframed as a backup/detail view reached on demand; the primary interface is ambient (calm-technology / peripheral-display style — full detail in "Ambient/action-driven dimming" above). Nothing pending → near-black. Something pending → still near-black, plus a top strip (`#ambient-zone`) highlighting up to 3 chores/finished-appliances/L1-L2-alerts, one tap away from acting (no separate wake-then-navigate step). A tap anywhere → full brightness for 60s, then back to ambient. Subsumed the idle-dim mechanism that had shipped just before this (2 min → 60s; the old flat 0.45 became four values — see the table above)
 - **Voice control live** — `voice/main.py` (FastAPI microservice, its own container): `faster-whisper` (`base.en`, int8) for STT, Piper (`en_US-lessac-medium`) for TTS. Mic button + state machine (idle/listening/processing/playing) in `dashboard.html`; browser records via `MediaRecorder`, posts to `POST /api/voice` in `server.js`, which forwards to the voice service and back
   - `dispatchVoice()` in `server.js`: **Tier 1** local regex commands (dismiss washer/dryer/dishwasher, "what time") handled inside Jeeves, no HA round trip. **Tier 2** falls through to HA Assist (`/api/conversation/process`) for general device control — exposed entities only (Settings → Voice Assistants → Expose)
   - Night hours (10pm–6am): action still executes, TTS playback suppressed — visual state only, no audio

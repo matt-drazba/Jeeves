@@ -26,13 +26,16 @@
       --radius:       12px;
       --radius-sm:    8px;
       --dim:          1;
+      --ambient-card-dim: 1;
     }
 
-    /* Night-dim and idle-dim are two independent reasons to dim, but they
-       share one visual state — nothing distinguishes "it's late" from
-       "nobody's touched it in a while" on screen. */
-    body.dimmed { --dim: 0.45; }
+    /* --dim is computed in JS (updateDimState) — see the "Night dim + idle
+       dim" section. Four states share this one property: full (awake, day),
+       capped (awake, night — never goes full-bright overnight even when
+       tapped), and two near-black ambient levels (idle, day/night) used
+       once the grid is a backup view rather than the primary display. */
     #root { opacity: var(--dim); transition: opacity 2s ease; }
+    body.night { --ambient-card-dim: 0.85; }
 
     html, body {
       width: 1280px;
@@ -517,6 +520,40 @@
     }
     .pool-btn:active { transform: scale(0.97); }
 
+    /* ── Ambient action zone ─────────────────────────────────────── */
+    /* Outside #root, same reasoning as #alert-overlay below: it must stay
+       legible while the grid is dimmed to near-black, so it can't inherit
+       --dim. Shown only while idle-dimmed and something needs doing. */
+    #ambient-zone {
+      position: fixed; inset: 0 0 auto 0; z-index: 90;
+      display: none; padding: 20px; background: #000;
+      height: 190px;
+    }
+    #ambient-cards { display: flex; gap: 12px; height: 100%; }
+    #ambient-zone.open { display: block; }
+
+    .ambient-card {
+      width: 290px; flex: 0 0 auto;
+      opacity: var(--ambient-card-dim);
+      cursor: pointer;
+      overflow: visible; /* .tile sets overflow:hidden, which would clip the ::after glow below */
+    }
+    .ambient-card:active { transform: scale(0.97); }
+    .ambient-card .tile-value { font-size: 18px; }
+
+    /* .tile.alert/.tile.degraded animate box-shadow directly (CLAUDE.md notes
+       this forces a repaint every frame). Not worth fixing there — brief
+       full-bright glances only. It IS worth fixing here: an ambient card can
+       sit on screen pulsing for hours. Static shadow, animate opacity only. */
+    .ambient-card.alert, .ambient-card.degraded { animation: none; }
+    .ambient-card.alert::after, .ambient-card.degraded::after {
+      content: ''; position: absolute; inset: -6px; border-radius: inherit;
+      opacity: 0; animation: ambient-pulse 1.8s ease-in-out infinite;
+    }
+    .ambient-card.alert::after    { box-shadow: 0 0 0 6px rgba(255,107,53,0.25); }
+    .ambient-card.degraded::after { box-shadow: 0 0 0 6px rgba(240,192,64,0.2); }
+    @keyframes ambient-pulse { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+
     /* ── Alert overlay ───────────────────────────────────────────── */
     /* Outside #root on purpose, so it stays full brightness during the
        10pm-6am night dim — you only open it because something is wrong. */
@@ -919,6 +956,13 @@
     <div id="chore-btn" title="Add Chore">📋</div>
   </footer>
 
+</div>
+
+<!-- Ambient action zone: outside #root, like #alert-overlay, so it is never
+     subject to --dim. Only visible while idle-dimmed and something needs
+     doing — see updateAmbientZoneVisibility(). -->
+<div id="ambient-zone">
+  <div id="ambient-cards"></div>
 </div>
 
 <div id="alert-overlay">
@@ -1459,6 +1503,9 @@
       if (document.getElementById('alert-overlay').classList.contains('open')) {
         renderAlertOverlay(data.alertDetail || []);
       }
+      _actionItems = computeActionItems(data);
+      renderAmbientZone(_actionItems);
+      updateAmbientZoneVisibility();
       updateTimestamp();
       setDataState('ok');
     } catch (err) {
@@ -1466,17 +1513,36 @@
     }
   }
 
-  /* ── Night dim + idle dim ───────────────────────────────────────── */
+  /* ── Night dim + idle dim + ambient action zone ───────────────────── */
   // No on-screen clock or date — the tablet sits next to a physical clock
-  // and calendar. Two independent triggers want the same dim look: it's
-  // 10pm-6am, or nobody has touched the screen in a while.
+  // and calendar. The grid is a backup/detail view now, reached on demand;
+  // the primary interface is ambient: near-black when there's nothing to
+  // do, near-black-plus-a-highlighted-zone when something needs doing, and
+  // full brightness only while someone is actively using it. Night caps
+  // brightness even while awake — this dashboard should never light up a
+  // dark kitchen at 2am, tapped or not.
   let _isNight       = false;
   let _isIdleDimmed  = false;
   let _idleTimer     = null;
-  const IDLE_DIM_MS  = 120_000; // 2 min of no touches
+  let _actionItems   = [];
+  const IDLE_DIM_MS  = 60_000; // 1 min of no touches
+
+  function applyDimValue() {
+    document.body.classList.toggle('night', _isNight);
+    const dim = _isIdleDimmed ? (_isNight ? 0.02 : 0.06)
+              : _isNight       ? 0.45
+              : 1;
+    document.body.style.setProperty('--dim', dim);
+  }
+
+  function updateAmbientZoneVisibility() {
+    const show = _isIdleDimmed && _actionItems.length > 0;
+    document.getElementById('ambient-zone').classList.toggle('open', show);
+  }
 
   function updateDimState() {
-    document.body.classList.toggle('dimmed', _isNight || _isIdleDimmed);
+    applyDimValue();
+    updateAmbientZoneVisibility();
   }
 
   function updateNightDim() {
@@ -1498,15 +1564,99 @@
   // reach a tile's own pointerdown/click handler) so a half-asleep tap can't
   // also dismiss a chore or open an alert — it just wakes the screen. The
   // *next* tap behaves normally.
+  //
+  // Ambient cards are the one exception: tapping one should wake AND act in
+  // the same tap (no extra tap to open "go kill the breaker"). So the wake
+  // isn't swallowed there — but the zone-hide half of updateDimState() is
+  // deferred a tick, because hiding #ambient-zone synchronously here (before
+  // the browser has resolved pointerup->click on the same target) would pull
+  // the tap's target out of the hit-test and cancel the click that's meant
+  // to fire the card's action.
   document.addEventListener('pointerdown', (e) => {
     if (_isIdleDimmed) {
+      const onCard = e.target.closest('.ambient-card');
       _isIdleDimmed = false;
-      updateDimState();
-      e.preventDefault();
-      e.stopImmediatePropagation();
+      if (onCard) {
+        applyDimValue();
+        setTimeout(updateAmbientZoneVisibility, 0);
+      } else {
+        updateDimState();
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
     }
     armIdleTimer();
   }, true);
+
+  /* ── Ambient action zone: derive + render ─────────────────────────── */
+  // "Action item" = something a bystander can physically do: a promoted
+  // chore, a finished appliance, or an L1/L2 alert. L3+ alerts are excluded
+  // on purpose — they're diagnostic facts (offline sensors, ΔT deltas), not
+  // something to do standing in the kitchen. `level` already carries this
+  // distinction (see docs/alerting_levels.md), so no separate field is
+  // needed on the alert registry.
+  function computeActionItems(data) {
+    if (!data) return [];
+    const items = [];
+    for (const a of (data.alertDetail || [])) {
+      if (a.level <= 2) {
+        items.push({ type: 'alert', key: a.key, level: a.level, icon: '🔔', label: a.title, text: a.action || '' });
+      }
+    }
+    for (const [key, tile] of Object.entries(data.status || {})) {
+      if (tile.isChore) {
+        items.push({ type: 'chore', key, choreId: tile.choreId, icon: tile.icon || '🧹', label: tile.label, text: 'Tap to claim!' });
+      } else if (tile.done) {
+        items.push({ type: 'done', key, icon: tile.icon || '✅', label: tile.label, text: tile.sub || 'Tap to dismiss' });
+      }
+    }
+    return items; // alertDetail already arrives level-sorted, then chores/done in status order — alerts first either way
+  }
+
+  const AMBIENT_CARDS_MAX = 3;
+
+  function renderAmbientZone(items) {
+    const wrap = document.getElementById('ambient-cards');
+    const shown = items.slice(0, AMBIENT_CARDS_MAX);
+    const overflow = items.length - shown.length;
+
+    wrap.innerHTML = shown.map(it => {
+      const cls = it.type === 'alert' ? `tile alert ambient-card` : it.type === 'chore' ? `tile chore-tile ambient-card` : `tile done ambient-card`;
+      const style = it.type === 'alert' ? ` style="background:${LEVEL_STYLE_CLIENT[it.level].bg};border-color:${LEVEL_STYLE_CLIENT[it.level].color}"` : '';
+      return `<div class="${cls}" data-type="${it.type}" data-key="${it.key}" ${it.choreId ? `data-chore-id="${it.choreId}"` : ''}${style}>
+        <div class="tile-header">
+          <span class="tile-icon">${it.icon}</span>
+          <span class="tile-label">${it.label}</span>
+        </div>
+        <div class="tile-value">${it.text}</div>
+      </div>`;
+    }).join('') + (overflow > 0
+      ? `<div class="tile ambient-card" data-type="overflow">
+          <div class="tile-header"><span class="tile-icon">➕</span><span class="tile-label">More</span></div>
+          <div class="tile-value">${overflow} more</div>
+        </div>`
+      : '');
+  }
+
+  const LEVEL_STYLE_CLIENT = {
+    1: { color: '#e53935', bg: '#1a0000' },
+    2: { color: '#ff6b35', bg: '#1a0a00' },
+  };
+
+  document.getElementById('ambient-cards').addEventListener('click', (e) => {
+    const card = e.target.closest('.ambient-card');
+    if (!card) return;
+    const type = card.dataset.type;
+    if (type === 'overflow') {
+      const hasAlert = _actionItems.some(it => it.type === 'alert');
+      if (hasAlert) openAlertOverlay();
+      return;
+    }
+    if (type === 'alert') { openAlertOverlay(); return; }
+    // chore / done — same PIN-overlay flow the grid tiles use
+    const tileData = _lastData?.status?.[card.dataset.key];
+    if (tileData) openPinOverlayFor(card.dataset.key, tileData, type === 'chore', card.dataset.choreId || null);
+  });
 
   /* ── Tap-to-dismiss with PIN overlay ───────────────────────────── */
   let _pendingKey = null, _pendingTile = null, _pinInput = '', _pendingType = null, _pendingChoreId = null;
@@ -1644,19 +1794,27 @@
     const isDone  = tile.classList.contains('done');
     if (!isChore && !isDone) return;
 
-    _pendingKey      = tile.dataset.key;
-    _pendingTile     = tile;
+    openPinOverlayFor(tile.dataset.key, _lastData?.status?.[tile.dataset.key], isChore, tile.dataset.choreId || null, tile);
+  });
+
+  // Shared by grid-tile taps and ambient-card taps. `gridTile`, if the real
+  // grid tile happens to be in the DOM (it won't be if it's on a different
+  // pagination page), is what gets removed/updated on completion — falls
+  // back to a lookup by key so an ambient-card tap still works either way.
+  function openPinOverlayFor(key, tileData, isChore, choreId, gridTile) {
+    _pendingKey      = key;
+    _pendingTile     = gridTile || document.querySelector(`#status-panel [data-key="${key}"]`);
     _pendingType     = isChore ? 'chore' : 'appliance';
-    _pendingChoreId  = tile.dataset.choreId || null;
+    _pendingChoreId  = choreId;
     _pinInput        = '';
     _updateDots();
 
-    const label = tile.querySelector('.tile-label')?.textContent || 'it';
+    const label = tileData?.label || 'it';
     document.getElementById('pin-title').textContent = isChore
       ? `Who did ${label.toLowerCase()}?`
       : `Who unloaded the ${label.toLowerCase()}?`;
     document.getElementById('pin-overlay').classList.remove('hidden');
-  });
+  }
 
   document.getElementById('pin-grid').addEventListener('click', async (e) => {
     const btn = e.target.closest('.pin-key');
@@ -2318,6 +2476,9 @@
       renderAlerts(data.alerts);
       renderAlertOverlay(data.alertDetail);
       if (_onPool && _lastData) renderPool(_lastData);
+      _actionItems = computeActionItems(_lastData);
+      renderAmbientZone(_actionItems);
+      updateAmbientZoneVisibility();
     } catch {
       btn.disabled = false;
       btn.classList.remove('armed');
