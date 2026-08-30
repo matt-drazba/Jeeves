@@ -526,20 +526,29 @@
        --dim. Shown only while idle-dimmed and something needs doing. */
     #ambient-zone {
       position: fixed; inset: 0 0 auto 0; z-index: 90;
-      display: none; padding: 20px; background: #000;
-      height: 190px;
+      display: none; padding: 28px; background: #000;
+      height: 320px;
     }
-    #ambient-cards { display: flex; gap: 12px; height: 100%; }
+    #ambient-cards { display: flex; gap: 20px; height: 100%; }
     #ambient-zone.open { display: block; }
 
+    /* flex:1 1 0 (not a fixed width) so 2 cards fill the same full-width row
+       as 5 would — this is a kitchen kiosk read from across the room, so a
+       big empty black strip next to two tiny cards defeats the point. Caps
+       out at 5 conceptual slots (AMBIENT_CARDS_MAX in JS); fewer items just
+       means each one gets a bigger share, not empty space. */
     .ambient-card {
-      width: 290px; flex: 0 0 auto;
+      flex: 1 1 0; min-width: 0;
       opacity: var(--ambient-card-dim);
       cursor: pointer;
+      padding: 28px 30px;
       overflow: visible; /* .tile sets overflow:hidden, which would clip the ::after glow below */
     }
     .ambient-card:active { transform: scale(0.97); }
-    .ambient-card .tile-value { font-size: 18px; }
+    .ambient-card .tile-header { gap: 14px; }
+    .ambient-card .tile-icon  { font-size: 44px; }
+    .ambient-card .tile-label { font-size: 22px; letter-spacing: 0.4px; }
+    .ambient-card .tile-value { font-size: 52px; line-height: 1.1; margin-top: 10px; }
 
     /* .tile.alert/.tile.degraded animate box-shadow directly (CLAUDE.md notes
        this forces a repaint every frame). Not worth fixing there — brief
@@ -1614,7 +1623,7 @@
     return items; // alertDetail already arrives level-sorted, then chores/done in status order — alerts first either way
   }
 
-  const AMBIENT_CARDS_MAX = 3;
+  const AMBIENT_CARDS_MAX = 5; // room-width row; cards flex to fill it regardless of count
 
   function renderAmbientZone(items) {
     const wrap = document.getElementById('ambient-cards');
