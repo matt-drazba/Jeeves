@@ -1,6 +1,6 @@
 # Pool — consolidated action list
 
-Last updated: 2026-08-07. **This is an index, not a design doc.** Every item
+Last updated: 2026-09-03. **This is an index, not a design doc.** Every item
 points at the doc that explains it. Rationale lives there; this file only says
 what to do, in what order, and what is blocking it.
 
@@ -44,19 +44,14 @@ Full spec and reasoning per line item in
       the HI702) + 2× HI747-25, Hanna HI701 + 3× HI701-25, Taylor K-2006,
       **HM Digital TDS-3** pen, 1 gal distilled water. **Usable the day it
       arrives, no wiring. Buy this one first.**
-- [x] ~~**Group B — pressure sensing, main parts**~~ — **BOUGHT 2026-08-07:**
-      automotive-sender transducer **150 psi**, 1/8"-27 NPT male, 0.5–4.5V on 5V,
-      316 SS, 300 psi burst, sealed QD + pigtail · **1/4"MNPT × 1/8"FNPT brass
-      reducing bushing** · 1/4" brass street tee · **ShillehTek pre-soldered
-      ADS1115**.
-- [ ] **Group B remainder — passives and wiring, ~$20.** Both the resistors and
-      the capacitors are **required**, not optional — reasoning in
-      data_addendum "Are the passives actually necessary?".
-      - 1% metal film: **4.7k ×1, 10k ×1** (signal divider). Add **10k ×2** if
-        doing the optional A1 rail compensation.
-      - **100 µF electrolytic + 0.1 µF ceramic** — mounted at the *transducer's*
-        supply pins, not the ADC.
-      - 3-conductor 22 AWG shielded cable, **2× 5-conductor WAGO 221**, PTFE tape.
+- [x] ~~**Group B — pressure sensing**~~ — **installed, flashed, and calibrated
+      2026-08-28.** The 0–60 PSI transducer, tee, reducing bushing, ADS1115,
+      divider, wiring, and ESPHome configuration are live. The implementation is
+      single-channel A0 with the 2.2kΩ + 4.7kΩ divider; see
+      [pool_pressure_install_card.md](pool_pressure_install_card.md).
+- [ ] **Record the clean-filter baseline** after the next backwash. The dashboard
+      currently shows the pressure reading but cannot classify filter health or
+      forecast backwash until this one durable baseline is set.
 - [ ] **CT clamp (~$15)** for the Shelly EM Gen3 `IB` channel — destined for the
       **booster** circuit, not the pump's second leg. → booster_interlock
 
@@ -192,42 +187,18 @@ Gated entirely on tier 3. This is the one where failure destroys hardware.
       dry-run alarm. Inverted from every other appliance alert in the house.
 - [ ] If EV2-A confirmed in tier 0: shift the window to ~12:30–2:00am.
 
-## 5. Filter pressure — gated on tier 0 (filter ID) + tier 1 (parts)
+## 5. Filter pressure — installed; baseline and alert remain
 
 → [pool_data_addendum.md](pool_data_addendum.md) Part 1
 
-- [ ] **Dry-fit the whole stack before taping anything** — tee → bushing →
-      transducer is four sealed joints on a plastic multiport boss. Check
-      clearance through the multiport handle's full rotation.
-- [ ] Plumb it. **Bleed the filter to zero PSI first** (pump off at the breaker,
-      air relief open, confirm the analog gauge reads 0). Keep the analog gauge
-      on the other tee branch. PTFE on every male thread. Hand tight + 1–2 turns
-      — the boss is plastic. Orient the transducer **down or sideways**, never
-      straight out, and strain-relieve the cable.
-- [ ] Wire: **ADS1115 powered at 3.3V** (ESP 3V3 pin — this is what makes the
-      divider mandatory and the I2C levels correct), SDA GPIO4 / SCL GPIO13,
-      4.7k/10k divider into A0, optional 10k/10k rail divider into A1,
-      100 µF + 0.1 µF at the **transducer's** supply pins. 5V for the transducer
-      comes off the buck via the new WAGO splices.
-- [ ] Decide bonding for the brass tee + transducer body (680.26(B)(6)).
-- [ ] **Add** the ADS1115 block to `esphome/pool-pad.yaml`, flash from the Mac.
-      **There is nothing to uncomment** — no such block exists in that file; copy
-      it from [pool_data_addendum.md](pool_data_addendum.md) "ESPHome". *(This line
-      used to say "uncomment," the same stale instruction already corrected in
-      wiring manual §5.2 for the `switch:` block.)*
-- [ ] **Scale constant 75**, for the **60 psi** sensor ordered 2026-08-12. *(This
-      line used to say 187.5 for a 150 psi sensor — that order was cancelled by the
-      seller and re-sourced at 60 psi.)* Confirm the range at calibration: if the
-      computed pressure comes out ~0.6× what the analog gauge reads, a 100 psi unit
-      shipped — change 75 to 125. Nothing else will tell you; both parts are
-      physically identical and both produce a plausible number.
-- [ ] Two-point calibrate against the analog gauge (0 PSI bled, then the Program 4
-      speed, 2200 RPM today).
-- [ ] **Establish the clean-filter baseline PSI at the Program 4 speed immediately
-      after the next backwash/clean.** Everything downstream compares to this
-      number. **Re-establish it if the Program 4 speed is ever changed** — it is a
-      user-adjustable setting, so the baseline is per-speed, not permanent.
-- [ ] Add a `filter_pressure` column to `pool_heat_samples` in `jeeves/db.js`.
+- [x] ~~Install, wire, flash, and calibrate the pressure sensor~~ — **done
+      2026-08-28.** See [pool_pressure_install_card.md](pool_pressure_install_card.md)
+      for the as-built circuit, calibration points, and wiring details.
+- [ ] **Set the clean-filter baseline** immediately after the next backwash. The
+      dashboard action is `POST /api/pool/set-filter-baseline`; it requires
+      confirmation and stores the single current baseline in SQLite.
+- [ ] Add the backwash-due alert and promote it to a chore. The tile currently
+      reports pressure health passively; no alert or maintenance chore exists yet.
 
 ## 6. Chemistry logging + forecasting — software
 
@@ -343,11 +314,12 @@ offset, so calibrating first means doing it twice.
       recovery is active, 10 min otherwise.
 - [x] ~~Maintenance mode removed~~ — a global L2–L4 mute that nothing ever turned
       off. Any future suppression must **expire on its own**.
-- [ ] **Extend `verify-alerts.py` to scan `jeeves/server.js`.** It only reads
-      `jeeves_alerts.yaml` today, so the `ALERT_REGISTRY` added 2026-08-08 —
-      seven flag entities and six detector sensors — is unchecked. That is
-      exactly the silent-failure mode the script was written for. Roughly a
-      three-line change; would retroactively cover every HA entity Jeeves touches.
+- [ ] **Extend `verify-alerts.py` to scan `jeeves/server.js`.** It already scans
+      every Home Assistant package, but the `ALERT_REGISTRY` added 2026-08-08 —
+      its flag entities and detector sensors — is still unchecked. That is
+      exactly the silent-failure mode the script was written for. This needs a
+      small JS-aware reference check rather than a raw regex, because the server
+      also contains dynamic entity IDs and unrelated API data.
 - [ ] Nothing can alert when HA itself is down — it kills the pump, the meter,
       and the messenger together. Needs a watcher outside the house. Unresolved.
 

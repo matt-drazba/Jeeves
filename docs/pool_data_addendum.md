@@ -1,6 +1,6 @@
 # Pool Data Addendum — filter pressure, chemistry instrumentation, and what to buy
 
-Last updated: 2026-08-12. Authority order: CLAUDE.md → this doc → coder briefs.
+Last updated: 2026-09-03. Authority order: CLAUDE.md → this doc → coder briefs.
 Companion docs: [pool_heat_recovery.md](pool_heat_recovery.md), [pool_booster_interlock.md](pool_booster_interlock.md), [pool_chemistry_logging.md](pool_chemistry_logging.md), [pool_wiring_manual.md](pool_wiring_manual.md).
 
 **Status: INSTALLED AND LIVE, 2026-08-28.** Threaded into the filter, wired,
@@ -119,7 +119,7 @@ handle's full travel and the adjacent plumbing before sealing threads.
 
 | Spec | Value | Why |
 |---|---|---|
-| Range | **0–60 PSI — ordered 2026-08-12** | The 2026-08-07 150 psi order was cancelled by the seller. Re-sourced at the range that was preferred all along — see "Range history" below. **Scale constant 75** |
+| Range | **0–60 PSI — installed 2026-08-28** | The 2026-08-07 150 psi order was cancelled by the seller. The installed unit uses the single-channel software scale constant **15** and the calibration recorded in [pool_pressure_install_card.md](pool_pressure_install_card.md). |
 | **Thread** | **1/8"-27 NPT male**, into a 1/4" MNPT × 1/8" FNPT brass reducing bushing | The automotive-sender market is almost entirely 1/8" NPT, so the parts are well labelled and unambiguous. **The most likely way to buy the wrong part is a `G1/8` unit** — those look identical and are BSPP, a *parallel* British thread where NPT is tapered. They start threading, then leak or crack the plastic multiport boss. NPT-to-NPT reducing bushings are fine; BSPP-to-NPT is not |
 | Output | **0.5–4.5V ratiometric** | Commodity part, easy to scale. Avoid 4–20mA: needs a loop supply and sense resistor for no benefit here |
 | Supply | **5V DC** | Confirmed available — the chimney-box buck outputs 5V |
@@ -612,8 +612,8 @@ sensor:
       return (frac - 0.10f) * 75.0f;    // 60 psi FS
 ```
 
-**Scale constant depends on the sensor's full-scale range.** Ordered 2026-08-12
-is a **60 psi** unit, so the constant is **75**. For a different sensor:
+**Historical two-channel design.** The unit ordered 2026-08-12 was a **60 psi**
+unit, so that abandoned design used the constant **75**. For a different sensor:
 `constant = FS_psi / 0.80`. A 100 psi part would be 125; a 150 psi part, 187.5.
 
 ⚠ **Confirm the range at calibration before trusting this number.** 60 was picked
@@ -1030,7 +1030,7 @@ should be replaced yearly. Ongoing reagent cost settles around **$60–70/year**
 
 | Item | Spec | ~$ |
 |---|---|---|
-| Pressure transducer | **ORDERED 2026-08-12:** automotive-sender type, **0–60 psi**, **1/8"-27 NPT male**, 0.5–4.5V out, 5V supply, stainless, sealed QD. Scale constant **75**. ***Never* G1/8** — that is BSPP. eBay/AliExpress, not Amazon | 16 |
+| Pressure transducer | **INSTALLED 2026-08-28:** automotive-sender type, **0–60 psi**, **1/8"-27 NPT male**, 0.5–4.5V out, 5V supply, stainless, sealed QD. Single-channel scale constant **15**; see [pool_pressure_install_card.md](pool_pressure_install_card.md). ***Never* G1/8** — that is BSPP. | 16 |
 | **Reducing bushing** | **1/4" MNPT × 1/8" FNPT brass hex bushing.** An NPT *reducing bushing* is male on the large end, female on the small — one piece. **Not** a reducing *coupling*, which is female × female and will not thread into the tee | 4 |
 | Brass 1/4" NPT **street tee** | male run × female × female | 8 |
 | PTFE tape | standard white — **every male thread**, four joints total | 2 |

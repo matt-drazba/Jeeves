@@ -1,6 +1,6 @@
 # Alerting Levels — the house alarm ladder
 
-Last updated: 2026-08-10. Authority order: CLAUDE.md → this doc → individual
+Last updated: 2026-09-03. Authority order: CLAUDE.md → this doc → individual
 automations. Companion docs: [pool_booster_interlock.md](pool_booster_interlock.md),
 [pool_heat_recovery.md](pool_heat_recovery.md).
 
@@ -68,8 +68,9 @@ for L3.** Both loop until acknowledged.
 - **Level 1 must name the physical action.** "Go turn off the breaker in the
   garage" — not "booster fault." If you can't state what the person does at 3am,
   it isn't Level 1.
-- Levels 1 and 2 require an **Acknowledge button**, and the acknowledgement
-  **auto-clears on recovery** so the next occurrence still alerts.
+- Levels 1 and 2 require an **Acknowledge button**. Recovery does not clear the
+   open-alert flag: the event remains visible until someone acknowledges it, so a
+   fault that self-heals still gets reviewed and the next occurrence can alert.
 - **There is no global mute.** Maintenance mode was removed 2026-08-08: it
   suppressed Levels 2–4 and nothing ever turned it back off, so alerting could be
   silently disabled indefinitely. Any future mute must expire on its own.
@@ -144,7 +145,7 @@ breakfast. A fault that fixed itself is still a fault you should know about.
 | Garage controller (ratgdo) offline >30 min | **live** |
 | Sweep did not run tonight | **live** |
 | Heat exchanger calling but ΔT ≤ 0 | **live** |
-| Filter pressure above clean baseline → backwash due | blocked — transducer |
+| Filter pressure above clean baseline → backwash due | blocked — baseline and alert/chore logic |
 | pH above 7.6 — the ionizer stops working at this point | blocked — test kit |
 | Copper outside 0.15–0.20 ppm | blocked — test kit |
 | TDS below 500 ppm — R-40 cannot produce ions at all | blocked — TDS pen |

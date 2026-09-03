@@ -1,6 +1,6 @@
 # Pool Heat Recovery — HotSpot FPH5 + IntelliFlo2 VST
 
-Last updated: 2026-08-12. Authority order: CLAUDE.md → this doc → coder briefs.
+Last updated: 2026-09-03. Authority order: CLAUDE.md → this doc → coder briefs.
 **For as-built wiring, troubleshooting, and how this install differs from the FPH manual, see [pool_wiring_manual.md](pool_wiring_manual.md)** — that doc is the authority on what is physically in the boxes; this one covers design rationale and project status.
 Sources: HotSpot FPH installer manual (44p scan), Pentair IntelliComm II guide, TFP community.
 
@@ -101,13 +101,17 @@ HA failure degrades to "no free heat," never to danger. See HA layer below.
 
 - [x] ~~FPH pump-call pair (reads ~24VAC when AC on + pool below setpoint) → 18AWG t-stat wire → IntelliComm input 4~~ — **DONE**, owner-confirmed 2026-08-07
 - [x] ~~Live test: setpoint > water temp, AC on → pump self-starts at 2200 RPM within ~30 s~~ — **DONE**, owner-confirmed 2026-08-07
-- [x] Flow switch (Tecmark 3010P) installed — wiring into trio 24VAC leg + calibration still remaining
+- [x] ~~Flow switch (Tecmark 3010P) installed~~ — electrical integration and
+  calibration remain; see [pool_wiring_manual.md](pool_wiring_manual.md)
 - [ ] **Breaker-kill acceptance test ONLY after flow switch wired + calibrated.** Until then it creates the dangerous state with nothing to catch it.
 - [x] R-40 ionizer control — **DONE, plan changed:** not wired to IntelliFlo accessory output. Instead, Shelly EM Gen3 (`shellyemg3-dcb4d9ce63a4`) on-device script watches `EM1.GetStatus` channel 0 (pump circuit CT) and drives `switch.shellyemg3_dcb4d9ce63a4` (relay → R-40) directly. Threshold 20W, 60s on-delay after pump starts (flow establishment), watts<=0 turns ionizer off immediately. Runs locally on the Shelly — no HA/network dependency, same resilience as the original hardware-interlock plan.
 
 ## HA layer (L3 — monitor + alert only)
 
-**Hardware:** ESP8266 HiLetgo (in hand) + 1× White Rodgers Type 84 fan relay (24VAC coil, SPNO, 90-290Q) as an isolated sensing relay + DS18B20 × 3 + hall-effect flow sensor + CT clamp. See `esphome/pool-pad.yaml` for full config.
+**Hardware:** ESP8266 HiLetgo + 1× White Rodgers Type 84 fan relay (24VAC coil,
+SPNO, 90-290Q) as an isolated sensing relay + 2× DS18B20 currently installed in
+the HX + ADS1115 filter-pressure sensor. The pool-return probe and hall-effect
+flow sensor remain pending. See `esphome/pool-pad.yaml` for the current config.
 - Switched from an opto module to this relay: coil taps the 24VAC pair in parallel (non-invasive, same as an opto would), SPNO contact closes 3.3V to the GPIO when energized. GPIO needs an external 10k pulldown to GND (ESP8266 has no internal pulldown except on GPIO16).
 
 **Sensors:**
@@ -127,7 +131,7 @@ HA failure degrades to "no free heat," never to danger. See HA layer below.
 
 **The "lost free heat" case above did happen** — a post-backwash clogged filter kept flow below the Tecmark's trip point, so the trio never energized and the AC ran plain cooling with zero heat recovery, silently, for as long as it took to notice by hand. The relay that was rejected here would have caught it, but it isn't needed: `binary_sensor.pool_hx_not_engaging` (L2, `homeassistant/packages/jeeves_alerts.yaml`) reconstructs the same signal from parts that already exist — `climate.t10_thermostat`'s `hvac_action` stands in for the FPH pump-call relay (both are driven by the same AC-compressor-on event), combined with `pool_heat_active` staying off and `hx_water_in_temp` still below setpoint. No new hardware, no GPIO spent. See `docs/alerting_levels.md` and `docs/alerting_runbook.md`.
 
-**Alert rules (HA automations, phase after monitoring proven):**
+**Alert rules (HA automations):**
 - `pool_heat_active && !pool_pump_running` for >30 s → critical alert (L1/L2 failed or bypassed)
 - `pool_heat_active && pool_flow_gpm ≈ 0` sustained → critical alert (diverting into stagnant water — the actual danger case)
 - Pump off during scheduled hours → warn

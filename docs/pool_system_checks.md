@@ -4,7 +4,7 @@
 
 **Why it exists:** most of this system's failure modes are silent. The booster destroys its seal in minutes while drawing *less* current than normal. A flow switch that fails closed looks identical to one working correctly. A probe offset of 0.3 °F disarmed a safety alert for a day without changing a single reading anyone looked at. **None of those announce themselves**, and several have no alert behind them at all (see the gaps table below). Periodically going and looking is the compensating control.
 
-Last updated: 2026-08-10. Companion docs: [pool_wiring_manual.md](pool_wiring_manual.md) (as-built wiring) · [pool_booster_interlock.md](pool_booster_interlock.md) · [pool_heat_recovery.md](pool_heat_recovery.md) · [pool_data_addendum.md](pool_data_addendum.md) (chemistry targets and sources) · [alerting_runbook.md](alerting_runbook.md).
+Last updated: 2026-09-03. Companion docs: [pool_wiring_manual.md](pool_wiring_manual.md) (as-built wiring) · [pool_booster_interlock.md](pool_booster_interlock.md) · [pool_heat_recovery.md](pool_heat_recovery.md) · [pool_data_addendum.md](pool_data_addendum.md) (chemistry targets and sources) · [alerting_runbook.md](alerting_runbook.md).
 
 ---
 
@@ -30,7 +30,7 @@ Automation covers a lot of this system. It does not cover these, and a check is 
 | Gap | Why nothing catches it | Covered by |
 |---|---|---|
 | **Heat-recovery interlock** — FPH diverting while the main pump is unpowered | The alert is **not built**. Both signals report into HA; nothing consumes them together. See `pool_wiring_manual.md` 3.1 and 4.5 | Monthly check 4 (summer only), and the spring changeover |
-| **Deadhead** — pump running against a closed valve | No flow meter installed, so no signal exists | Monthly check 3 (filter pressure, by eye) |
+| **Deadhead** — pump running against a closed valve | Flow meter is not installed, so no flow-based signal exists yet | Monthly check 3 (filter pressure, by eye) |
 | **Flow switch drift** — trip point wanders below the FPH5 floor | Nothing measures actual flow to compare against | Spring changeover |
 | **`pool_heat_active` true while the FPH is disabled** | Nothing watches for it; in winter it is an anomaly rather than a normal state | Monthly check 4, winter form |
 | **A Tuya app schedule reappearing** | HA cannot see schedules living in Tuya's cloud | Monthly check 5 |
@@ -50,7 +50,7 @@ cd ~/homelab && git pull && python3 scripts/verify-alerts.py
 
 Every entity, automation id, and notify service the alerting package references must exist. **`check_config` passing proves none of this** — HA derives a template entity's `entity_id` from its `name`, not its `unique_id`, so a renamed sensor silently orphans any automation pointing at the old id.
 
-⚠ Known gap: the script only scans `jeeves_alerts.yaml`. The `ALERT_REGISTRY` in `jeeves/server.js` is unchecked.
+⚠ Known gap: the script scans every Home Assistant package, but the `ALERT_REGISTRY` in `jeeves/server.js` is still unchecked.
 
 ### 2. Open alerts and the acknowledge trail
 
@@ -72,7 +72,7 @@ Read the gauge on the Tagelus TA100D with the pump at its normal speed.
 | Climbing toward 50 psi | **Stop.** That is the filter's ceiling and a blown lid is an injury risk, not just equipment loss |
 | Unusually *low* with the pump running | Suction-side problem — closed valve, clogged skimmer, air leak, lost prime |
 
-There is no pressure sensor, so **this reading is the only deadhead detection this system has.** Write the number down; the trend is what tells you anything, and backwash is deliberately not on a calendar.
+The pressure sensor now records this reading, but it does not replace the analog gauge as the field reference. The dashboard trend remains unavailable until a clean-filter baseline is recorded; backwash is deliberately not on a calendar.
 
 Note the reading moves with pump speed, so record which speed you read it at — comparing a 1750 RPM reading against a 2000 RPM one will invent a trend that isn't there.
 

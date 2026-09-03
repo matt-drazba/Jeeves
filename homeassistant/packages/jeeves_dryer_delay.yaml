@@ -25,10 +25,9 @@
 # L1-L4 tier, no input_boolean flag, no Acknowledge button. Same reasoning as
 # the garage's daytime warning: an Acknowledge that clears nothing is a lie.
 #
-# NOT YET DEPLOYED OR TESTED. Written 2026-08-20 from the live entity dump but
-# never fired for real — the "armed, not running" combination in the condition
-# below is inferred from the options list, not observed. First live run should
-# be watched via the automation trace, not trusted blind.
+# Deployed and manually verified 2026-08-20. The "armed, not running"
+# combination was exercised by triggering the automation from the HA UI; the
+# natural 21:00 clock trigger still needs observation during a real cycle.
 
 automation:
   # ---------------------------------------------------------------------------

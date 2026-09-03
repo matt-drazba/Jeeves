@@ -1,14 +1,14 @@
 # Jeeves — Home Automation Monorepo
 
 A Raspberry Pi 5 running Home Assistant and a custom kitchen dashboard, plus the
-pool monitoring and alerting that grew out of it. LAN-only, no cloud dependency
-for anything that matters.
+pool monitoring and alerting that grew out of it. LAN-only, with safety controls
+kept local or hardware-backed wherever the system design requires it.
 
 ## Layout
 
 ```
 homelab/
-├── docker-compose.yml      # HA + Jeeves + ESPHome
+├── docker-compose.yml      # HA + Jeeves + ESPHome + voice + Ollama
 ├── homeassistant/
 │   └── packages/           # alerting config (deployable; secrets/DB gitignored)
 ├── jeeves/                 # Express server + single-file dashboard
@@ -20,17 +20,26 @@ homelab/
 ## The pieces
 
 **Jeeves** is an Express server (`jeeves/server.js`) that polls Home Assistant,
-Open-Meteo, PurpleAir, and a few other sources on independent timers into one
-in-memory cache, and serves it as `/api/status`. History goes to SQLite
-(`jeeves/db.js`).
+Open-Meteo, PurpleAir, BiblioCommons, and the Mac Music bridge on independent
+timers into one in-memory cache, and serves it as `/api/status`. History goes to
+SQLite (`jeeves/db.js`). It also proxies voice requests, HA Assist commands, and
+the local Ollama chat service.
 
 **The dashboard** is one self-contained file, `jeeves/public/dashboard.html` —
-vanilla HTML/CSS/JS, no build step, no frameworks, no external requests. It runs
-on a wall-mounted Fire HD 8 in Fully Kiosk Browser at a fixed 1280×800.
+vanilla HTML/CSS/JS, no build step, no frameworks, no CDN or external browser
+requests. It runs on a wall-mounted Fire HD 8 in Fully Kiosk Browser. The tile
+grid is the detail view; the calendar and pool views open on demand, while the
+ambient layer surfaces actionable chores, completed appliances, and urgent
+alerts when the display is idle.
 
 **Home Assistant** owns devices and alerting. Jeeves displays; it does not decide.
 The one exception is acknowledging an alert from the tablet, which calls back into
 HA.
+
+**Other services** are deliberately separate: `voice` provides local Whisper/Piper
+speech processing, `ollama` provides local chat inference, and ESPHome provides
+the pool-pad firmware/configuration. The Mac Music bridge is outside this Compose
+project and runs as a launchd service on the Mac mini.
 
 ## Hardware
 
@@ -43,8 +52,11 @@ HA.
 
 ## Dashboard
 
-Three views. The tile grid is the default; the calendar and the pool page are
-opened by tapping a tile and return on their own.
+Three views. The tile grid is the default detail view; the calendar and pool page
+are opened by tapping a tile and return on their own. When idle, the dashboard
+dims to a low-power ambient state and presents a separate action strip for items
+that need a person's attention. A tap wakes it; tapping an action item performs
+that item's normal dashboard action.
 
 Tiles are driven entirely by the `status` object in the API response — adding a
 key adds a tile, and the grid reflows. The grid is a hard **24 cells** at
@@ -62,14 +74,26 @@ Tile states:
 | Colored | `color`/`bg` inline override — used by AQI and the alert count |
 | Stale / Error | no refresh in >2 min / fetch threw |
 
-Night dimming (opacity 0.45) runs 10pm–6am. Modal overlays sit outside the dimmed
-root so they stay readable.
+Night dimming caps the awake display from 10pm–6am. Modal overlays and the ambient
+action strip sit outside the dimmed root so they remain readable.
 
 ### Rendering
 
 `renderStatus()` builds tile DOM once, then patches only text and class names.
 **Never reset `innerHTML` on `#status-panel` during an update** — it restarts the
 CSS pulse animations. A full rebuild is forced every 30 cycles.
+
+## Data ownership
+
+- Home Assistant: device integrations, entity state, schedules, safety automations,
+  notifications, and alert flags.
+- Jeeves memory: current dashboard cache and short-lived appliance/UI state.
+- Jeeves SQLite: appliance cycles, energy readings, behavior errors, chore credits,
+  recurring tasks, sweep runs, pool samples, and filter baseline.
+- ESPHome: pool-pad sensor firmware and low-level device configuration.
+
+The dashboard is LAN-only by design and `/api/status` is unauthenticated. Do not
+port-forward Jeeves; use the LAN or Tailscale for remote access.
 
 ## Pool
 
@@ -97,8 +121,8 @@ levels doc, not a fact about the house.
 
 ## Deploying
 
-Three targets, three different commands. Getting these confused is the most common
-way a change appears not to work.
+Three targets have different deployment paths. Getting these confused is the most
+common way a change appears not to work.
 
 **Jeeves** — the dashboard is baked into the image, so `--build` is required.
 A plain `docker restart jeeves` will not pick up frontend changes:
@@ -124,6 +148,29 @@ the hardware is running. Pushing to GitHub deploys nothing:
 ```bash
 cd "~/Code Repos/Jeeves/esphome" && uvx esphome run pool-pad.yaml
 ```
+
+**Voice and Ollama** — both are Compose services. Voice models live in the
+`voice_models` volume and Ollama models live in `ollama_data`; rebuild or restart
+the relevant service after changing its image or source.
+
+## Documentation map
+
+- [STATUS.md](STATUS.md): concise current project status, pending work, and deferred
+  decisions.
+- [CLAUDE.md](CLAUDE.md): repository rules, stable architecture constraints, and
+  project context for coding agents.
+- [docs/pool_wiring_manual.md](docs/pool_wiring_manual.md): as-built pool wiring
+  and safety notes.
+- [docs/alerting_levels.md](docs/alerting_levels.md): alert severity policy.
+- [docs/alerting_runbook.md](docs/alerting_runbook.md): operator response steps.
+- [docs/pool_todo.md](docs/pool_todo.md): current pool action list.
+- [docs/pool_system_checks.md](docs/pool_system_checks.md): recurring verification.
+- [docs/whisper_architecture.md](docs/whisper_architecture.md): voice service design
+  and implementation record.
+
+Focused documents are authoritative for their subject. Historical corrections and
+rejected alternatives are retained where they prevent a dangerous or expensive
+mistake; current operating instructions should appear before that history.
 
 ## Hard rules
 

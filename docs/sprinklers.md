@@ -1,6 +1,6 @@
 # Sprinklers — Orbit B-hyve, weather-aware watering
 
-**Status:** the weather-aware watering model itself (ET-minus-rain deficit, `bhyve.update_program(budget:%)`) is design-in-progress, nothing built yet — open questions at the bottom must be answered before that code is written. Separately, the **tickler/fertilizer piece (§10) is built**: schema v8 seeded `fert_rose`/`fert_citrus_ground`/`fert_potted`/`mulch_beds` into the `tasks` table, written and verified locally but not yet deployed to the Pi.
+**Status:** the weather-aware watering model itself (ET-minus-rain deficit, `bhyve.update_program(budget:%)`) is design-in-progress, nothing built yet — open questions at the bottom must be answered before that code is written. Separately, the **tickler/fertilizer piece (§10) is live**: migrations v8–v11 seeded the seasonal and calendar-day tasks into SQLite, and the existing Next Up / 07:00 chore-promotion flow consumes them. The source and deployment state should still be confirmed on the Pi after future database changes.
 
 **Active work item: the rose — see §13.** It needs no code and does not wait on anything.
 
@@ -285,9 +285,9 @@ Consequences:
 
 ---
 
-## 10. Fertilizer + mulch in the tickler — BUILT 2026-08-12, schema v8
+## 10. Fertilizer + mulch in the tickler — LIVE 2026-08-12 onward
 
-Written, not yet deployed. No dashboard work was needed: the Next Up tile and the 07:00
+No dashboard work was needed: the Next Up tile and the 07:00
 `_addChore()` promotion already consume anything in the `tasks` table.
 
 ### The schema gap is closed
