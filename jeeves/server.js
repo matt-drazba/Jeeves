@@ -1527,7 +1527,16 @@ function computeUpNext() {
 }
 
 // ── Routes ────────────────────────────────────────────────────────
-app.use(express.static(join(__dirname, 'public')));
+// no-store: the kiosk tablet's WebView must never serve dashboard.html from
+// its own cache. Fully Kiosk's "Reload on Screen On"/"Auto Reload on Idle"
+// just re-navigate to the same URL — without this, that "reload" can be
+// satisfied entirely from local cache and the tablet keeps running whatever
+// JS was current the last time it made a real request, silently missing any
+// dashboard feature shipped since. Single small HTML file on a LAN — no
+// caching upside to trade away.
+app.use(express.static(join(__dirname, 'public'), {
+  setHeaders: (res) => res.setHeader('Cache-Control', 'no-store'),
+}));
 
 app.get('/', (req, res) => {
   res.sendFile(join(__dirname, 'public', 'dashboard.html'));

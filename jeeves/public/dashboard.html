@@ -527,18 +527,22 @@
     #ambient-zone {
       position: fixed; inset: 0 0 auto 0; z-index: 90;
       display: none; padding: 28px; background: #000;
-      height: 320px;
     }
-    #ambient-cards { display: flex; gap: 20px; height: 100%; }
+    /* auto-fit + a real minmax so each card is read from across the room —
+       cramming every item into one forced row (the old flex:1 1 0 layout)
+       squeezed long text like "Close it, or confirm someone is out there
+       using it." into 4+ wrapped lines. Extra items wrap to another row
+       instead of shrinking everyone to fit; grid-auto-rows: auto lets a card
+       with wrapped text grow instead of clipping. */
+    #ambient-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      grid-auto-rows: minmax(240px, auto);
+      gap: 20px;
+    }
     #ambient-zone.open { display: block; }
 
-    /* flex:1 1 0 (not a fixed width) so 2 cards fill the same full-width row
-       as 5 would — this is a kitchen kiosk read from across the room, so a
-       big empty black strip next to two tiny cards defeats the point. Caps
-       out at 5 conceptual slots (AMBIENT_CARDS_MAX in JS); fewer items just
-       means each one gets a bigger share, not empty space. */
     .ambient-card {
-      flex: 1 1 0; min-width: 0;
       opacity: var(--ambient-card-dim);
       cursor: pointer;
       padding: 28px 30px;
@@ -1623,7 +1627,7 @@
     return items; // alertDetail already arrives level-sorted, then chores/done in status order — alerts first either way
   }
 
-  const AMBIENT_CARDS_MAX = 5; // room-width row; cards flex to fill it regardless of count
+  const AMBIENT_CARDS_MAX = 4; // 2 columns x 2 rows fit within the 800px kiosk viewport
 
   function renderAmbientZone(items) {
     const wrap = document.getElementById('ambient-cards');
