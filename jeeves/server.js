@@ -1521,7 +1521,11 @@ function computeUpNext() {
     sub: upcoming.length ? (upcoming[0].allDay ? upcoming[0].title : `Next: ${upcoming[0].time}`) : '',
     alert: false,
     degraded: false,
-    done: upcoming.length === 0,
+    // Never `done`. An empty calendar is not a completed task: `done: true`
+    // rendered the Today tile as an ambient action card ("Tap to dismiss")
+    // that dismissed nothing — POST /api/dismiss/upNext has no handler and
+    // 400s. It also painted the grid tile green every day with a blank agenda.
+    done: false,
     events: upcoming.map(ev => ({ time: ev.allDay ? 'All day' : ev.time, title: ev.title })),
   };
 }
