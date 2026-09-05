@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=1280, initial-scale=1.0" />
+  <meta name="viewport" content="width=1280, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <!-- user-scalable=no + .tile { touch-action: manipulation }: this is a fixed
+       wall tablet, zoom is never wanted, and WITHOUT these the mobile
+       Chromium (Fully Kiosk WebView) auto-detects every tap as a double-tap-
+       to-zoom candidate and delays the click by ~300ms. That delay is what
+       let the old ambient-zone wake path (hide-the-zone in a setTimeout race)
+       pull a just-tapped card out of the render tree before the click fired. -->
   <title>Kitchen Dashboard</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,6 +89,11 @@
       transition: border-color 0.3s, background 0.3s;
       position: relative;
       overflow: hidden;
+      /* Kills the ~300ms double-tap-to-zoom click delay on the touch WebView
+         (see the viewport meta note). Ambient cards MUST respond on the first
+         tap, and grid tiles benefit from a snappier tap too. Long-press chore
+         deletion is unaffected — this only governs pan/zoom gestures. */
+      touch-action: manipulation;
     }
 
     .tile-header { display: flex; align-items: center; gap: 7px; }
@@ -1581,18 +1592,23 @@
   //
   // Ambient cards are the one exception: tapping one should wake AND act in
   // the same tap (no extra tap to open "go kill the breaker"). So the wake
-  // isn't swallowed there — but the zone-hide half of updateDimState() is
-  // deferred a tick, because hiding #ambient-zone synchronously here (before
-  // the browser has resolved pointerup->click on the same target) would pull
-  // the tap's target out of the hit-test and cancel the click that's meant
-  // to fire the card's action.
+  // isn't swallowed there — and the zone is NOT hidden here either. Hiding
+  // #ambient-zone on pointerdown (or in a setTimeout scheduled from here)
+  // races the browser's click dispatch: by the time mobile Chromium fires
+  // click — delayed ~300ms by double-tap-to-zoom detection, see the viewport
+  // meta — the tapped card has been pulled out of the render tree, the hit
+  // test fails, and the click never fires. The click fires ONCE and lands on
+  // a still-mounted card because the zone stays up through pointerup; the
+  // #ambient-cards click handler hides it, after it has acted. The only
+  // downside is a cancelled tap (pointerdown then a drag) leaving the zone up
+  // until the next poll's updateAmbientZoneVisibility() — 30s at most, vs the
+  // alternative where every normal tap is lost.
   document.addEventListener('pointerdown', (e) => {
     if (_isIdleDimmed) {
       const onCard = e.target.closest('.ambient-card');
       _isIdleDimmed = false;
       if (onCard) {
-        applyDimValue();
-        setTimeout(updateAmbientZoneVisibility, 0);
+        applyDimValue();           // brighten, but keep the zone mounted
       } else {
         updateDimState();
         e.preventDefault();
@@ -1652,6 +1668,40 @@
       : '');
   }
 
+  // Optimistic local-state updates so a just-completed item stops being
+  // tappable immediately instead of waiting for the next /api/status poll.
+  // The server is the source of truth; these mirror what its handlers do
+  // (_removeChore / _dismissAppliance in server.js) so re-renders stay
+  // consistent. The next poll confirms or corrects (30s at most).
+  function _refreshAmbientZone() {
+    _actionItems = computeActionItems(_lastData);
+    renderAmbientZone(_actionItems);
+    updateAmbientZoneVisibility();
+  }
+
+  // Chore completed → drop the tile from the local status copy AND the
+  // ambient zone. Removing only the ambient card would leave a re-tap that
+  // 404s ("Chore not found") and flashes a wrong PIN; doing nothing leaves
+  // the stale card tappable until the poll re-renders it.
+  function _dropFromStatusAndAmbient(key) {
+    if (_lastData?.status) {
+      delete _lastData.status[key];
+      _refreshAmbientZone();
+    }
+  }
+
+  // Appliance dismissed → clear its done flag locally so it drops out of the
+  // ambient zone before the poll (and can't be double-credited by a re-tap).
+  function _clearDoneInStatusAndAmbient(key) {
+    const t = _lastData?.status?.[key];
+    if (t) {
+      t.done = false;
+      t.value = 'Idle';
+      delete t.sub;
+      _refreshAmbientZone();
+    }
+  }
+
   const LEVEL_STYLE_CLIENT = {
     1: { color: '#e53935', bg: '#1a0000' },
     2: { color: '#ff6b35', bg: '#1a0a00' },
@@ -1661,14 +1711,27 @@
     const card = e.target.closest('.ambient-card');
     if (!card) return;
     const type = card.dataset.type;
+    // The zone stayed mounted through pointerdown/pointerup so THIS click
+    // could resolve against the card (see the pointerdown handler above).
+    // Hiding it here — after the click has hit its target and dispatched —
+    // is what makes "wake and act in one tap" reliable on the touch browser.
     if (type === 'overflow') {
       const hasAlert = _actionItems.some(it => it.type === 'alert');
+      updateAmbientZoneVisibility();
       if (hasAlert) openAlertOverlay();
       return;
     }
-    if (type === 'alert') { openAlertOverlay(); return; }
-    // chore / done — same PIN-overlay flow the grid tiles use
+    if (type === 'alert') {
+      updateAmbientZoneVisibility();
+      openAlertOverlay();
+      return;
+    }
+    // chore / done — same PIN-overlay flow the grid tiles use. A stale card
+    // (item completed/removed by a poll since this card rendered) lands here
+    // with no tileData; the zone and card are rebuilt on the next poll
+    // regardless.
     const tileData = _lastData?.status?.[card.dataset.key];
+    updateAmbientZoneVisibility();
     if (tileData) openPinOverlayFor(card.dataset.key, tileData, type === 'chore', card.dataset.choreId || null);
   });
 
@@ -1738,6 +1801,9 @@
       if (data.creditedTo) {
         if (tile) tile.remove();
         _celebrate(data.creditedTo);
+        // Remove the chore locally so it stops rendering as an ambient action
+        // card right now; the next poll confirms the server-side removal.
+        _dropFromStatusAndAmbient(key);
         setTimeout(_closePinOverlay, 1800);
       } else {
         _flashWrong();
@@ -1749,6 +1815,7 @@
     if (!pin) {
       overlay.classList.add('hidden');
       if (tile) { tile.classList.remove('done'); const v = tile.querySelector('.tile-value'); if (v) v.textContent = 'Idle'; }
+      _clearDoneInStatusAndAmbient(key);
       fetch(`/api/dismiss/${key}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: null }) });
       return;
     }
@@ -1763,6 +1830,7 @@
     if (data.creditedTo) {
       if (tile) { tile.classList.remove('done'); const v = tile.querySelector('.tile-value'); if (v) v.textContent = 'Idle'; }
       _celebrate(data.creditedTo);
+      _clearDoneInStatusAndAmbient(key);
       setTimeout(() => {
         overlay.classList.add('hidden');
         document.getElementById('pin-result').style.display = 'none';

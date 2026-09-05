@@ -86,6 +86,12 @@ The grid is a backup/detail view, reached on demand — the primary interface is
 
 Tapping the black background just wakes the screen (the tap is swallowed in a capture-phase `pointerdown` listener). Tapping an `.ambient-card` wakes **and** acts in the same tap — opens the alert overlay, or the same PIN-overlay flow (`openPinOverlayFor()`) the grid tiles use — since a "go kill the breaker" card shouldn't need a second tap.
 
+**One-tap reliability (fixed 2026-09-04).** The original wake path hid `#ambient-zone` from `pointerdown` via `setTimeout(updateAmbientZoneVisibility, 0)`. On the Fire tablet's mobile Chromium the browser delays the synthesized click ~300ms (double-tap-to-zoom detection), so by click time the just-tapped card was `display:none`/out of the hit-test and the click was cancelled — the reported "can't mark these done" symptom. The zone is now hidden *from the click handler*, after it has acted; `pointerdown` only wakes. `user-scalable=no` on the viewport (`viewport` meta) + `touch-action: manipulation` on `.tile` remove the tap-delay entirely (it's a fixed wall tablet; zoom is never wanted; long-press chore deletion is unaffected). Verified with a Playwright harness that models the delayed click (pointerdown now, click 300ms later, click cancelled if the target is no longer hit-testable): 11/11 checks pass on the fix, and the original fails exactly on "tap opens the action". See the pointerdown/click comments in `dashboard.html`.
+
+**Completed cards vanish immediately (same change).** A completed chore or dismissed appliance used to stay as a stale ambient card until the next ≤30s poll — allowing a double-credit re-tap (appliance) or a "Chore not found" 404 flash (promoted chore). `_dropFromStatusAndAmbient()` / `_clearDoneInStatusAndAmbient()` now mirror the server handler optimistically (`_removeChore` / `_dismissAppliance`), so the card leaves the zone in the same tap; the poll confirms or corrects.
+
+**`upNext` no longer reports `done` (same change).** `computeUpNext()` set `done: upcoming.length === 0`, so on an empty calendar the Today tile became a green `.done` tile AND an ambient action card ("Tap to dismiss") whose tap POSTed `/api/dismiss/upNext` — no such handler, 400, wrong-PIN flash. "No events today" is not a completed task; `done` is now always `false`.
+
 ### Adding tiles
 Add a new key to the `status` object in the API response. The grid uses CSS `auto-fill minmax(190px, 1fr)` and reflows automatically — no CSS changes needed.
 
