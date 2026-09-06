@@ -886,6 +886,12 @@ const ALERT_REGISTRY = {
     detector: 'binary_sensor.pool_pad_node_offline',
     action: 'Power-cycle the ESP; check WiFi coverage at the pad.',
   },
+  localtuya_offline: {
+    level: 2,
+    title: 'LocalTuya controller offline',
+    detector: 'binary_sensor.localtuya_offline',
+    action: 'Check the LocalTuya integration in HA. The pool sweep and OhmPlugs are unreachable.',
+  },
   meter_offline: {
     level: 3,
     title: 'Pump power meter offline',

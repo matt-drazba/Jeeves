@@ -56,6 +56,10 @@ input_boolean:
     name: Open Alert - Pool Pad Node Offline
     icon: mdi:lan-disconnect
 
+  alert_open_localtuya_offline:
+    name: Open Alert - LocalTuya Offline
+    icon: mdi:lan-disconnect
+
   alert_open_meter_offline:
     name: Open Alert - Pump Meter Offline
     icon: mdi:lan-disconnect
@@ -168,6 +172,26 @@ template:
         device_class: problem
         delay_on: "00:30:00"
         state: "{{ not has_value('sensor.pool_pad_hx_water_in_temp') }}"
+
+      # ---------------------------------------------------------------------
+      # L2 — LocalTuya controller offline.
+      #
+      # The pool sweep timer (Polaris PB4-60 booster) and both OhmPlugs live
+      # on LocalTuya. If the integration dies, switch.pool_sweep_socket_1 goes
+      # unavailable — that's the canary. 30-minute debounce rides out a Wi-Fi
+      # blip or an HA restart.
+      #
+      # The booster dry-run kill already fails closed on an unavailable switch,
+      # so a dead LocalTuya does not endanger the pump — it just means the
+      # sweep won't run and energy monitoring is dark. L2, not L3: the sweep
+      # not running means the pool is degrading (getting dirtier), sooner than
+      # "when you get home."
+      # ---------------------------------------------------------------------
+      - name: "LocalTuya Offline"
+        unique_id: localtuya_offline
+        device_class: problem
+        delay_on: "00:30:00"
+        state: "{{ not has_value('switch.pool_sweep_socket_1') }}"
 
       - name: "Pool Pump Meter Offline"
         unique_id: pool_pump_meter_offline
@@ -515,6 +539,21 @@ automation:
               tag: "pool-hx-not-engaging"
               ack_action: "ACK_HX_NOT_ENGAGING"
 
+      - if:
+          - condition: state
+            entity_id: input_boolean.alert_open_localtuya_offline
+            state: "on"
+        then:
+          - service: script.normal_alert
+            data:
+              title: "Still open: LocalTuya controller offline"
+              message: >-
+                Unacknowledged from overnight. The pool sweep timer and OhmPlugs
+                are still unreachable through LocalTuya. Check the integration
+                in HA and the devices' network connection.
+              tag: "pool-localtuya-offline"
+              ack_action: "ACK_LOCALTUYA_OFFLINE"
+
   # -------------------------------------------------------------------------
   # L3 — sensor offline. Nothing is being damaged; the house has just gone
   # partially blind. Push once, then re-raise each evening until acknowledged.
@@ -534,6 +573,10 @@ automation:
         entity_id: binary_sensor.pool_pump_meter_offline
         to: "on"
         id: meter_offline
+      - platform: state
+        entity_id: binary_sensor.localtuya_offline
+        to: "on"
+        id: localtuya_offline
     action:
       - service: input_boolean.turn_on
         target:
@@ -542,14 +585,21 @@ automation:
         data:
           title: >
             {{ 'Pool pad node offline' if trigger.id == 'pad_offline'
-               else 'Pool pump meter offline' }}
+               else 'Pool pump meter offline' if trigger.id == 'meter_offline'
+               else 'LocalTuya controller offline' }}
           message: >
             {{ 'The pool pad ESP has not reported for 30 minutes. HX temps,
                 flow and BTU readings are dead.'
                if trigger.id == 'pad_offline' else
                'The Shelly EM pump meter has not reported for 30 minutes. The
                 booster dry-run kill fails closed on a dead meter, so the sweep
-                will not run until this is back.' }}
+                will not run until this is back.'
+               if trigger.id == 'meter_offline' else
+               'The pool sweep timer and OhmPlugs are unreachable through
+                LocalTuya. Check the LocalTuya integration in HA and the
+                devices\' network connection. The pool sweep will not run while
+                offline — the booster dry-run kill still fails closed, so the
+                pump is protected.' }}
           tag: "pool-{{ trigger.id }}"
           ack_action: "ACK_{{ trigger.id | upper }}"
 
@@ -680,6 +730,11 @@ automation:
         event_data:
           action: "ACK_METER_OFFLINE"
         id: meter_offline
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "ACK_LOCALTUYA_OFFLINE"
+        id: localtuya_offline
       - platform: event
         event_type: mobile_app_notification_action
         event_data:
