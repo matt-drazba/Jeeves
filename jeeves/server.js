@@ -187,7 +187,14 @@ async function fetchWasher() {
       catch (err) { console.error('DB washer cycle open failed:', err.message); }
     }
   } else if (state === 'stop' && (washerPrevState === 'run' || washerPrevState === 'pause')) {
-    washerDone = true;
+    // Check if appliance was dismissed since this cycle started
+    const dismissedAt = db.getDismissedAt('washer');
+    const cycleStarted = washerCycleId ? db.getCycleStartedAt(washerCycleId) : null;
+    const wasDismissedAfterCycleStart = dismissedAt && cycleStarted && dismissedAt >= cycleStarted;
+
+    if (!wasDismissedAfterCycleStart) {
+      washerDone = true;
+    }
     if (washerCycleId) {
       try { db.closeCycle(washerCycleId); } catch (err) { console.error('DB washer cycle close failed:', err.message); }
       washerCycleId = null;
@@ -276,9 +283,21 @@ async function fetchDishwasher() {
     if (dishwasherBelowSince === null) {
       dishwasherBelowSince = Date.now();
     } else if (Date.now() - dishwasherBelowSince >= DISHWASHER_END_DELAY_MS) {
-      dishwasherDone       = true;
-      dishwasherWasRunning = false;
-      dishwasherBelowSince = null;
+      // Check if appliance was dismissed since this cycle started
+      const dismissedAt = db.getDismissedAt('dishwasher');
+      const cycleStarted = dishwasherCycleId ? db.getCycleStartedAt(dishwasherCycleId) : null;
+      const wasDismissedAfterCycleStart = dismissedAt && cycleStarted && dismissedAt >= cycleStarted;
+
+      if (wasDismissedAfterCycleStart) {
+        // User dismissed during this cycle - don't show "Done!", just reset state
+        dishwasherWasRunning = false;
+        dishwasherBelowSince = null;
+      } else {
+        dishwasherDone       = true;
+        dishwasherWasRunning = false;
+        dishwasherBelowSince = null;
+      }
+
       if (dishwasherCycleId) {
         try { db.closeCycle(dishwasherCycleId, { peakWatts: dishwasherPeakWatts }); }
         catch (err) { console.error('DB dishwasher cycle close failed:', err.message); }
@@ -357,7 +376,14 @@ async function fetchDryer() {
     if (eventTime !== lastDryerEventTime) {
       lastDryerEventTime = eventTime;
       if (eventType === 'drying_is_complete') {
-        dryerDone = true;
+        // Check if appliance was dismissed since this cycle started
+        const dismissedAt = db.getDismissedAt('dryer');
+        const cycleStarted = dryerCycleId ? db.getCycleStartedAt(dryerCycleId) : null;
+        const wasDismissedAfterCycleStart = dismissedAt && cycleStarted && dismissedAt >= cycleStarted;
+
+        if (!wasDismissedAfterCycleStart) {
+          dryerDone = true;
+        }
         if (dryerCycleId) {
           try { db.closeCycle(dryerCycleId); } catch (err) { console.error('DB dryer cycle close failed:', err.message); }
           dryerCycleId = null;
@@ -1630,6 +1656,8 @@ function _dismissAppliance(appliance) {
   } else {
     return false;
   }
+  // Persist dismiss to DB so polling doesn't re-trigger "Done!" on the same cycle
+  db.dismissAppliance(appliance);
   return true;
 }
 

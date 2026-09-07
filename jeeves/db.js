@@ -320,6 +320,14 @@ function migrate() {
     db.pragma('user_version = 12');
     console.log('DB: migrated to v12');
   }
+  if (v < 13) {
+    db.exec(`
+      ALTER TABLE devices ADD COLUMN dismissed_at INTEGER;
+    `);
+    db.pragma('user_version = 13');
+    console.log('DB: migrated to v13');
+  }
+}
 }
 
 migrate();
@@ -349,6 +357,24 @@ export function closeCycle(id, { peakWatts = null, kwh = null, endReason = 'norm
 
 export function getOpenCycleId(appliance) {
   return _getOpenCycle.get(appliance)?.id ?? null;
+}
+
+// ── Appliance dismiss state ────────────────────────────────────────
+
+const _dismissAppliance = db.prepare('UPDATE devices SET dismissed_at = ? WHERE name = ?');
+const _getDismissedAt = db.prepare('SELECT dismissed_at FROM devices WHERE name = ?');
+const _getCycleStartedAt = db.prepare('SELECT started_at FROM appliance_cycles WHERE id = ?');
+
+export function dismissAppliance(name, ts = Math.floor(Date.now() / 1000)) {
+  _dismissAppliance.run(ts, name);
+}
+
+export function getDismissedAt(name) {
+  return _getDismissedAt.get(name)?.dismissed_at ?? null;
+}
+
+export function getCycleStartedAt(cycleId) {
+  return _getCycleStartedAt.get(cycleId)?.started_at ?? null;
 }
 
 // ── Energy readings ────────────────────────────────────────────────
