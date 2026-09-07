@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=1280, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <!-- user-scalable=no + .tile { touch-action: manipulation }: this is a fixed
-       wall tablet, zoom is never wanted, and WITHOUT these the mobile
-       Chromium (Fully Kiosk WebView) auto-detects every tap as a double-tap-
-       to-zoom candidate and delays the click by ~300ms. That delay is what
-       let the old ambient-zone wake path (hide-the-zone in a setTimeout race)
-       pull a just-tapped card out of the render tree before the click fired. -->
+  <meta name="viewport" content="width=1280, initial-scale=1.0" />
+  <!-- .tile { touch-action: manipulation } (below) kills the ~300ms double-tap-
+       to-zoom click delay on the mobile Chromium (Fully Kiosk WebView) so
+       ambient cards respond on the first tap. Zoom is left ENABLED (no
+       user-scalable=no / maximum-scale) so the dashboard stays pinchable on
+       the Fire tablet; touch-action: manipulation is what actually removes the
+       tap delay, so zoom and snappy taps coexist. -->
   <title>Kitchen Dashboard</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -90,9 +90,9 @@
       position: relative;
       overflow: hidden;
       /* Kills the ~300ms double-tap-to-zoom click delay on the touch WebView
-         (see the viewport meta note). Ambient cards MUST respond on the first
-         tap, and grid tiles benefit from a snappier tap too. Long-press chore
-         deletion is unaffected — this only governs pan/zoom gestures. */
+         so ambient cards respond on the first tap and grid tiles feel snappy.
+         Long-press chore deletion is unaffected — this only governs pan/zoom
+         gestures. Zoom is intentionally left enabled on the viewport. */
       touch-action: manipulation;
     }
 
@@ -1595,8 +1595,8 @@
   // isn't swallowed there — and the zone is NOT hidden here either. Hiding
   // #ambient-zone on pointerdown (or in a setTimeout scheduled from here)
   // races the browser's click dispatch: by the time mobile Chromium fires
-  // click — delayed ~300ms by double-tap-to-zoom detection, see the viewport
-  // meta — the tapped card has been pulled out of the render tree, the hit
+  // click — delayed ~300ms by double-tap-to-zoom detection (touch-action:
+  // manipulation on .tile removes this) — the tapped card has been pulled
   // test fails, and the click never fires. The click fires ONCE and lands on
   // a still-mounted card because the zone stays up through pointerup; the
   // #ambient-cards click handler hides it, after it has acted. The only
