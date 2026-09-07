@@ -328,7 +328,6 @@ function migrate() {
     console.log('DB: migrated to v13');
   }
 }
-}
 
 migrate();
 
