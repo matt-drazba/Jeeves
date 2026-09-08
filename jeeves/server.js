@@ -1686,10 +1686,37 @@ app.get('/api/chores/presets', (req, res) => {
   }
 });
 
+/**
+ * Sanitize a chore name: strip all HTML tags and trim whitespace.
+ * Chore names should be plain text only — no markup allowed.
+ */
+function _sanitizeChoreName(name) {
+  if (typeof name !== 'string') return '';
+  // Strip HTML tags, then collapse whitespace and trim
+  return name.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Validate a chore icon: must be a single emoji or empty/null.
+ * Returns a safe default (🧹) if invalid.
+ * Emoji ranges cover the common symbols used for chores.
+ */
+function _sanitizeChoreIcon(icon) {
+  if (typeof icon !== 'string' || !icon) return '🧹';
+  // Match a single emoji character (including ZWJ sequences like 👨‍🔧)
+  // This regex covers: basic multilingual plane emoji, skin tone modifiers,
+  // ZWJ sequences, and flag sequences
+  const emojiRegex = /^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(\u200D(\p{Emoji_Presentation}|\p{Emoji}\uFE0F))*$/u;
+  const trimmed = icon.trim();
+  return emojiRegex.test(trimmed) ? trimmed : '🧹';
+}
+
 app.post('/api/chores', express.json(), (req, res) => {
   const { name, icon } = req.body || {};
-  if (!name?.trim()) return res.status(400).json({ error: 'name required' });
-  const id = _addChore(name.trim(), icon);
+  const cleanName = _sanitizeChoreName(name);
+  if (!cleanName) return res.status(400).json({ error: 'name required' });
+  const cleanIcon = _sanitizeChoreIcon(icon);
+  const id = _addChore(cleanName, cleanIcon);
   res.json({ ok: true, choreId: id });
 });
 

@@ -1066,6 +1066,18 @@
 </div>
 
 <script>
+  /* ── HTML escaping ─────────────────────────────────────────────── */
+  // Escape user-controlled data before inserting into innerHTML to prevent XSS.
+  function _escHtml(str) {
+    if (str == null) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   /* ── View switching ─────────────────────────────────────────────── */
   // Calendar is no longer part of the auto-rotation — it's opened by
   // tapping the "Today" tile and auto-returns after a short timeout.
@@ -1273,10 +1285,10 @@
           </div>`;
         }
         if (tile.isChore) {
-          return `<div class="tile chore-tile" data-key="${key}" data-chore-id="${tile.choreId}">
+          return `<div class="tile chore-tile" data-key="${_escHtml(key)}" data-chore-id="${tile.choreId}">
             <div class="tile-header">
-              <span class="tile-icon">${tile.icon || '🧹'}</span>
-              <span class="tile-label">${tile.label}</span>
+              <span class="tile-icon">${_escHtml(tile.icon) || '🧹'}</span>
+              <span class="tile-label">${_escHtml(tile.label)}</span>
             </div>
             <div class="tile-value">Tap to claim!</div>
             <div class="tile-sub">Hold to remove</div>
@@ -1318,7 +1330,7 @@
         if (rows && tile.members?.length) {
           rows.innerHTML = tile.members.map(m =>
             `<div class="sb-row">
-              <span class="sb-name">${m.name}</span>
+              <span class="sb-name">${_escHtml(m.name)}</span>
               <span class="sb-count ${m.count > 0 ? 'sb-count-pos' : 'sb-count-zero'}">${m.count}</span>
             </div>`
           ).join('');
@@ -1653,12 +1665,12 @@
     wrap.innerHTML = shown.map(it => {
       const cls = it.type === 'alert' ? `tile alert ambient-card` : it.type === 'chore' ? `tile chore-tile ambient-card` : `tile done ambient-card`;
       const style = it.type === 'alert' ? ` style="background:${LEVEL_STYLE_CLIENT[it.level].bg};border-color:${LEVEL_STYLE_CLIENT[it.level].color}"` : '';
-      return `<div class="${cls}" data-type="${it.type}" data-key="${it.key}" ${it.choreId ? `data-chore-id="${it.choreId}"` : ''}${style}>
+      return `<div class="${cls}" data-type="${it.type}" data-key="${_escHtml(it.key)}" ${it.choreId ? `data-chore-id="${it.choreId}"` : ''}${style}>
         <div class="tile-header">
-          <span class="tile-icon">${it.icon}</span>
-          <span class="tile-label">${it.label}</span>
+          <span class="tile-icon">${_escHtml(it.icon)}</span>
+          <span class="tile-label">${_escHtml(it.label)}</span>
         </div>
-        <div class="tile-value">${it.text}</div>
+        <div class="tile-value">${_escHtml(it.text)}</div>
       </div>`;
     }).join('') + (overflow > 0
       ? `<div class="tile ambient-card" data-type="overflow">
@@ -2114,7 +2126,7 @@
     const presets = await fetch('/api/chores/presets').then(r => r.json()).catch(() => []);
     const container = document.getElementById('chore-presets');
     container.innerHTML = presets.map(p =>
-      `<button class="chore-preset" data-name="${p.name}" data-icon="${p.icon}">${p.icon} ${p.name}</button>`
+      `<button class="chore-preset" data-name="${_escHtml(p.name)}" data-icon="${_escHtml(p.icon)}">${_escHtml(p.icon)} ${_escHtml(p.name)}</button>`
     ).join('');
     container.querySelectorAll('.chore-preset').forEach(btn => {
       btn.addEventListener('click', () => submitChore(btn.dataset.name, btn.dataset.icon));
