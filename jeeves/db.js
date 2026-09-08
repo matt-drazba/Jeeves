@@ -327,6 +327,19 @@ function migrate() {
     db.pragma('user_version = 13');
     console.log('DB: migrated to v13');
   }
+  if (v < 14) {
+    // Disable manually added tickler tasks that are buggy on the display.
+    // These can be re-enabled later by setting enabled = 1 if the display
+    // issues are resolved and the tasks are needed again.
+    db.prepare(
+      `UPDATE tasks SET enabled = 0 WHERE key IN
+        ('test_fc', 'test_copper_ph', 'test_ta_ch', 'test_tds',
+         'shade_battery_charge', 'shade_operation_check')`
+    ).run();
+
+    db.pragma('user_version = 14');
+    console.log('DB: migrated to v14');
+  }
 }
 
 migrate();
