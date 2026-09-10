@@ -7,10 +7,11 @@
 
 ## 🔴 High Priority
 
-### 1. XSS via chore name injection
+### 1. ~~XSS via chore name injection~~ ✅ Done
 - **Where:** `jeeves/server.js` `/api/chores` POST → `jeeves/public/dashboard.html` renders `p.name`/`p.icon` as raw HTML
 - **Fix:** Sanitize chore names/icons before DB insert AND/OR escape on render. `name` should be plain text only (strip HTML tags), `icon` should be validated against the known set or limited to emoji Unicode ranges.
 - **Effort:** ~30 min
+- **Completed:** 2026-09-07 — Chore name/icon sanitized to prevent XSS (commit 97dc1d8).
 
 ### 2. ~~Remove or guard the test endpoint~~ ✅ Done
 - **Where:** `jeeves/server.js:1752` — `POST /api/test/done/:appliance`
