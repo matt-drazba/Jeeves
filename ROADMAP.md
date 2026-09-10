@@ -12,11 +12,12 @@
 - **Fix:** Sanitize chore names/icons before DB insert AND/OR escape on render. `name` should be plain text only (strip HTML tags), `icon` should be validated against the known set or limited to emoji Unicode ranges.
 - **Effort:** ~30 min
 
-### 2. Remove or guard the test endpoint
+### 2. ~~Remove or guard the test endpoint~~ ✅ Done
 - **Where:** `jeeves/server.js:1752` — `POST /api/test/done/:appliance`
 - **Issue:** Anyone on the LAN can force appliance Done states with no auth.
 - **Fix:** Gate behind `process.env.NODE_ENV !== 'production'` or an `ENABLE_TEST_ROUTES` env var. Remove entirely if unused.
 - **Effort:** ~10 min
+- **Completed:** 2026-09-09 — Gated behind `ENABLE_TEST_ROUTES=true` env var. Route is not registered unless explicitly enabled.
 
 ### 3. Startup environment validation
 - **Where:** `jeeves/server.js` bottom — `app.listen` fires regardless of whether `HA_TOKEN`, `PURPLEAIR_API_KEY`, etc. are set.
