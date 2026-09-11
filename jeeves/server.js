@@ -1954,6 +1954,36 @@ setInterval(() => {
 loadDocs().catch(err => console.error('RAG load failed:', err));
 db.seedMembers(process.env.MEMBERS).catch(err => console.error('Member seed failed:', err));
 
+// ── Startup environment validation ──────────────────────────────────
+// Log what's available and what's degraded so there's no mystery about
+// missing features after a restart.
+const _envStatus = [];
+const _check = (name, isSet, feature) => _envStatus.push({ name, isSet, feature });
+
+_check('HA_TOKEN', !!HA_TOKEN, 'Home Assistant (appliances, alerts, calendar, batteries, pool)');
+_check('PURPLEAIR_API_KEY', !!PURPLEAIR_KEY, 'AQI outdoor sensors');
+_check('RESEND_API_KEY', !!process.env.RESEND_API_KEY, 'Weekly email reports');
+_check('REPORT_TO_EMAIL', !!process.env.REPORT_TO_EMAIL, 'Weekly email reports');
+_check('BIBLIO_CARD', !!BIBLIO_CARD, 'Library holds');
+_check('BIBLIO_PIN', !!BIBLIO_PIN, 'Library holds');
+_check('MEMBERS', !!process.env.MEMBERS, 'Chore member seeding');
+
+const _missing = _envStatus.filter(e => !e.isSet);
+const _present = _envStatus.filter(e => e.isSet);
+
+console.log('── Startup environment check ──');
+for (const e of _present) {
+  console.log(`  ✓ ${e.name} — ${e.feature}`);
+}
+for (const e of _missing) {
+  console.log(`  ✗ ${e.name} — ${e.feature} (degraded)`);
+}
+if (_missing.length > 0) {
+  console.log(`── ${_present.length}/${_envStatus.length} env vars set, ${_missing.length} feature(s) degraded ──`);
+} else {
+  console.log('── All env vars set ──');
+}
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Jeeves running on http://0.0.0.0:${PORT}`);
 });

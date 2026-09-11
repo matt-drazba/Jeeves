@@ -20,11 +20,12 @@
 - **Effort:** ~10 min
 - **Completed:** 2026-09-09 — Gated behind `ENABLE_TEST_ROUTES=true` env var. Route is not registered unless explicitly enabled.
 
-### 3. Startup environment validation
+### 3. ~~Startup environment validation~~ ✅ Done
 - **Where:** `jeeves/server.js` bottom — `app.listen` fires regardless of whether `HA_TOKEN`, `PURPLEAIR_API_KEY`, etc. are set.
 - **Issue:** Server starts degraded with no clear signal. Silent failures in polling loops.
 - **Fix:** Add a startup check that logs missing critical env vars and either exits or runs in a clearly-degraded mode.
 - **Effort:** ~20 min
+- **Completed:** 2026-09-11 — Startup env validation logs ✓/✗ for each feature's env var, clearly showing which features are degraded.
 
 ---
 
