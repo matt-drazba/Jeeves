@@ -22,6 +22,12 @@ import {
   OLLAMA_URL, CHAT_MODEL, CHAT_SYSTEM,
   validateStartupEnv,
 } from './src/config.js';
+import {
+  cachedStatus,
+  washer, dishwasher, dryer, pool,
+  promotionTasks, lastPromotionDate,
+  biblio, chores, report,
+} from './src/state.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -66,48 +72,6 @@ async function fetchWeather() {
   console.log(`Weather updated: ${cachedStatus.weather.temp}° ${cachedStatus.weather.condition}`);
 }
 
-// In-memory status cache
-let cachedStatus = {
-  weather: {
-    location:  LOCATION,
-    temp:      72,
-    condition: 'Sunny',
-    high:      78,
-    low:       60,
-    forecast: [
-      { day: 'Wed', high: 75, low: 58, condition: 'Cloudy' },
-      { day: 'Thu', high: 70, low: 55, condition: 'Rain' },
-      { day: 'Fri', high: 73, low: 57, condition: 'Sunny' },
-    ],
-  },
-  status: {
-    upNext:     { label: 'Today',       icon: '🗓️', value: '—',    sub: '', alert: false, degraded: false, done: false, events: [] },
-    washer:     { label: 'Washer',      icon: '🫧', value: 'Idle', alert: false, degraded: false },
-    dryer:      { label: 'Dryer',       icon: '🌀', value: 'Idle', alert: false, degraded: false },
-    aqiIn:      { label: 'AQI In',      icon: '🏠', value: '—',    alert: false, degraded: false },
-    aqiOut:     { label: 'AQI Out',     icon: '🌿', value: '—',    alert: false, degraded: false },
-    dishwasher: { label: 'Dishwasher',  icon: '🍽️', value: 'Idle', alert: false, degraded: false },
-    sprinklers:   { label: 'Sprinklers',   icon: '💧', value: '—',    alert: false, degraded: false },
-    waterHeater:  { label: 'Hot Water',    icon: '🚿', value: '—',    sub: '', alert: false, degraded: false },
-    library:      { label: 'Library',      icon: '📚', value: '—',    sub: '', alert: false, degraded: false, readyHolds: [] },
-    booksOut:     { label: 'Books Out',    icon: '📖', value: '—',    sub: '', alert: false, degraded: false, checkedOut: [] },
-    nowPlaying: { label: 'Now Playing', icon: '🎵', value: '—',    sub: '', alert: false, degraded: false },
-    batteries:  { label: 'Batteries',   icon: '🔋', value: '—',    sub: '', alert: false, degraded: false, devices: [] },
-    scoreboard: { label: 'Chores',      icon: '🏆', value: '—',    sub: 'This week', members: [], alert: false, degraded: false },
-    homeEnergy: { label: 'Home Energy', icon: '⚡', value: '—',    sub: '', alert: false, degraded: false },
-    poolPump:   { label: 'Pool Pump',   icon: '🏊', value: '—',    sub: '', alert: false, degraded: false },
-    poolTemp:   { label: 'Pool Temp',   icon: '🌡️', value: '—',    sub: '', alert: false, degraded: false },
-    nextActions:{ label: 'Next Up',     icon: '🔮', value: '—',    sub: '', alert: false, degraded: false },
-    alerts:     { label: 'Alerts',      icon: '🔔', value: '—',    sub: '', alert: false, degraded: false },
-  },
-  alerts: [],
-  alertDetail: [],
-  pool: {},
-  nextActions: [],
-  calendar: { days: [] },
-  updatedAt: new Date().toISOString(),
-};
-
 // ── Home Assistant ────────────────────────────────────────────────
 
 async function fetchHAState(entityId) {
@@ -150,10 +114,6 @@ async function callHAService(domain, service, entityId) {
 }
 
 // ── Washer ────────────────────────────────────────────────────────
-let washerPrevState  = 'stop';
-let washerDone       = false;
-let washerCycleId    = null;
-let washerRecovered  = false;
 
 async function fetchWasher() {
   if (!HA_TOKEN) return;
@@ -172,12 +132,12 @@ async function fetchWasher() {
   const state = machineRes.value.state;
 
   // Restart recovery: re-attach to any open cycle from before a container restart
-  if (!washerRecovered) {
-    washerRecovered = true;
+  if (!washer.recovered) {
+    washer.recovered = true;
     const openId = db.getOpenCycleId('washer');
     if (openId) {
       if (state === 'run' || state === 'pause') {
-        washerCycleId = openId; // resume tracking
+        washer.cycleId = openId; // resume tracking
       } else {
         db.closeCycle(openId, { endReason: 'unknown' }); // was running when we restarted, now idle
       }
@@ -185,29 +145,29 @@ async function fetchWasher() {
   }
 
   if (state === 'run' || state === 'pause') {
-    washerDone = false;
-    if (!washerCycleId) {
-      try { washerCycleId = db.openCycle('washer'); }
+    washer.done = false;
+    if (!washer.cycleId) {
+      try { washer.cycleId = db.openCycle('washer'); }
       catch (err) { console.error('DB washer cycle open failed:', err.message); }
     }
-  } else if (state === 'stop' && (washerPrevState === 'run' || washerPrevState === 'pause')) {
+  } else if (state === 'stop' && (washer.prevState === 'run' || washer.prevState === 'pause')) {
     // Check if appliance was dismissed since this cycle started
     const dismissedAt = db.getDismissedAt('washer');
-    const cycleStarted = washerCycleId ? db.getCycleStartedAt(washerCycleId) : null;
+    const cycleStarted = washer.cycleId ? db.getCycleStartedAt(washer.cycleId) : null;
     const wasDismissedAfterCycleStart = dismissedAt && cycleStarted && dismissedAt >= cycleStarted;
 
     if (!wasDismissedAfterCycleStart) {
-      washerDone = true;
+      washer.done = true;
     }
-    if (washerCycleId) {
-      try { db.closeCycle(washerCycleId); } catch (err) { console.error('DB washer cycle close failed:', err.message); }
-      washerCycleId = null;
+    if (washer.cycleId) {
+      try { db.closeCycle(washer.cycleId); } catch (err) { console.error('DB washer cycle close failed:', err.message); }
+      washer.cycleId = null;
     }
   }
-  washerPrevState = state;
+  washer.prevState = state;
 
   let value, alert = false, done = false, degraded = false;
-  if (washerDone) {
+  if (washer.done) {
     value = 'Done!';
     done = true;
   } else if (state === 'run') {
@@ -234,13 +194,6 @@ async function fetchWasher() {
 
 // ── Dishwasher ────────────────────────────────────────────────────
 
-let dishwasherWasRunning  = false;
-let dishwasherDone        = false;
-let dishwasherBelowSince  = null;
-let dishwasherPeakWatts   = 0;
-let dishwasherCycleId     = null;
-let dishwasherRecovered   = false;
-
 async function fetchDishwasher() {
   if (!HA_TOKEN) return;
 
@@ -256,16 +209,16 @@ async function fetchDishwasher() {
   const watts = parseFloat(res.state);
 
   // Restart recovery
-  if (!dishwasherRecovered) {
-    dishwasherRecovered = true;
+  if (!dishwasher.recovered) {
+    dishwasher.recovered = true;
     const openId = db.getOpenCycleId('dishwasher');
     if (openId) {
       if (watts >= DISHWASHER_WATTS_THRESHOLD) {
-        dishwasherCycleId    = openId;
-        dishwasherWasRunning = true;
+        dishwasher.cycleId    = openId;
+        dishwasher.wasRunning = true;
       } else {
-        db.closeCycle(openId, { peakWatts: dishwasherPeakWatts, endReason: 'unknown' });
-        dishwasherDone = true; // was running before restart, now below threshold = likely done
+        db.closeCycle(openId, { peakWatts: dishwasher.peakWatts, endReason: 'unknown' });
+        dishwasher.done = true; // was running before restart, now below threshold = likely done
       }
     }
   }
@@ -273,44 +226,44 @@ async function fetchDishwasher() {
   db.maybeLogEnergy('dishwasher', isNaN(watts) ? 0 : watts);
 
   if (!isNaN(watts) && watts >= DISHWASHER_WATTS_THRESHOLD) {
-    dishwasherBelowSince = null;
-    dishwasherDone = false;
-    dishwasherPeakWatts = Math.max(dishwasherPeakWatts, watts);
-    if (!dishwasherWasRunning) {
-      dishwasherWasRunning = true;
-      try { dishwasherCycleId = db.openCycle('dishwasher'); }
+    dishwasher.belowSince = null;
+    dishwasher.done = false;
+    dishwasher.peakWatts = Math.max(dishwasher.peakWatts, watts);
+    if (!dishwasher.wasRunning) {
+      dishwasher.wasRunning = true;
+      try { dishwasher.cycleId = db.openCycle('dishwasher'); }
       catch (err) { console.error('DB dishwasher cycle open failed:', err.message); }
     }
-  } else if (dishwasherWasRunning) {
-    if (dishwasherBelowSince === null) {
-      dishwasherBelowSince = Date.now();
-    } else if (Date.now() - dishwasherBelowSince >= DISHWASHER_END_DELAY_MS) {
+  } else if (dishwasher.wasRunning) {
+    if (dishwasher.belowSince === null) {
+      dishwasher.belowSince = Date.now();
+    } else if (Date.now() - dishwasher.belowSince >= DISHWASHER_END_DELAY_MS) {
       // Check if appliance was dismissed since this cycle started
       const dismissedAt = db.getDismissedAt('dishwasher');
-      const cycleStarted = dishwasherCycleId ? db.getCycleStartedAt(dishwasherCycleId) : null;
+      const cycleStarted = dishwasher.cycleId ? db.getCycleStartedAt(dishwasher.cycleId) : null;
       const wasDismissedAfterCycleStart = dismissedAt && cycleStarted && dismissedAt >= cycleStarted;
 
       if (wasDismissedAfterCycleStart) {
         // User dismissed during this cycle - don't show "Done!", just reset state
-        dishwasherWasRunning = false;
-        dishwasherBelowSince = null;
+        dishwasher.wasRunning = false;
+        dishwasher.belowSince = null;
       } else {
-        dishwasherDone       = true;
-        dishwasherWasRunning = false;
-        dishwasherBelowSince = null;
+        dishwasher.done       = true;
+        dishwasher.wasRunning = false;
+        dishwasher.belowSince = null;
       }
 
-      if (dishwasherCycleId) {
-        try { db.closeCycle(dishwasherCycleId, { peakWatts: dishwasherPeakWatts }); }
+      if (dishwasher.cycleId) {
+        try { db.closeCycle(dishwasher.cycleId, { peakWatts: dishwasher.peakWatts }); }
         catch (err) { console.error('DB dishwasher cycle close failed:', err.message); }
-        dishwasherCycleId   = null;
-        dishwasherPeakWatts = 0;
+        dishwasher.cycleId   = null;
+        dishwasher.peakWatts = 0;
       }
     }
   }
 
   let value, done = false;
-  if (dishwasherDone) {
+  if (dishwasher.done) {
     value = 'Done!'; done = true;
   } else if (!isNaN(watts) && watts >= DISHWASHER_WATTS_THRESHOLD) {
     value = `Running (${Math.round(watts)}W)`;
@@ -329,10 +282,6 @@ fetchWasher().catch(err => console.error('Washer fetch failed:', err));
 setInterval(() => fetchWasher().catch(err => console.error('Washer fetch failed:', err)), 30 * 1000);
 
 // ── Dryer ─────────────────────────────────────────────────────────
-let dryerDone          = false;
-let lastDryerEventTime = null;
-let dryerCycleId       = null;
-let dryerRecovered     = false;
 
 async function fetchDryer() {
   if (!HA_TOKEN) return;
@@ -351,12 +300,12 @@ async function fetchDryer() {
   const state = statusRes.value.state;
 
   // Restart recovery
-  if (!dryerRecovered) {
-    dryerRecovered = true;
+  if (!dryer.recovered) {
+    dryer.recovered = true;
     const openId = db.getOpenCycleId('dryer');
     if (openId) {
       if (state === 'running' || state === 'pause') {
-        dryerCycleId = openId;
+        dryer.cycleId = openId;
       } else {
         db.closeCycle(openId, { endReason: 'unknown' });
       }
@@ -364,9 +313,9 @@ async function fetchDryer() {
   }
 
   if (state === 'running' || state === 'pause') {
-    dryerDone = false;
-    if (!dryerCycleId) {
-      try { dryerCycleId = db.openCycle('dryer'); }
+    dryer.done = false;
+    if (!dryer.cycleId) {
+      try { dryer.cycleId = db.openCycle('dryer'); }
       catch (err) { console.error('DB dryer cycle open failed:', err.message); }
     }
   }
@@ -375,27 +324,27 @@ async function fetchDryer() {
   if (notifRes.status === 'fulfilled') {
     const eventTime = notifRes.value.state;
     const eventType = notifRes.value.attributes?.event_type;
-    if (eventTime !== lastDryerEventTime) {
-      lastDryerEventTime = eventTime;
+    if (eventTime !== dryer.lastEventTime) {
+      dryer.lastEventTime = eventTime;
       if (eventType === 'drying_is_complete') {
         // Check if appliance was dismissed since this cycle started
         const dismissedAt = db.getDismissedAt('dryer');
-        const cycleStarted = dryerCycleId ? db.getCycleStartedAt(dryerCycleId) : null;
+        const cycleStarted = dryer.cycleId ? db.getCycleStartedAt(dryer.cycleId) : null;
         const wasDismissedAfterCycleStart = dismissedAt && cycleStarted && dismissedAt >= cycleStarted;
 
         if (!wasDismissedAfterCycleStart) {
-          dryerDone = true;
+          dryer.done = true;
         }
-        if (dryerCycleId) {
-          try { db.closeCycle(dryerCycleId); } catch (err) { console.error('DB dryer cycle close failed:', err.message); }
-          dryerCycleId = null;
+        if (dryer.cycleId) {
+          try { db.closeCycle(dryer.cycleId); } catch (err) { console.error('DB dryer cycle close failed:', err.message); }
+          dryer.cycleId = null;
         }
       }
     }
   }
 
   let value, alert = false, done = false, degraded = false;
-  if (dryerDone) {
+  if (dryer.done) {
     value = 'Done!';
     done = true;
   } else if (state === 'running') {
@@ -587,7 +536,6 @@ fetchHomeEnergy().catch(() => {});
 setInterval(() => fetchHomeEnergy().catch(() => {}), 30 * 1000);
 
 // ── Pool Pump (Shelly EM Gen3) ─────────────────────────────────────
-let lastPumpWatts = NaN; // most recent pump reading, paired onto each pool heat sample
 
 async function fetchPoolPump() {
   if (!HA_TOKEN) return;
@@ -597,7 +545,7 @@ async function fetchPoolPump() {
     if (isNaN(watts)) throw new Error(`unexpected state: ${res.state}`);
 
     db.maybeLogEnergy('pool_pump', watts);
-    lastPumpWatts = watts;
+    pool.lastPumpWatts = watts;
 
     const running = watts > POOL_PUMP_WATTS_THRESHOLD;
     const value = running ? 'Running' : 'Idle';
@@ -637,7 +585,7 @@ async function fetchPoolHeat() {
       flowGpm:    haNum(state.flow),
       btuHr:      haNum(state.btu),
       heatActive: state.active === 'on',
-      pumpWatts:  lastPumpWatts,
+      pumpWatts:  pool.lastPumpWatts,
       filterPressure: haNum(state.filterPsi),
     });
   } catch (err) {
@@ -649,8 +597,6 @@ fetchPoolHeat().catch(() => {});
 setInterval(() => fetchPoolHeat().catch(() => {}), 2 * 60 * 1000);
 
 // ── Pool page state ────────────────────────────────────────────────
-
-let _lastSweepOn = null;   // null until the first poll establishes a baseline
 
 // Turns the stored run into what the tile and the pool card actually say.
 function _describeSweep(run) {
@@ -768,7 +714,7 @@ async function fetchPoolStatus() {
     // flag. Set POOL_FLOW_METER_INSTALLED=true in ~/homelab/.env on install day.
     const FLOW_METER_INSTALLED = process.env.POOL_FLOW_METER_INSTALLED === 'true';
     const rawFlow = haNum(s('flow'));
-    const pumpRunning = lastPumpWatts > POOL_PUMP_WATTS_THRESHOLD;
+    const pumpRunning = pool.lastPumpWatts > POOL_PUMP_WATTS_THRESHOLD;
 
     let flowStatus;   // 'no_meter' | 'deadhead' | 'ok'
     if (!FLOW_METER_INSTALLED) flowStatus = 'no_meter';
@@ -785,15 +731,15 @@ async function fetchPoolStatus() {
     // the HA schedule or a hand press. The question is "did the pool get
     // cleaned", same as the jeeves_sweep_ran_latch automation.
     //
-    // _lastSweepOn starts null so the first poll after a restart only sets the
+    // pool.lastSweepOn starts null so the first poll after a restart only sets the
     // baseline. Treating a restart mid-run as a fresh start would log a run
     // that began at boot and report a falsely short duration.
     const sweepOn = s('sweep') === 'on';
-    if (_lastSweepOn !== null && sweepOn !== _lastSweepOn) {
+    if (pool.lastSweepOn !== null && sweepOn !== pool.lastSweepOn) {
       if (sweepOn) db.openSweepRun();
       else         db.closeSweepRun();
     }
-    _lastSweepOn = sweepOn;
+    pool.lastSweepOn = sweepOn;
 
     cachedStatus.pool = {
       flowStatus,
@@ -807,7 +753,7 @@ async function fetchPoolStatus() {
       btuHr:      flowLive && !isNaN(haNum(s('btu'))) ? Math.round(haNum(s('btu'))) : null,
       padOnline,
       pumpRunning,
-      pumpWatts:  isNaN(lastPumpWatts) ? null : Math.round(lastPumpWatts),
+      pumpWatts:  isNaN(pool.lastPumpWatts) ? null : Math.round(pool.lastPumpWatts),
       sweepOn,
       sweepRanTonight: s('sweepRan') === 'on',
       // The durable answer to "did the last sweep go well". sweepRanTonight is
@@ -1008,10 +954,8 @@ function refreshNextActions() {
 
 // Promotion: at 07:00 each day, anything due today (or overdue) becomes a chore
 // tile via the existing _addChore path — tap to claim, PIN credit, scoreboard.
-// _promotedTasks maps choreId → task key so completing the chore stamps
+// promotionTasks maps choreId → task key so completing the chore stamps
 // last_done_at and the next due date recalculates.
-const _promotedTasks = new Map();
-let _lastPromotionDate = null;
 
 function promoteDueTasks() {
   const now = Date.now();
@@ -1019,9 +963,9 @@ function promoteDueTasks() {
     if (!action.promoteOnDue) continue;
     if (action.dueAt * 1000 > now) continue;
     // Already on the board? Don't stack duplicates across restarts or reruns.
-    if ([..._promotedTasks.values()].includes(action.id)) continue;
+    if ([...promotionTasks.values()].includes(action.id)) continue;
     const choreId = _addChore(action.title, action.icon);
-    _promotedTasks.set(choreId, action.id);
+    promotionTasks.set(choreId, action.id);
     console.log(`Promoted task "${action.title}" to chore ${choreId}`);
   }
 }
@@ -1030,16 +974,14 @@ refreshNextActions();
 setInterval(() => {
   const now = new Date();
   const today = now.toDateString();
-  if (now.getHours() === 7 && _lastPromotionDate !== today) {
-    _lastPromotionDate = today;
+  if (now.getHours() === 7 && lastPromotionDate !== today) {
+    lastPromotionDate = today;
     refreshNextActions();
     promoteDueTasks();
   }
 }, 60 * 1000);
 
 // ── BiblioCommons (RCPL library holds) ───────────────────────────
-
-let biblioSession = null; // { accessToken, sessionId, accountId, loginAt }
 
 function _extractCookies(response) {
   const cookies = {};
@@ -1088,12 +1030,12 @@ async function _biblioLogin() {
   if (!accessToken || !sessionId) throw new Error('BiblioCommons: login failed — check BIBLIO_CARD/BIBLIO_PIN');
 
   const accountId = parseInt(sessionId.split('-').pop(), 10) + 1;
-  biblioSession = { accessToken, sessionId, accountId, loginAt: Date.now() };
+  biblio.session = { accessToken, sessionId, accountId, loginAt: Date.now() };
   console.log(`BiblioCommons: logged in, accountId=${accountId}`);
 }
 
 async function _biblioGet(path, params = {}) {
-  const { accessToken, sessionId, accountId } = biblioSession;
+  const { accessToken, sessionId, accountId } = biblio.session;
   const url = new URL(`https://gateway.bibliocommons.com/v2/libraries/${BIBLIO_LIBRARY}${path}`);
   url.searchParams.set('accountId', accountId);
   url.searchParams.set('size', '100');
@@ -1101,7 +1043,7 @@ async function _biblioGet(path, params = {}) {
   const res = await fetch(url.toString(), {
     headers: { 'X-Access-Token': accessToken, 'X-Session-Id': sessionId, 'Accept': 'application/json' },
   });
-  if (res.status === 401) { biblioSession = null; throw new Error('BiblioCommons 401'); }
+  if (res.status === 401) { biblio.session = null; throw new Error('BiblioCommons 401'); }
   if (!res.ok) throw new Error(`BiblioCommons ${path} ${res.status}`);
   return res.json();
 }
@@ -1109,7 +1051,7 @@ async function _biblioGet(path, params = {}) {
 async function fetchBiblio() {
   if (!BIBLIO_CARD || !BIBLIO_PIN) return;
   try {
-    if (!biblioSession || Date.now() - biblioSession.loginAt > BIBLIO_SESSION_TTL_MS) {
+    if (!biblio.session || Date.now() - biblio.session.loginAt > BIBLIO_SESSION_TTL_MS) {
       await _biblioLogin();
     }
 
@@ -1192,20 +1134,19 @@ async function fetchBiblio() {
       // session expired — retry once with fresh login
       try { await _biblioLogin(); return fetchBiblio(); } catch (e2) { /* fall through */ }
     }
-    biblioSession = null;
+    biblio.session = null;
     console.error('BiblioCommons fetch failed:', err.message);
   }
 }
 
 fetchBiblio().catch(() => {});
 
-let lastBiblioDate = null;
 setInterval(() => {
   const now = new Date();
   if (now.getHours() === 2 && now.getMinutes() === 0) {
     const today = now.toDateString();
-    if (lastBiblioDate !== today) {
-      lastBiblioDate = today;
+    if (biblio.lastDate !== today) {
+      biblio.lastDate = today;
       fetchBiblio().catch(() => {});
     }
   }
@@ -1509,13 +1450,13 @@ refreshScoreboard();
 
 function _dismissAppliance(appliance) {
   if (appliance === 'washer') {
-    washerDone = false;
+    washer.done = false;
     cachedStatus.status.washer = { ...cachedStatus.status.washer, value: 'Idle', done: false };
   } else if (appliance === 'dryer') {
-    dryerDone = false;
+    dryer.done = false;
     cachedStatus.status.dryer = { ...cachedStatus.status.dryer, value: 'Idle', done: false };
   } else if (appliance === 'dishwasher') {
-    dishwasherDone = false;
+    dishwasher.done = false;
     cachedStatus.status.dishwasher = { ...cachedStatus.status.dishwasher, value: 'Idle', done: false };
   } else {
     return false;
@@ -1526,10 +1467,9 @@ function _dismissAppliance(appliance) {
 }
 
 // ── Chore tiles ───────────────────────────────────────────────────
-let _choreIdCounter = 1;
 
 function _addChore(name, icon) {
-  const id = _choreIdCounter++;
+  const id = chores.idCounter++;
   cachedStatus.status[`chore_${id}`] = {
     label: name, icon: icon || '🧹', value: 'Tap to claim!',
     isChore: true, choreId: id,
@@ -1597,10 +1537,10 @@ app.post('/api/chores/:id/complete', express.json(), async (req, res) => {
   refreshScoreboard();
 
   // If this chore was promoted from a recurring task, restart that task's clock.
-  const taskKey = _promotedTasks.get(id);
+  const taskKey = promotionTasks.get(id);
   if (taskKey) {
     db.markTaskDone(taskKey);
-    _promotedTasks.delete(id);
+    promotionTasks.delete(id);
     refreshNextActions();
     console.log(`Task "${taskKey}" marked done — next due date recalculated`);
   }
@@ -1614,7 +1554,7 @@ app.delete('/api/chores/:id', (req, res) => {
   // Deleting a promoted chore dismisses it from the board but does NOT mark the
   // task done — it's still due, so it re-promotes tomorrow. Marking it done
   // would falsify the maintenance record.
-  _promotedTasks.delete(id);
+  promotionTasks.delete(id);
   _removeChore(id);
   res.json({ ok: true });
 });
@@ -1645,9 +1585,9 @@ app.post('/api/dismiss/:appliance', express.json(), async (req, res) => {
 if (process.env.ENABLE_TEST_ROUTES === 'true') {
   app.post('/api/test/done/:appliance', (req, res) => {
     const { appliance } = req.params;
-    if (appliance === 'washer')     { washerDone = true;     cachedStatus.status.washer     = { ...cachedStatus.status.washer,     value: 'Done!', done: true }; }
-    else if (appliance === 'dryer') { dryerDone = true;      cachedStatus.status.dryer      = { ...cachedStatus.status.dryer,      value: 'Done!', done: true }; }
-    else if (appliance === 'dishwasher') { dishwasherDone = true; cachedStatus.status.dishwasher = { ...cachedStatus.status.dishwasher, value: 'Done!', done: true }; }
+    if (appliance === 'washer')     { washer.done = true;     cachedStatus.status.washer     = { ...cachedStatus.status.washer,     value: 'Done!', done: true }; }
+    else if (appliance === 'dryer') { dryer.done = true;      cachedStatus.status.dryer      = { ...cachedStatus.status.dryer,      value: 'Done!', done: true }; }
+    else if (appliance === 'dishwasher') { dishwasher.done = true; cachedStatus.status.dishwasher = { ...cachedStatus.status.dishwasher, value: 'Done!', done: true }; }
     else return res.status(400).json({ error: 'unknown' });
     res.json({ ok: true });
   });
@@ -1796,13 +1736,12 @@ app.post('/api/chat', express.json(), async (req, res) => {
 });
 
 // ── Weekly report (Sunday 9am) ────────────────────────────────────
-let lastReportDate = null;
 setInterval(() => {
   const now = new Date();
   if (now.getDay() === 0 && now.getHours() === 9 && now.getMinutes() === 0) {
     const today = now.toDateString();
-    if (lastReportDate !== today) {
-      lastReportDate = today;
+    if (report.lastDate !== today) {
+      report.lastDate = today;
       sendWeeklyReport().catch(err => console.error('Weekly report failed:', err));
     }
   }
