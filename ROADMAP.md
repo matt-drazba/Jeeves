@@ -60,6 +60,7 @@
         errors.js          # logError/resolveError helpers
   ```
 - **Migration path:** Do it incrementally. Extract `config.js` and `state.js` first (no behavior change), then move routes, then services. Each step is independently committable.
+- **Progress:** ✅ Phase 1 done — `src/config.js` extracted (all env vars, constants, startup validation). `server.js` reduced from 1,989 → 1,819 lines.
 - **Effort:** 1–2 days incremental
 
 ### 5. Generic appliance poller (DRY)

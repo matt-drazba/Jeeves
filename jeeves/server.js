@@ -6,17 +6,25 @@ import { readFileSync } from 'fs';
 import * as db from './db.js';
 import { sendWeeklyReport } from './report.js';
 import { loadDocs, getContext } from './rag.js';
+import {
+  PORT, LAT, LON, LOCATION, DAYS,
+  HA_TOKEN, HA_URL, VOICE_SERVICE_URL,
+  DISHWASHER_WATTS_THRESHOLD, DISHWASHER_END_DELAY_MS,
+  PURPLEAIR_KEY, PURPLEAIR_INDOOR_SENSOR, PURPLEAIR_OUTDOOR_SENSORS,
+  POOL_PUMP_WATTS_THRESHOLD, POOL_PAD_ENTITIES, POOL_EXTRA_ENTITIES,
+  FLOW_DEADHEAD_GPM, SWEEP_FULL_MIN, SWEEP_SHORT_MIN,
+  FILTER_WATTS_BAND_FRAC, FILTER_ALERT_PSI_OVER_BASE, FILTER_TREND_MIN_DAYS, FILTER_TREND_MIN_SAMPLES,
+  ALERT_REGISTRY, DAY_MS, MONTH_ABBR,
+  BIBLIO_LIBRARY, BIBLIO_CARD, BIBLIO_PIN, BIBLIO_SESSION_TTL_MS,
+  BATTERY_PINNED, BATTERY_ICONS,
+  MUSIC_BRIDGE_URL,
+  CALENDAR_ENTITY, CAL_DAYS,
+  OLLAMA_URL, CHAT_MODEL, CHAT_SYSTEM,
+  validateStartupEnv,
+} from './src/config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Farm Hill, Redwood City, CA
-const LAT = 37.48;
-const LON = -122.25;
-const LOCATION = 'Redwood City, CA';
-
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function wmoToCondition(code) {
   if (code === 0)                          return 'Clear';
@@ -101,10 +109,6 @@ let cachedStatus = {
 };
 
 // ── Home Assistant ────────────────────────────────────────────────
-const HA_TOKEN = process.env.HA_TOKEN;
-const HA_URL   = 'http://host.docker.internal:8123';
-
-const VOICE_SERVICE_URL = process.env.VOICE_SERVICE_URL || 'http://voice:5100';
 
 async function fetchHAState(entityId) {
   const res = await fetch(`${HA_URL}/api/states/${entityId}`, {
@@ -229,8 +233,6 @@ async function fetchWasher() {
 }
 
 // ── Dishwasher ────────────────────────────────────────────────────
-const DISHWASHER_WATTS_THRESHOLD = 4;
-const DISHWASHER_END_DELAY_MS    = 5 * 60 * 1000; // 5 min continuous below threshold = cycle ended
 
 let dishwasherWasRunning  = false;
 let dishwasherDone        = false;
@@ -421,9 +423,6 @@ fetchDryer().catch(err => console.error('Dryer fetch failed:', err));
 setInterval(() => fetchDryer().catch(err => console.error('Dryer fetch failed:', err)), 30 * 1000);
 
 // ── AQI (PurpleAir) ──────────────────────────────────────────────
-const PURPLEAIR_KEY             = process.env.PURPLEAIR_API_KEY;
-const PURPLEAIR_INDOOR_SENSOR   = 126601;
-const PURPLEAIR_OUTDOOR_SENSORS = [113020, 81199, 284212];
 
 function pm25ToAqi(pm) {
   const bp = [
@@ -588,7 +587,6 @@ fetchHomeEnergy().catch(() => {});
 setInterval(() => fetchHomeEnergy().catch(() => {}), 30 * 1000);
 
 // ── Pool Pump (Shelly EM Gen3) ─────────────────────────────────────
-const POOL_PUMP_WATTS_THRESHOLD = 20; // matches the Shelly on-device ionizer script's threshold
 let lastPumpWatts = NaN; // most recent pump reading, paired onto each pool heat sample
 
 async function fetchPoolPump() {
@@ -619,17 +617,6 @@ setInterval(() => fetchPoolPump().catch(() => {}), 30 * 1000);
 // Capture only — no dashboard tile. Water temps move slowly, so 2 min is plenty.
 // Flow GPM and BTU/hr stay null until the flow meter is installed; the columns
 // exist now so they backfill themselves the day it goes in.
-const POOL_PAD_ENTITIES = {
-  hxIn:   'sensor.pool_pad_hx_water_in_temp',
-  hxOut:  'sensor.pool_pad_hx_water_out_temp',
-  flow:   'sensor.pool_pad_pool_flow_gpm',
-  btu:    'sensor.pool_pad_pool_heat_btu_hr',
-  active: 'binary_sensor.pool_pad_pool_heat_active',
-  // Live 2026-08-28 — entity_id confirmed against the API, not guessed (this
-  // project's own documented trap: HA derives it from the ESPHome `name` at
-  // first registration, and it does not match the friendly name literally).
-  filterPsi: 'sensor.infrawall_pool_pad_filter_pressure',
-};
 
 async function fetchPoolHeat() {
   if (!HA_TOKEN) return;
@@ -662,21 +649,6 @@ fetchPoolHeat().catch(() => {});
 setInterval(() => fetchPoolHeat().catch(() => {}), 2 * 60 * 1000);
 
 // ── Pool page state ────────────────────────────────────────────────
-const POOL_EXTRA_ENTITIES = {
-  sweep:     'switch.pool_sweep_socket_1',
-  sweepRan:  'input_boolean.sweep_ran_tonight',
-};
-
-// Pump energized but water not moving = running against a closed valve. Normal
-// operation is 45-60 GPM (docs/pool_heat_recovery.md), so this is far below any
-// legitimate reading and only trips on a hard stop, not on "low".
-const FLOW_DEADHEAD_GPM = 10;
-
-// The HA schedule runs 21:45-23:15. A run that ends materially short of that
-// was cut off by something (breaker, Tuya round-trip failure, manual stop), and
-// that is the whole point of showing the duration rather than a yes/no.
-const SWEEP_FULL_MIN  = 90;
-const SWEEP_SHORT_MIN = 80;
 
 let _lastSweepOn = null;   // null until the first poll establishes a baseline
 
@@ -716,10 +688,6 @@ function _describeSweep(run) {
 // which is recorded by hand after a backwash (POST /api/pool/set-filter-baseline)
 // — there's no automatic "the filter is clean now" signal. Colors and the
 // forecast both stay in a "not ready yet" state until that baseline exists.
-const FILTER_WATTS_BAND_FRAC     = 0.15; // ±15% around the baseline's own watts
-const FILTER_ALERT_PSI_OVER_BASE = 9;    // midpoint of the documented +8-10 psi window
-const FILTER_TREND_MIN_DAYS      = 5;
-const FILTER_TREND_MIN_SAMPLES   = 20;
 
 // Least-squares slope over [unixSeconds, psi] points. Returns psi per second.
 function _linearSlope(points) {
@@ -887,90 +855,7 @@ setInterval(() => fetchPoolStatus().catch(() => {}), 30 * 1000);
 // expose them — so they live here. The open-alert flag entity is DERIVED from
 // the key (input_boolean.alert_open_<key>), and the key must be a member of this
 // registry, so nothing client-supplied ever reaches an entity_id.
-const ALERT_REGISTRY = {
-  booster_kill_failed: {
-    level: 1,
-    title: 'Pool booster running dry — kill FAILED',
-    detector: 'binary_sensor.pool_booster_dry_run',
-    action: 'Go kill the breaker for the sweep circuit now.',
-  },
-  booster_dry_run: {
-    level: 2,
-    title: 'Booster dry run caught and killed',
-    detector: 'binary_sensor.pool_booster_dry_run',
-    action: 'Check why the main pump was off during the sweep window.',
-  },
-  pump_off: {
-    level: 2,
-    title: 'Main pump unexpectedly off',
-    detector: 'binary_sensor.pool_pump_unexpectedly_off',
-    action: 'Check the breaker and the IntelliFlo panel.',
-  },
-  pad_offline: {
-    level: 3,
-    title: 'Pool pad node offline',
-    detector: 'binary_sensor.pool_pad_node_offline',
-    action: 'Power-cycle the ESP; check WiFi coverage at the pad.',
-  },
-  localtuya_offline: {
-    level: 2,
-    title: 'LocalTuya controller offline',
-    detector: 'binary_sensor.localtuya_offline',
-    action: 'Check the LocalTuya integration in HA. The pool sweep and OhmPlugs are unreachable.',
-  },
-  meter_offline: {
-    level: 3,
-    title: 'Pump power meter offline',
-    detector: 'binary_sensor.pool_pump_meter_offline',
-    action: 'Check the Shelly EM in the subpanel.',
-  },
-  hx_no_transfer: {
-    level: 3,
-    title: 'Heat exchanger not transferring',
-    detector: 'binary_sensor.pool_hx_not_transferring',
-    action: 'HX calling but ΔT ≤ 0 — check the trio circuit and probe seating.',
-  },
-  sweep_skipped: {
-    level: 3,
-    title: 'Sweep did not run tonight',
-    detector: null, // nightly 11:45pm check, no live detector to re-read
-    action: 'Check whether the pump ran ≥30 min before 9:45pm.',
-  },
-  hx_not_engaging: {
-    level: 2,
-    title: 'Heat recovery not engaging',
-    detector: 'binary_sensor.pool_hx_not_engaging',
-    action: 'AC cooling 10+ min, pool below setpoint, heat recovery never turned on — check the Tecmark flow switch / filter for a clog (common right after a backwash).',
-  },
-
-  // Garage — homeassistant/packages/jeeves_garage.yaml. No garage tile by
-  // decision; these surface only through the alerts tile and the overlay.
-  // The two L1s are both "the house is open and only a person can close it".
-  garage_night_open: {
-    level: 1,
-    title: 'Garage opened overnight',
-    detector: 'binary_sensor.garage_door_open',
-    action: 'Account for everyone before going out. Close it from your phone.',
-  },
-  garage_close_failed: {
-    level: 1,
-    title: 'Garage would not close',
-    detector: 'binary_sensor.garage_door_open',
-    action: 'Clear the doorway — the safety beam is reversing it — then close it by hand.',
-  },
-  garage_open_daytime: {
-    level: 2,
-    title: 'Garage left open',
-    detector: 'binary_sensor.garage_open_too_long',
-    action: 'Close it, or confirm someone is out there using it.',
-  },
-  garage_node_offline: {
-    level: 3,
-    title: 'Garage controller offline',
-    detector: 'binary_sensor.garage_node_offline',
-    action: 'Check the ratgdo at http://192.168.0.230 and power-cycle it.',
-  },
-};
+// ALERT_REGISTRY is imported from src/config.js.
 
 function _ageText(sinceMs) {
   if (!sinceMs) return '';
@@ -1056,7 +941,6 @@ setInterval(() => fetchAlerts().catch(() => {}), 30 * 1000);
 // date. Source 1 (fixed cadence, below) is the only one built. Threshold-based
 // (filter backwash, needs the pressure sensor) and chemistry-model-based
 // projections append to the same array later and need no UI work.
-const DAY_MS = 86400 * 1000;
 
 function _relativeDay(dueMs) {
   const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
@@ -1067,10 +951,6 @@ function _relativeDay(dueMs) {
   const weekday = new Date(dueMs).toLocaleDateString('en-US', { weekday: 'long' });
   return days < 7 ? `${weekday} · in ${days} days` : `in ${days} days`;
 }
-
-// 1-indexed to match tasks.start_month / end_month.
-const MONTH_ABBR = [null, 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function _ordinal(n) {
   const suffixes = ['th', 'st', 'nd', 'rd'];
@@ -1158,10 +1038,6 @@ setInterval(() => {
 }, 60 * 1000);
 
 // ── BiblioCommons (RCPL library holds) ───────────────────────────
-const BIBLIO_LIBRARY = 'rcpl';
-const BIBLIO_CARD    = process.env.BIBLIO_CARD;
-const BIBLIO_PIN     = process.env.BIBLIO_PIN;
-const BIBLIO_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 let biblioSession = null; // { accessToken, sessionId, accountId, loginAt }
 
@@ -1354,14 +1230,7 @@ setInterval(() => {
 // its state is exactly "charging" (case-insensitive, so "Not Charging"
 // correctly reads as false, not a substring match on "charging"). A device
 // with no such sibling just never shows as charging — never wrong, just less complete.
-const BATTERY_PINNED = new Set(['sensor.dusty_battery_level', 'sensor.snorlax_battery_level']);
-const BATTERY_ICONS = {
-  'sensor.dusty_battery_level':       '🚗',
-  'sensor.snorlax_battery_level':     '🚗',
-  'sensor.front_door_battery':        '🔔',
-  'sensor.front_front_door_battery':  '🔒',
-  'sensor.ipad_battery_level':        '📱',
-};
+// BATTERY_PINNED and BATTERY_ICONS are imported from src/config.js.
 
 async function fetchBatteries() {
   if (!HA_TOKEN) return;
@@ -1406,9 +1275,6 @@ fetchBatteries().catch(err => console.error('Batteries fetch failed:', err));
 setInterval(() => fetchBatteries().catch(err => console.error('Batteries fetch failed:', err)), 5 * 60 * 1000);
 
 // ── Now Playing (Mac mini Music bridge) ──────────────────────────
-// Mac mini. Pin this in the router's DHCP reservations — the 2026-08-18 power
-// outage moved the lease from .204 to .203 and silently killed the Now Playing tile.
-const MUSIC_BRIDGE_URL = 'http://192.168.0.203:8181';
 
 async function fetchNowPlaying() {
   try {
@@ -1445,8 +1311,6 @@ fetchWeather().catch(err => console.error('Weather fetch failed:', err));
 setInterval(() => fetchWeather().catch(err => console.error('Weather fetch failed:', err)), 10 * 60 * 1000);
 
 // ── Calendar (HA Google Calendar API) ────────────────────────────
-const CALENDAR_ENTITY = 'calendar.matthew_drazba';
-const CAL_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 async function fetchCalendar() {
   if (!HA_TOKEN) return;
@@ -1870,13 +1734,6 @@ app.post('/api/voice', express.raw({ type: 'audio/*', limit: '10mb' }), async (r
 });
 
 // ── Chat (Ollama) ─────────────────────────────────────────────────
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://ollama:11434';
-const CHAT_MODEL = 'llama3.2:3b';
-const CHAT_SYSTEM = `You are Jeeves, a smart home assistant for a house in Redwood City, CA. \
-Answer questions concisely and practically. The home has: a Samsung washer, LG dryer, \
-dishwasher (monitored via power draw), Rheem heat pump water heater, Resideo T10 Pro thermostat, \
-August Smart Lock, Tesla vehicles named Dusty (white) and Snorlax (blue), Bhyve sprinkler system, \
-TP-Link Kasa smart outlets, and Tuya window shades. Home automation runs on Home Assistant.`;
 
 app.post('/api/chat', express.json(), async (req, res) => {
   const { message, history = [] } = req.body;
@@ -1955,34 +1812,7 @@ loadDocs().catch(err => console.error('RAG load failed:', err));
 db.seedMembers(process.env.MEMBERS).catch(err => console.error('Member seed failed:', err));
 
 // ── Startup environment validation ──────────────────────────────────
-// Log what's available and what's degraded so there's no mystery about
-// missing features after a restart.
-const _envStatus = [];
-const _check = (name, isSet, feature) => _envStatus.push({ name, isSet, feature });
-
-_check('HA_TOKEN', !!HA_TOKEN, 'Home Assistant (appliances, alerts, calendar, batteries, pool)');
-_check('PURPLEAIR_API_KEY', !!PURPLEAIR_KEY, 'AQI outdoor sensors');
-_check('RESEND_API_KEY', !!process.env.RESEND_API_KEY, 'Weekly email reports');
-_check('REPORT_TO_EMAIL', !!process.env.REPORT_TO_EMAIL, 'Weekly email reports');
-_check('BIBLIO_CARD', !!BIBLIO_CARD, 'Library holds');
-_check('BIBLIO_PIN', !!BIBLIO_PIN, 'Library holds');
-_check('MEMBERS', !!process.env.MEMBERS, 'Chore member seeding');
-
-const _missing = _envStatus.filter(e => !e.isSet);
-const _present = _envStatus.filter(e => e.isSet);
-
-console.log('── Startup environment check ──');
-for (const e of _present) {
-  console.log(`  ✓ ${e.name} — ${e.feature}`);
-}
-for (const e of _missing) {
-  console.log(`  ✗ ${e.name} — ${e.feature} (degraded)`);
-}
-if (_missing.length > 0) {
-  console.log(`── ${_present.length}/${_envStatus.length} env vars set, ${_missing.length} feature(s) degraded ──`);
-} else {
-  console.log('── All env vars set ──');
-}
+validateStartupEnv();
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Jeeves running on http://0.0.0.0:${PORT}`);
