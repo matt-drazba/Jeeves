@@ -77,7 +77,7 @@ Arrives as a normal push, re-raised at **7:00am** until acknowledged.
 | **"Pool sweep shut off — booster was running dry"** | Booster was on with no pump; HA killed the switch and confirmed it. The pump is safe. | Find out why the main pump wasn't running before sweeping again. |
 | **"Pool pump is off"** | Under 20 W for 15 min during the 9pm–4pm run window. | Check the breaker and the pump. No filtration or heat recovery until it's back. |
 | **"Pool heat recovery isn't engaging"** | AC has been cooling 10+ min, pool is below setpoint, but the heat-recovery relay never energized. | Check the Tecmark flow switch / filter for a clog — this is what a backwash-clogged filter looks like. No damage, just no free heat. |
-| **"Garage has been open N minutes"** | Open >15 min between 6am and 9:15pm. Repeats every 15 min, four times. | Close it, or confirm someone is out there using it. HA will never close it during the day on purpose. |
+| **"Garage has been open N minutes"** | Open >15 min between 6am and 9:15pm. Repeats every 15 min, four times. | Close it, or confirm someone is out there. HA will never close it during the day on purpose. **Closing the door clears the alert and its push by itself** (2026-09-15) — Acknowledge only if you need the repeats stopped while it stays open. |
 
 ### Level 3 — handle it when you get home
 
@@ -103,6 +103,14 @@ That is deliberate: a pump that trips at 2am and recovers by 4am still surfaces
 at breakfast, because a fault that fixed itself is still a fault you should know
 about.
 
+**One exception (2026-09-15): the two garage door-position alerts clear
+themselves when the door reaches `closed`.** The left-open L2 and the
+could-not-close L1 both name *close the garage* as the action, and a shut door is
+that action, measured by the hardware — so the flag goes off and the push is
+cleared off the phone. The overnight intrusion L1 is **not** in that set: it
+needs a person to account for the house, not a closed door. See
+[alerting_levels.md](alerting_levels.md#alerts-that-clear-themselves).
+
 If you lost the notification, clear the flag directly:
 
 ```bash
@@ -122,8 +130,8 @@ The flags, one per alert:
 | Pump meter offline (L3) | `input_boolean.alert_open_meter_offline` |
 | HX not transferring (L3) | `input_boolean.alert_open_hx_no_transfer` |
 | Garage opened overnight (L1) | `input_boolean.alert_open_garage_night_open` |
-| Garage would not close (L1) | `input_boolean.alert_open_garage_close_failed` |
-| Garage left open (L2) | `input_boolean.alert_open_garage_open_daytime` |
+| Garage would not close (L1) | `input_boolean.alert_open_garage_close_failed` — clears itself once the door reaches `closed` |
+| Garage left open (L2) | `input_boolean.alert_open_garage_open_daytime` — clears itself once the door reaches `closed` |
 | Garage controller offline (L3) | `input_boolean.alert_open_garage_node_offline` |
 
 See everything currently open:

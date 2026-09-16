@@ -553,9 +553,11 @@ automation:
               data:
                 title: >
                   Garage has been open {{ 15 * repeat.index }} minutes
+                # One short line, no editorialising. The title already carries
+                # how long, so the body only has to name the action — a
+                # reminder is not a place to scold.
                 message: >
-                  The garage door is still open. If you have left the house,
-                  nobody is going to close it.
+                  Close it, or confirm someone is out there.
                 tag: "garage-open-daytime"
                 ack_action: "ACK_GARAGE_OPEN_DAYTIME"
             - delay: "00:15:00"
@@ -626,6 +628,65 @@ automation:
       - service: input_boolean.turn_off
         target:
           entity_id: "input_boolean.alert_open_{{ trigger.id }}"
+
+  # -------------------------------------------------------------------------
+  # Resolution: the door is closed, so the door-position alerts are over.
+  #
+  # Both flags cleared here name *close the door* as the physical action, and
+  # `cover.garage_door` reaching `closed` IS that action — performed, and
+  # confirmed by the hardware. A flag that keeps demanding something already
+  # done is how a wall of alerts becomes wallpaper, and it left the dashboard
+  # showing "garage left open" for a garage that was shut (owner, 2026-09-15).
+  #
+  # alert_open_garage_night_open is deliberately NOT here. Its action is
+  # "account for everyone in the house" — nothing senses that, and a door that
+  # closed itself at 3am does not answer who opened it. It stays
+  # Acknowledge-only and still re-raises at 7am. See docs/alerting_levels.md,
+  # "Alerts that clear themselves".
+  #
+  # `to: closed` only, never `unavailable`: a dead ratgdo looks exactly like a
+  # shut door from here, and clearing on that would silently retire an alert
+  # the L3 offline rule exists to catch. Fail closed.
+  # -------------------------------------------------------------------------
+  - id: jeeves_garage_close_clears_alerts
+    alias: "Garage: closing the door clears the door-position alerts"
+    description: >
+      The door reached CLOSED, which is the physical action both the left-open
+      L2 and the could-not-close L1 ask for. Clears those flags and the stale
+      push, so a garage that is shut stops reading as an open alert.
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: cover.garage_door
+        to: "closed"
+    condition:
+      # Nothing to do on the many ordinary closes that had no alert running.
+      - condition: template
+        value_template: >
+          {{ is_state('input_boolean.alert_open_garage_open_daytime', 'on')
+             or is_state('input_boolean.alert_open_garage_close_failed', 'on') }}
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id:
+            - input_boolean.alert_open_garage_open_daytime
+            - input_boolean.alert_open_garage_close_failed
+
+      # Same tag each alert was sent with, so the phone stops showing a problem
+      # that is finished. Companion-app convention; a no-op if nothing with that
+      # tag is on screen. (These flags are also what the 7am re-raise checks,
+      # so clearing them retires tomorrow's reminder too — correctly, because
+      # the door is shut.)
+      - service: notify.mobile_app_matt_drazba_s_iphone
+        data:
+          message: clear_notification
+          data:
+            tag: "garage-open-daytime"
+      - service: notify.mobile_app_matt_drazba_s_iphone
+        data:
+          message: clear_notification
+          data:
+            tag: "garage-close-failed"
 
   # -------------------------------------------------------------------------
   # Safety net under both L1s. The critical-alert loops give up after an hour

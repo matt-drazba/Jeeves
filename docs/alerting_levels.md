@@ -71,11 +71,38 @@ for L3.** Both loop until acknowledged.
 - Levels 1 and 2 require an **Acknowledge button**. Recovery does not clear the
    open-alert flag: the event remains visible until someone acknowledges it, so a
    fault that self-heals still gets reviewed and the next occurrence can alert.
+   The exception is an alert whose **named physical action is itself the
+   recovery** — see "Alerts that clear themselves" below.
 - **There is no global mute.** Maintenance mode was removed 2026-08-08: it
   suppressed Levels 2–4 and nothing ever turned it back off, so alerting could be
   silently disabled indefinitely. Any future mute must expire on its own.
 - **Fail closed.** Anything protective treats an unavailable sensor as the
   dangerous state, never the safe one.
+
+### Alerts that clear themselves
+
+Recovery normally does not clear a flag, because "the fault stopped" and "the
+fault is understood" are different claims, and only the second one is worth
+retiring an alert for.
+
+**The exception is an alert whose named physical action *is* the recovery, and
+whose completion a sensor can verify.** The garage's door-position alerts are the
+live case (2026-09-15): the left-open L2 and the could-not-close L1 both name
+*close the door*, and `cover.garage_door` reaching `closed` is that action —
+measured by the hardware, not assumed. Continuing to demand it afterwards is how
+a wall of alerts becomes wallpaper, and it left the dashboard reporting an open
+garage that was shut. Same self-clearing principle as
+`timer.garage_autoclose_snooze` and the deleted `input_boolean.pool_maintenance`.
+
+What does **not** qualify is an alert whose action is a judgement rather than a
+measurement. The garage's overnight L1 names *account for everyone in the house*;
+nothing senses that, and a door that closed itself at 3am does not answer who
+opened it. It stays Acknowledge-only and still re-raises at 7am.
+
+**An unverified state never clears an alert.** `unavailable` is not `closed`: a
+dead ratgdo and a shut door are indistinguishable from outside, and telling them
+apart is exactly what the L3 offline rule is for. Clear on the confirmed-good
+state only.
 
 ### The automation-succeeded demotion
 
@@ -135,6 +162,9 @@ Both deliver as a normal push immediately, plus a 7am re-raise if still
 unacknowledged. The open-alert flags clear **only** on Acknowledge, never on
 recovery — so a pump that trips at 2am and self-heals by 4am still surfaces at
 breakfast. A fault that fixed itself is still a fault you should know about.
+
+The garage's left-open entry is the documented exception: it clears when the door
+closes — see [Alerts that clear themselves](#alerts-that-clear-themselves).
 
 ### Level 3 — handle it when you get home
 

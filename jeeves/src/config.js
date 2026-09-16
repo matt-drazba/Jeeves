@@ -136,6 +136,13 @@ export const ALERT_REGISTRY = {
   // Garage — homeassistant/packages/jeeves_garage.yaml. No garage tile by
   // decision; these surface only through the alerts tile and the overlay.
   // The two L1s are both "the house is open and only a person can close it".
+  //
+  // open_daytime and close_failed clear themselves the moment the door reaches
+  // `closed` (jeeves_garage_close_clears_alerts): closing it IS the physical
+  // action both of them name, verified by the hardware. night_open is the
+  // deliberate exception — its action is "account for everyone in the house",
+  // which no sensor reports, and a door that closed itself at 3am does not
+  // answer who opened it. It stays Acknowledge-only and re-raises at 7am.
   garage_night_open: {
     level: 1,
     title: 'Garage opened overnight',
@@ -152,7 +159,7 @@ export const ALERT_REGISTRY = {
     level: 2,
     title: 'Garage left open',
     detector: 'binary_sensor.garage_open_too_long',
-    action: 'Close it, or confirm someone is out there using it.',
+    action: 'Close it, or confirm someone is out there.',
   },
   garage_node_offline: {
     level: 3,

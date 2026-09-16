@@ -114,6 +114,13 @@ the auto-close shuts the door.
 Open for 15 minutes between 6am and 9:15pm. Repeats every 15 minutes for an hour, then
 falls back to the 7am re-raise.
 
+**Closing the door dismisses this alert (2026-09-15).** Its named action is *close
+it*, and `cover.garage_door` reaching `closed` is that action confirmed by the
+hardware, so `jeeves_garage_close_clears_alerts` turns the flag off and clears the
+push. Requiring an Acknowledge after the door was already shut made the dashboard
+report an open garage that wasn't one. The overnight L1 is **not** cleared this way —
+see "Levels and why" below.
+
 **This never moves the door.** Closing one on someone unloading a truck is the
 "manual control is not a fault" trap. The overnight rule is allowed to act because at
 11pm an open door is almost certainly a mistake; at 2pm it is almost certainly a person.
@@ -154,8 +161,15 @@ not to demote it, and not to learn to ignore it. A noisy L1 is a bug in
 [alerting_levels.md](alerting_levels.md).
 
 The critical-alert loops stop when the door reaches `closed` (the house is secure, stop
-screaming) but the open-alert **flag** stays set until Acknowledge. Those are two
-different questions, and the flag is what puts it in front of you at breakfast.
+screaming). The **left-open L2 and the could-not-close L1** then clear themselves too:
+`closed` is the physical action both of them name, so the flag goes with it
+(`jeeves_garage_close_clears_alerts`, 2026-09-15).
+
+The overnight **L1 is the exception.** Its action is *account for everyone in the
+house*, and nothing senses that — a door that closed itself at 3am does not answer who
+opened it. That flag stays set until Acknowledge, and the flag is what puts it in front
+of you at breakfast. The generalised rule is in
+[alerting_levels.md](alerting_levels.md#alerts-that-clear-themselves).
 
 ---
 
@@ -223,9 +237,9 @@ overnight watchdogs still catch it.
 
 | Alert | What it means | What to do |
 |---|---|---|
-| **GARAGE OPENED AT hh:mm** | The door left `closed` overnight and HA did not command it | Do not walk out blind. Account for everyone in the house; call 911 if you cannot. Close it from your phone once clear. If it was a legitimate remote or keypad use, acknowledge and consider narrowing the window. |
-| **GARAGE WILL NOT CLOSE** | Two close commands sent, neither confirmed | **Read the message — it tells you which problem it is.** "THE SAFETY BEAM IS BLOCKED" → go clear the doorway. "The safety beam is CLEAR" → it is not something in the way; look at the opener, the door track, or the photo-eye alignment. Either way the house is open until you close it by hand. |
-| **Garage has been open N minutes** | Open >15 min during the day | Close it, or confirm someone is out there. Acknowledge to stop the repeats. |
+| **GARAGE OPENED AT hh:mm** | The door left `closed` overnight and HA did not command it | Do not walk out blind. Account for everyone in the house; call 911 if you cannot. Close it from your phone once clear. **This one does not clear when the door closes — only Acknowledge does.** If it was a legitimate remote or keypad use, acknowledge and consider narrowing the window. |
+| **GARAGE WILL NOT CLOSE** | Two close commands sent, neither confirmed | **Read the message — it tells you which problem it is.** "THE SAFETY BEAM IS BLOCKED" → go clear the doorway. "The safety beam is CLEAR" → it is not something in the way; look at the opener, the door track, or the photo-eye alignment. Either way the house is open until you close it by hand — **and shutting it clears this alert by itself.** |
+| **Garage has been open N minutes** | Open >15 min during the day | Close it, or confirm someone is out there. **Closing the door clears this alert by itself** — Acknowledge only if you want the repeats stopped while it stays open. |
 | **Garage controller offline** | ratgdo silent 30 min | `http://192.168.0.230`. If unreachable, power-cycle it. Red LED is a hardwired power indicator, not an error — blue is status. Nothing is watching the garage until it returns, including the overnight close. |
 
 Acknowledge from the phone notification, or from the alert overlay on the kitchen
