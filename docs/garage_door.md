@@ -253,8 +253,19 @@ After any change to `jeeves_garage.yaml`:
 
 ```bash
 cd ~/homelab && git pull && docker compose restart homeassistant
+
+# `restart` returns as soon as the container is up; HA is still booting and port
+# 8123 is not open yet. A ConnectionRefused from the next line is THIS, not a
+# rejected package. Wait for the port, then verify.
+for _ in $(seq 60); do curl -s -o /dev/null http://localhost:8123/ && break; sleep 5; done
+curl -s -o /dev/null http://localhost:8123/ || echo '!! HA is still not answering — check: docker compose ps'
 python3 scripts/verify-alerts.py
 ```
+
+The wait is load-bearing, not politeness: on 2026-09-15 this section's original
+two-line form (restart, then verify immediately) produced a `ConnectionRefusedError`
+traceback that read like the garage package had been rejected. The pull and the
+restart were both fine — the verifier simply outran HA's boot.
 
 `check_config` passing proves nothing about whether the entities exist. As of
 2026-08-10 `verify-alerts.py` scans **every** file in `homeassistant/packages/`, not

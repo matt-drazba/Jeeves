@@ -194,7 +194,27 @@ button, an app countdown, an inline timer. HA only steps in at the 2-hour cap.
 Alerts live in the repo and deploy by `git pull`:
 
 ```bash
-cd ~/homelab && git pull && docker exec homeassistant python -m homeassistant --script check_config -c /config && docker restart homeassistant && sleep 45 && python3 scripts/verify-alerts.py
+cd ~/homelab && git pull && docker exec homeassistant python -m homeassistant --script check_config -c /config && docker restart homeassistant
+for _ in $(seq 60); do curl -s -o /dev/null http://localhost:8123/ && break; sleep 5; done
+curl -s -o /dev/null http://localhost:8123/ || echo '!! HA is still not answering — check: docker compose ps'
+python3 scripts/verify-alerts.py
+```
+
+**Wait for HA to answer before verifying — a fixed `sleep 45` was not enough.**
+`docker restart` / `docker compose restart` returns as soon as the *container* is
+up; HA itself is still booting and port 8123 is not open yet. The old one-liner
+chained `sleep 45` and then ran the verifier, which on 2026-09-15 produced a
+25-line `ConnectionRefusedError` traceback that looked like the new garage package
+had been rejected. It had not. The loop above breaks the moment HA answers and
+gives up after 5 minutes.
+
+**Telling a booting HA from a bad package.** A `ConnectionRefused` from the
+verifier means nothing was listening — HA was still coming up. A genuinely
+rejected package looks the opposite way: port 8123 answers fine, and the
+offending automation is simply absent from the verifier's list:
+
+```bash
+docker compose logs --tail=100 homeassistant | grep -i 'invalid config\|error'
 ```
 
 **`check_config` passing does not mean it works.** It validates syntax, not

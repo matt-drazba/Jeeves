@@ -137,9 +137,28 @@ entities actually registered. `verify-alerts.py` is the real gate:
 ```bash
 cd ~/homelab && git pull \
   && docker exec homeassistant python -m homeassistant --script check_config -c /config \
-  && docker restart homeassistant && sleep 45 \
-  && python3 scripts/verify-alerts.py
+  && docker restart homeassistant
+
+# `restart` returns as soon as the container is up — HA itself is still booting
+# and port 8123 is not open yet. Without this wait the verifier below dies with
+# a ConnectionRefused traceback that reads like a rejected package. It isn't.
+for _ in $(seq 60); do curl -s -o /dev/null http://localhost:8123/ && break; sleep 5; done
+curl -s -o /dev/null http://localhost:8123/ || echo '!! HA is still not answering — check: docker compose ps'
+
+python3 scripts/verify-alerts.py
 ```
+
+A `ConnectionRefused` from the verifier means HA was **still coming up**, not that
+your config was rejected. If HA is genuinely up and a package is bad, you get the
+opposite symptom: the port answers, and the offending automation is simply missing
+from the verifier's list. Check the log to tell them apart:
+
+```bash
+docker compose logs --tail=100 homeassistant | grep -i 'invalid config\|error'
+```
+
+**The verifier reaches HA over HTTP, so it must run on the Pi** — not from the Mac,
+where `localhost:8123` is nothing.
 
 **ESPHome** — flashed from the **Mac**, over the air, directly to the device. The
 Pi is not in this path at all; its copy of `esphome/*.yaml` is irrelevant to what
