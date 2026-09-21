@@ -474,7 +474,14 @@ automation:
             {{ (s.last_changed | as_local).strftime('%-I:%M %p')
                if s else 'a while ago' }}. Closing it in 10 minutes.
           data:
-            tag: garage-autoclose
+            # Deliberately NOT the `garage-autoclose` tag the confirmation
+            # uses. They are two opposite messages, and
+            # jeeves_garage_close_clears_alerts removes THIS one the moment the
+            # door shuts — one shared tag would mean that clear could delete the
+            # "closed and confirmed" push instead, depending on which landed
+            # first. Two tags, no race. Repeats of the warning still replace
+            # each other, which is what a tag is for.
+            tag: garage-autoclose-warn
             actions:
               - action: "GARAGE_SNOOZE"
                 title: "Leave it open 1 hour"
@@ -644,6 +651,10 @@ automation:
   # Acknowledge-only and still re-raises at 7am. See docs/alerting_levels.md,
   # "Alerts that clear themselves".
   #
+  # It also retires the 9:15pm auto-close WARNING push, which is the same
+  # stranded-notification problem one layer out: closing by hand ends that
+  # sequence silently, leaving a "Close it now" button for a door already shut.
+  #
   # `to: closed` only, never `unavailable`: a dead ratgdo looks exactly like a
   # shut door from here, and clearing on that would silently retire an alert
   # the L3 offline rule exists to catch. Fail closed.
@@ -652,19 +663,20 @@ automation:
     alias: "Garage: closing the door clears the door-position alerts"
     description: >
       The door reached CLOSED, which is the physical action both the left-open
-      L2 and the could-not-close L1 ask for. Clears those flags and the stale
-      push, so a garage that is shut stops reading as an open alert.
+      L2 and the could-not-close L1 ask for. Clears those flags and every stale
+      garage push, so a garage that is shut stops reading as an open problem.
     mode: single
     trigger:
       - platform: state
         entity_id: cover.garage_door
         to: "closed"
-    condition:
-      # Nothing to do on the many ordinary closes that had no alert running.
-      - condition: template
-        value_template: >
-          {{ is_state('input_boolean.alert_open_garage_open_daytime', 'on')
-             or is_state('input_boolean.alert_open_garage_close_failed', 'on') }}
+    # No condition, deliberately — and putting one back would silently break the
+    # auto-close warning below. That push is sent BEFORE any open-alert flag
+    # exists (the warning is pre-emptive; the flag comes only if it escalates),
+    # so "only run when a flag is on" would skip exactly the case where a stale
+    # warning is stranded. Everything here is a no-op when there is nothing to
+    # clear: turn_off on an already-off boolean changes no state, and
+    # clear_notification with no matching tag does nothing.
     action:
       - service: input_boolean.turn_off
         target:
@@ -672,11 +684,11 @@ automation:
             - input_boolean.alert_open_garage_open_daytime
             - input_boolean.alert_open_garage_close_failed
 
-      # Same tag each alert was sent with, so the phone stops showing a problem
-      # that is finished. Companion-app convention; a no-op if nothing with that
-      # tag is on screen. (These flags are also what the 7am re-raise checks,
-      # so clearing them retires tomorrow's reminder too — correctly, because
-      # the door is shut.)
+      # One clear per tag the garage can have on screen, each matching the tag
+      # the alert was sent with — the companion-app convention; a no-op if
+      # nothing with that tag is showing. (These flags are also what the 7am
+      # re-raise checks, so clearing them retires tomorrow's reminder too —
+      # correctly, because the door is shut.)
       - service: notify.mobile_app_matt_drazba_s_iphone
         data:
           message: clear_notification
@@ -687,6 +699,11 @@ automation:
           message: clear_notification
           data:
             tag: "garage-close-failed"
+      - service: notify.mobile_app_matt_drazba_s_iphone
+        data:
+          message: clear_notification
+          data:
+            tag: "garage-autoclose-warn"
 
   # -------------------------------------------------------------------------
   # Safety net under both L1s. The critical-alert loops give up after an hour

@@ -85,7 +85,12 @@ notification sent ten minutes earlier.
    automation fixed the problem, and a flag would make the dashboard's alert count lie.
 4. Not confirmed after two tries → **L1**.
 
-Closing by hand while the warning is up ends the sequence silently.
+Closing by hand while the warning is up ends the sequence silently, **and removes
+that warning from the phone** — otherwise a push offering *Close it now* outlives the
+door being open. It carries its own tag (`garage-autoclose-warn`) precisely so
+`jeeves_garage_close_clears_alerts` can delete it without any risk to the *Garage
+closed* confirmation, which is sent under `garage-autoclose` once the door is already
+shut.
 
 **Snooze is a `timer`, not an `input_boolean`, on purpose.** It expires on its own and
 re-arms the whole sequence when it does. `input_boolean.pool_maintenance` was deleted
