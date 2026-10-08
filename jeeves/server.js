@@ -327,12 +327,19 @@ async function fetchDryer() {
     if (eventTime !== dryer.lastEventTime) {
       dryer.lastEventTime = eventTime;
       if (eventType === 'drying_is_complete') {
-        // Check if appliance was dismissed since this cycle started
+        // Check if appliance was dismissed since this cycle started.
+        // Also guard against restart-resurrection: lastEventTime is
+        // memory-only, so after a restart the previous completion event
+        // looks "new" with a null cycleId. In that case only honor it if
+        // the event itself is fresh and not already dismissed.
         const dismissedAt = db.getDismissedAt('dryer');
         const cycleStarted = dryer.cycleId ? db.getCycleStartedAt(dryer.cycleId) : null;
         const wasDismissedAfterCycleStart = dismissedAt && cycleStarted && dismissedAt >= cycleStarted;
+        const eventTs = Date.parse(eventTime) / 1000;
+        const wasDismissedAfterEvent = dismissedAt && !isNaN(eventTs) && dismissedAt >= eventTs;
+        const eventIsFresh = !isNaN(eventTs) && (Date.now() / 1000 - eventTs) < 3600;
 
-        if (!wasDismissedAfterCycleStart) {
+        if (!wasDismissedAfterCycleStart && !wasDismissedAfterEvent && (dryer.cycleId || eventIsFresh)) {
           dryer.done = true;
         }
         if (dryer.cycleId) {
